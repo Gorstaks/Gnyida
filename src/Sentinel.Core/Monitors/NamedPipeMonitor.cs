@@ -165,7 +165,6 @@ namespace Sentinel.Core
                 if (matchedPattern != null)
                 {
                     uint ownerPid = TryGetPipeOwner(pipePath);
-                    if (IsOwnDecoyPipe(pipeName, ownerPid)) continue;
                     string ownerName = ownerPid > 0 ? ResolveProcessName(ownerPid) : "Unknown";
 
                     await _detectionEngine.EmitAsync(new DetectionEvent
@@ -201,11 +200,11 @@ namespace Sentinel.Core
                 {
                     // High-entropy pipe name from non-system process
                     uint ownerPid = TryGetPipeOwner(pipePath);
-                    if (IsOwnDecoyPipe(pipeName, ownerPid)) continue;
                     string ownerName = ownerPid > 0 ? ResolveProcessName(ownerPid) : "Unknown";
 
                     // Only alert if owner is not a known system process
-                    if (!IsSystemProcess(ownerName, ownerPid))
+                    if (!IsSystemProcess(ownerName, ownerPid) &&
+                        !IsGenuinePowerShellHostPipe(pipeName, ownerPid, ownerPid > 0 ? SecurityValidation.GetProcessImagePath((int)ownerPid) : null))
                     {
                         await _detectionEngine.EmitAsync(new DetectionEvent
                         {
@@ -318,9 +317,40 @@ namespace Sentinel.Core
             return entropy;
         }
 
-        internal static bool IsOwnDecoyPipe(string name, uint serverPid)
-            => serverPid == (uint)System.Net48Environment.ProcessId && DecoyPipeMonitor.IsDecoyPipeName(name);
 
+        private static readonly Regex PowerShellHostPipe = new(
+            @"^PSHost\.\d{15,20}\.(\d+)\.DefaultAppDomain\.(powershell|pwsh)$",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        /// <summary>
+        /// PowerShell names its remoting pipe PSHost.[ticks].[pid].DefaultAppDomain.[host]; the random
+        /// ticks look high-entropy. A name alone never earns trust, because any process can create a
+        /// pipe with any name. Both anchors must hold: the PID inside the name equals the kernel-reported
+        /// owner of the pipe, and that owner's image is a PowerShell binary under Windows\System32,
+        /// Windows\SysWOW64 or Program Files, which a standard user cannot write to.
+        /// </summary>
+        internal static bool IsGenuinePowerShellHostPipe(string pipeName, uint ownerPid, string? ownerImagePath)
+        {
+            if (ownerPid == 0 || ownerImagePath == null || ownerImagePath.Length == 0) return false;
+            string image = ownerImagePath;
+            var m = PowerShellHostPipe.Match(pipeName);
+            if (!m.Success || !uint.TryParse(m.Groups[1].Value, out var namedPid) || namedPid != ownerPid) return false;
+            var win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var pfx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+            var file = Path.GetFileName(image);
+            if (file.Equals("powershell.exe", StringComparison.OrdinalIgnoreCase))
+                return PathEquals(image, Path.Combine(win, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
+                    || PathEquals(image, Path.Combine(win, "SysWOW64", "WindowsPowerShell", "v1.0", "powershell.exe"));
+            if (file.Equals("pwsh.exe", StringComparison.OrdinalIgnoreCase))
+                return UnderRoot(image, Path.Combine(pf, "PowerShell"))
+                    || (!string.IsNullOrEmpty(pfx86) && UnderRoot(image, Path.Combine(pfx86, "PowerShell")));
+            return false;
+        }
+        private static bool PathEquals(string a, string b)
+            => string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+        private static bool UnderRoot(string path, string root)
+            => Path.GetFullPath(path).StartsWith(Path.GetFullPath(root).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase);
         private uint TryGetPipeOwner(string pipePath)
         {
             IntPtr handle = IntPtr.Zero;

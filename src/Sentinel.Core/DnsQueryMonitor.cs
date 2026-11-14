@@ -171,6 +171,15 @@ namespace Sentinel.Core
             }
         }
 
+        private readonly HashSet<string> _lookalikeReported = new(StringComparer.OrdinalIgnoreCase);
+        private bool NoteLookalike(string domain)
+        {
+            lock (_lookalikeReported)
+            {
+                if (_lookalikeReported.Count >= 2048) _lookalikeReported.Clear();
+                return _lookalikeReported.Add(domain);
+            }
+        }
         private void ProcessDnsQuery(string domain, int pid)
         {
             if (string.IsNullOrWhiteSpace(domain) || domain == ".") return;
@@ -235,6 +244,28 @@ namespace Sentinel.Core
                 });
             }
 
+            // Real-site check: observe-only report of a domain that imitates a well-known brand.
+            var lookalike = LookalikeDomainDetector.Evaluate(domain);
+            if (lookalike.HasValue && NoteLookalike(domain))
+            {
+                _ = _detectionEngine.EmitAsync(new DetectionEvent
+                {
+                    RuleName = "DNS: Look-alike Of Well-Known Brand",
+                    Evidence = $"DNS query for '{domain}' PID={pid} process='{processName}' imitates '{lookalike.Value.Brand}': {lookalike.Value.Reason}.",
+                    Reasoning = "The name resembles a well-known site but is not that site's domain. This is a common phishing and redirect pattern. Observe only; no response is taken.",
+                    Confidence = 0.45,
+                    Tier = DetectionTier.Tier2Indicator,
+                    AuthorizedResponse = ResponseAction.LogOnly,
+                    ProcessName = processName,
+                    ProcessId = pid,
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["Domain"] = domain,
+                        ["Brand"] = lookalike.Value.Brand,
+                        ["Protocol"] = "DNS",
+                    }
+                });
+            }
             // GorstaksProtection v2.4.0: ThreatFox domain IOC check - fast O(1) lookup
             if (_threatFoxFeed != null && _threatFoxFeed.IsMaliciousDomain(domain, out var tfVerdict))
             {

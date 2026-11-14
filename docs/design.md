@@ -257,7 +257,7 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 | `PersistenceSurfaceMonitor` | IFEO, accessibility, Winlogon, COM hijack | periodic |
 | `DreamJobCampaignMonitor` | **v2.2.3.** Lazarus Dream Job: SecurityPDF / FudModule / libmupdf sideload / Temp\\new.exe / C2 IOCs (not afd.sys) | 15s |
 | `EdrKillerDetectionMonitor` | **v2.2.0 registered.** Known EDR-killer **process names** - LogOnly observe fuel (rename bypasses) | 5s |
-| `DecoyPipeMonitor` | **v2.2.0 registered.** Default CS/Metasploit pipe-name honeypots | continuous |
+| `DecoyPipeMonitor` | **Retired in 3.7.4.** Creating Cobalt Strike default pipe names made AV flag the service as a beacon. `NamedPipeMonitor` still detects those names on other processes' pipes | n/a |
 | `CveClassCoverageMonitor` | **v2.2.4.** Generic kernel-EoP / MSI / winget / VS Code / ClickFix / MIDI / RDP-client userland shape | 18s |
 | `MotwBypassMonitor` | **v2.2.4 / v2.3.5.** MOTW-strip PE **and script droppers** (`.hta`/`.js`/`.vbs`/`.wsf`/`.ps1`/`.lnk`/`.chm`), ISO/VHD, VSIX, .rdp, AppInstaller in Downloads/Desktop/Temp | 40s |
 | `ContainerIsolationTamperMonitor` | **v2.2.4.** unionfs/wcifs/bindflt staging (CVE-2026-72971); AlwaysInstallElevated | 30s |
@@ -288,6 +288,11 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 | `DnsResponseValidationMonitor` | Retired compatibility type; no external validation | inactive |
 | `PublicIpMonitor` | Checks public IP via Cloudflare/ipify/icanhazip; detects geo/ASN shift | 5min |
 | `WifiSecurityMonitor` | Polls Wi-Fi state via netsh; detects deauth flood, open network, encryption downgrade | 15s |
+| `LanDeviceInventoryMonitor` | **3.7.4.** Reports a new device in the ARP table (Tier2 / LogOnly) | 2m |
+| `CaptureDeviceUseMonitor` | **3.7.4.** Reports camera/microphone use by an app outside Program Files/System32 (Tier2 / LogOnly) | 20s |
+| `ScheduledScanService` | **3.7.4.** Runs `ScanEngine` daily; no response action | 24h |
+| `BrowserRedirectGuard` | **3.7.4.** Reports Chrome/Edge home, search, proxy policy and default http/https handler changes (Tier2 / LogOnly) | 30s |
+| `LookalikeDomainDetector` | **3.7.4.** Brand look-alike check called from `DnsQueryMonitor` (Tier2 / LogOnly) | per query |
 | `NetworkInterfaceGuard` | Removes bridges via SetupAPI, restores disabled adapters, observes IPv4/IPv6/effective DNS drift as Tier2 LogOnly; administrator-approved DNS repair is separate | 15s |
 | `VpnTunnelLeakMonitor` | **3.6.8.** Observe-only (Tier2/LogOnly, no mutation) VPN tunnel state and bypass: tunnel connected/disconnected, public IPv4 outside the tunnel, physical IPv6 next to an IPv4-only tunnel, resolvers left on physical adapters. OS state only; never reads a VPN client's user-writable log | 20s |
 | `WinsockLspIntegrityMonitor` | **v2.6.5.** Walks Winsock2 protocol/namespace catalogs; flags non-Microsoft/unsigned LSP provider DLLs, missing providers, and chain gaps. Tier1 LogOnly (never rewrites the catalog) | 10min |
@@ -1027,7 +1032,7 @@ Honest remediations. Several 2.1.8 "fixes" were not in force until this version.
 | `KernelModuleAuditMonitor` | SystemIntegrity | NtQuerySystemInformation(SystemModuleInformation) enumeration; detects stealth driver loads bypassing SCM events |
 | `TokenPrivilegeAuditMonitor` | CredentialProtection | Enumerates processes holding SeDebugPrivilege/SeImpersonate from non-admin paths (potato attacks, token theft) |
 | `HoneypotDllMonitor` | Anti-Tamper | Plants decoys in `{install}\honeypot\` (v2.2.0). Not next to Sentinel.exe. |
-| `DecoyPipeMonitor` | Anti-Tamper | Creates secondary pipes with common C2 names; any connection = immediate Tier1 with process attribution |
+| `DecoyPipeMonitor` | Anti-Tamper | Retired in 3.7.4 (see CHANGELOG) |
 | Critical response budget | Response | Chain-confirmed multi-signal detections bypass per-minute rate limit (separate unlimited budget) |
 
 ---

@@ -27,7 +27,7 @@ namespace Sentinel.Core
     // B3: EdrKillerDetectionRule     - Immediate fire on known EDR-killer tools
     // B5: (integrated into AdvancedResponseEngine - critical budget bypass)
     // C1: HoneypotDllMonitor         - Plants decoy DLL in install dir
-    // C3: DecoyPipeMonitor           - Honeypot named pipes with C2 names
+    // C3: (retired 3.7.4) decoy pipes with C2 default names - see CHANGELOG
     // D3: KernelModuleAuditMonitor   - Detects stealth driver loads
     // D4: TokenPrivilegeAuditMonitor - Detects processes with dangerous privileges
     // 
@@ -315,133 +315,6 @@ namespace Sentinel.Core
             if (name == null) return false;
             return HoneypotDllNames.Any(h => string.Equals(h, name, StringComparison.OrdinalIgnoreCase));
         }
-    }
-
-    // 
-    // C3: Decoy Named Pipe Monitor (C2 Honeypot)
-    // 
-
-    /// <summary>
-    /// Creates named pipes with names commonly used by C2 frameworks.
-    /// Any process that connects to these honeypot pipes is definitively performing
-    /// lateral movement or C2 communication - zero false positives.
-    ///
-    /// Known C2 pipe names: CobaltStrike (msagent_*), Metasploit, PoshC2, etc.
-    /// </summary>
-    public sealed class DecoyPipeMonitor : BackgroundService
-    {
-        private readonly DetectionEngine _detectionEngine;
-        private readonly ILogger<DecoyPipeMonitor> _logger;
-
-        // C2 framework pipe name patterns (well-known from CTI), loaded from the compressed
-        // indicator resource so the names are not contiguous entries in the PE string table.
-        private static readonly string[] DecoyPipeNames = IndicatorCatalog.List("decoyPipe.names");
-
-        internal static bool IsDecoyPipeName(string name)
-            => Array.Exists(DecoyPipeNames, candidate => string.Equals(candidate, name, StringComparison.OrdinalIgnoreCase));
-
-        public DecoyPipeMonitor(DetectionEngine detectionEngine, ILogger<DecoyPipeMonitor> logger)
-        {
-            _detectionEngine = detectionEngine;
-            _logger = logger;
-        }
-
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-        {
-            _logger.LogInformation("[DecoyPipe] Creating {Count} C2 honeypot pipes", DecoyPipeNames.Length);
-
-            var tasks = new List<Task>();
-            foreach (var pipeName in DecoyPipeNames)
-            {
-                tasks.Add(MonitorPipeAsync(pipeName, stoppingToken));
-            }
-
-            await Task.WhenAll(tasks);
-        }
-
-        private async Task MonitorPipeAsync(string pipeName, CancellationToken ct)
-        {
-            while (!ct.IsCancellationRequested)
-            {
-                NamedPipeServerStream? pipe = null;
-                try
-                {
-                    // Create a pipe with SYSTEM-only write ACL (any auth user can connect to read direction)
-                    var security = new PipeSecurity();
-                    security.AddAccessRule(new PipeAccessRule(
-                        new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
-                        PipeAccessRights.FullControl, AccessControlType.Allow));
-                    security.AddAccessRule(new PipeAccessRule(
-                        new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null),
-                        PipeAccessRights.ReadWrite, AccessControlType.Allow));
-
-                    pipe = new NamedPipeServerStream(
-                        pipeName,
-                        PipeDirection.InOut,
-                        1,
-                        PipeTransmissionMode.Byte,
-                        PipeOptions.Asynchronous,
-                        0,
-                        0,
-                        security);
-
-                    await pipe.WaitForConnectionAsync(ct);
-
-                    // Someone connected to our C2 honeypot pipe!
-                    int clientPid = 0;
-                    try { GetNamedPipeClientProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out clientPid); } catch { }
-
-                    // Our pipe-owner inspection opens the pipe and therefore connects as a client.
-                    // Compare the kernel-reported PID, never an attacker-controlled process name.
-                    if (clientPid == System.Net48Environment.ProcessId)
-                        continue;
-
-                    string clientProcessName = "unknown";
-                    try
-                    {
-                        using var clientProc = Process.GetProcessById(clientPid);
-                        clientProcessName = clientProc.ProcessName;
-                    }
-                    catch { }
-
-                    await _detectionEngine.EmitAsync(new DetectionEvent
-                    {
-                        RuleName = "C2 Honeypot: Decoy Pipe Connection",
-                        Evidence = $"Process '{clientProcessName}' (PID {clientPid}) connected to honeypot pipe " +
-                                   $"'\\\\?\\pipe\\{pipeName}'. This pipe name is associated with C2 frameworks.",
-                        Reasoning = "Sentinel creates named pipes matching well-known post-exploitation " +
-                                    "framework defaults. No legitimate software uses these pipe names. " +
-                                    "An external client connected to a decoy; inspect its identity and corroborating behavior.",
-                        Confidence = 0.97,
-                        Tier = DetectionTier.Tier1Behavioral,
-                        AuthorizedResponse = ResponseAction.KillProcessTree,
-                        ProcessName = clientProcessName,
-                        ProcessId = clientPid,
-                        SignalType = SignalType.NetworkC2,
-                        Family = TerminalFamily.C2Beacon,
-                        Metadata = new Dictionary<string, string>
-                        {
-                            ["PipeName"] = pipeName,
-                            ["ClientPid"] = clientPid.ToString(),
-                            ["Technique"] = "T1071.001"
-                        }
-                    });
-                }
-                catch (OperationCanceledException) { break; }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(ex, "[DecoyPipe] Error on pipe {Name}", pipeName);
-                    try { await Task.Delay(5000, ct); } catch { break; }
-                }
-                finally
-                {
-                    try { pipe?.Dispose(); } catch { }
-                }
-            }
-        }
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool GetNamedPipeClientProcessId(IntPtr pipe, out int clientProcessId);
     }
 
     // 

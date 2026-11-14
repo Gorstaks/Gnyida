@@ -1,16 +1,16 @@
 [Setup]
 AppName=Sentinel
-AppVersion=3.7.3
+AppVersion=3.7.4
 AppPublisher=Gorstak
 AppPublisherURL=https://gorstak.eu
 AppCopyright=Copyright (C) 2026 Gorstak
-VersionInfoVersion=3.7.3.0
+VersionInfoVersion=3.7.4.0
 VersionInfoCompany=Gorstak
 VersionInfoDescription=Sentinel Endpoint Detection and Response Setup
 VersionInfoCopyright=Copyright (C) 2026 Gorstak
 VersionInfoProductName=Sentinel EDR
-VersionInfoProductVersion=3.7.3.0
-VersionInfoOriginalFileName=SentinelSetup-3.7.3.exe
+VersionInfoProductVersion=3.7.4.0
+VersionInfoOriginalFileName=SentinelSetup-3.7.4.exe
 SourceDir=.
 DefaultDirName={autopf}\Sentinel
 DefaultGroupName=Sentinel
@@ -20,7 +20,7 @@ UninstallDisplayIcon={app}\Sentinel.ico
 Compression=lzma/max
 SolidCompression=no
 OutputDir=.
-OutputBaseFilename=SentinelSetup-3.7.3
+OutputBaseFilename=SentinelSetup-3.7.4
 PrivilegesRequired=admin
 SetupMutex=Global\SentinelSetupMutex
 UsePreviousAppDir=yes
@@ -543,7 +543,7 @@ begin
       'if($p.ChangedInbound -and $p.OriginalInboundAction -ne ''NotConfigured''){$a.DefaultInboundAction=$p.OriginalInboundAction};' +
       'Set-NetFirewallProfile @a -EA SilentlyContinue } }';
     if not Exec(PowerShellPath,
-      '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + PsRestore + '"',
+      '-NoLogo -NoProfile -NonInteractive -Command "' + PsRestore + '"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
       Log('Sentinel: firewall journal restore could not be launched; continuing teardown.')
     else if ResultCode <> 0 then

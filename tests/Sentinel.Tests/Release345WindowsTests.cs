@@ -102,8 +102,9 @@ namespace Sentinel.Tests
             string root = Path.Combine(Path.GetTempPath(), "Sentinel345_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(root);
             using var child = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo {
-                FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"),
-                Arguments = "-NoLogo -NoProfile -NonInteractive -EncodedCommand " + Convert.ToBase64String(Encoding.Unicode.GetBytes("Start-Sleep -Seconds 120")),
+                FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "PING.EXE"),
+                // Plain sleeper: hidden encoded PowerShell is blocked by AV behavior shields.
+                Arguments = "-n 120 127.0.0.1",
                 UseShellExecute = false, CreateNoWindow = true
             })!;
             try

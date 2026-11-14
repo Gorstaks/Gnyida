@@ -153,17 +153,6 @@ edrprison.exe
 sharpterminator.exe
 kdu.exe
 
-# DecoyPipeMonitor.DecoyPipeNames - honeypot pipe names Sentinel CREATES at runtime.
-# These are the strongest "this binary IS C2" tell in a PE string table, so they must
-# live as data, not literals. Order preserved.
-[decoyPipe.names]
-msagent_01
-MSSE-1234-server
-postex_ssh_0001
-win_svc_pipe
-ntsvcs_00
-DserNamePipe_00
-
 # CoercionAbusePolicy.RemoteAccessToolNames.
 [coercion.remoteAccessTools]
 anydesk

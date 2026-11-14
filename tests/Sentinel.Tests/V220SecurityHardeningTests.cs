@@ -135,7 +135,6 @@ namespace Sentinel.Tests
         {
             Assert.True(typeof(BackgroundService).IsAssignableFrom(typeof(HoneypotDllMonitor)));
             Assert.True(typeof(BackgroundService).IsAssignableFrom(typeof(EdrKillerDetectionMonitor)));
-            Assert.True(typeof(BackgroundService).IsAssignableFrom(typeof(DecoyPipeMonitor)));
             Assert.True(typeof(BackgroundService).IsAssignableFrom(typeof(KernelModuleAuditMonitor)));
             Assert.True(typeof(BackgroundService).IsAssignableFrom(typeof(TokenPrivilegeAuditMonitor)));
         }

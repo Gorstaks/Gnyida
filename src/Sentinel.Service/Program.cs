@@ -477,6 +477,7 @@ namespace Sentinel.Service
 
                     // Rules
                     services.AddSingleton<IDetectionRule, ExposedProcessExploitRule>();
+                    services.AddSingleton<IDetectionRule, StdinStagedPowerShellRule>();
                     services.AddTransient<IDetectionRule, LsassAccessRule>();
                     services.AddSingleton<IDetectionRule, SensitiveStoreReadRule>();
                     services.AddTransient<IDetectionRule, RansomwareDetectionRule>();
@@ -560,6 +561,7 @@ namespace Sentinel.Service
                     services.AddHostedService<ServiceAgentIpcHost>();
                     // v2.0: signed correlation rule packs -> PluginRegistry
                     services.AddHostedService<RulePackLoader>();
+                    services.AddHostedService<ScheduledScanService>();
 
                     // 
                     // v1.4.4: Monitor Groups - replaces flat AddHostedService registrations.
@@ -657,7 +659,6 @@ namespace Sentinel.Service
                             ("PersistenceSurfaceMonitor",    s => s.GetRequiredService<PersistenceSurfaceMonitor>()),
                             ("DreamJobCampaignMonitor",      s => s.GetRequiredService<DreamJobCampaignMonitor>()),
                             ("EdrKillerDetectionMonitor",    s => s.GetRequiredService<EdrKillerDetectionMonitor>()),
-                            ("DecoyPipeMonitor",             s => s.GetRequiredService<DecoyPipeMonitor>()),
                             ("CveClassCoverageMonitor",      s => s.GetRequiredService<CveClassCoverageMonitor>()),
                             ("MotwBypassMonitor",            s => s.GetRequiredService<MotwBypassMonitor>()),
                             ("ContainerIsolationTamperMonitor", s => s.GetRequiredService<ContainerIsolationTamperMonitor>()),
@@ -714,7 +715,6 @@ namespace Sentinel.Service
                     services.AddSingleton<PersistenceSurfaceMonitor>();
                     services.AddSingleton<DreamJobCampaignMonitor>();
                     services.AddSingleton<EdrKillerDetectionMonitor>();
-                    services.AddSingleton<DecoyPipeMonitor>();
                     services.AddSingleton<CveClassCoverageMonitor>();
                     services.AddSingleton<MotwBypassMonitor>();
                     services.AddSingleton<ContainerIsolationTamperMonitor>();
@@ -846,6 +846,7 @@ namespace Sentinel.Service
                             ("TlsCertificateMonitor",           s => s.GetRequiredService<TlsCertificateMonitor>()),
                             ("UacBypassSurfaceMonitor",         s => s.GetRequiredService<UacBypassSurfaceMonitor>()),
                             ("HostsFileGuard",                  s => s.GetRequiredService<HostsFileGuard>()),
+                            ("BrowserRedirectGuard",            s => s.GetRequiredService<BrowserRedirectGuard>()),
                             ("BrowserDnsPolicyGuard",           s => s.GetRequiredService<BrowserDnsPolicyGuard>()),
                             ("BootIntegrityGuard",              s => s.GetRequiredService<BootIntegrityGuard>()),
                             ("CveShieldHardener",               s => s.GetRequiredService<CveShieldHardener>()),
@@ -913,6 +914,7 @@ namespace Sentinel.Service
                     services.AddSingleton<TlsCertificateMonitor>();
                     services.AddSingleton<UacBypassSurfaceMonitor>();
                     services.AddSingleton<HostsFileGuard>();
+                    services.AddSingleton<BrowserRedirectGuard>();
                     services.AddSingleton<BrowserDnsPolicyGuard>();
                     services.AddSingleton<BootIntegrityGuard>();
                     services.AddSingleton<CveShieldHardener>();
@@ -942,7 +944,9 @@ namespace Sentinel.Service
                             ("SandboxEscapeMonitor",            s => s.GetRequiredService<SandboxEscapeMonitor>()),
                             ("HardwareSecurityGuard",           s => s.GetRequiredService<HardwareSecurityGuard>()),
                             ("UsbHidWhitelist",                 s => s.GetRequiredService<UsbHidWhitelist>()),
-                            ("PhysicalAccessMonitor",           s => s.GetRequiredService<PhysicalAccessMonitor>())
+                            ("PhysicalAccessMonitor",           s => s.GetRequiredService<PhysicalAccessMonitor>()),
+                            ("CaptureDeviceUseMonitor",         s => s.GetRequiredService<CaptureDeviceUseMonitor>()),
+                            ("LanDeviceInventoryMonitor",       s => s.GetRequiredService<LanDeviceInventoryMonitor>())
                         );
                         return new MonitorGroup(
                             new MonitorGroupConfig
@@ -960,6 +964,8 @@ namespace Sentinel.Service
                             sp.GetRequiredService<MonitorRegistry>());
                     });
                     services.AddSingleton<BluetoothMonitor>();
+                    services.AddSingleton<CaptureDeviceUseMonitor>();
+                    services.AddSingleton<LanDeviceInventoryMonitor>();
                     services.AddSingleton<DeviceInstallMonitor>();
                     services.AddSingleton<MtpTransferGuard>();
                     services.AddSingleton<VolumeMountMonitor>();

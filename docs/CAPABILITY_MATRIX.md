@@ -24,6 +24,8 @@ malware and false-positive testing is still required before claiming product par
 | Tamper resistance / evidence | Visible service, protected IPC, local audit and incident evidence | Userland cannot guarantee survival against SYSTEM/kernel compromise. No self-hiding or kernel self-defense. |
 | Identity / social engineering | Local authentication/event observations where auditing is available | No domain-wide ticket validation, cloud token revocation, phone/SMS scam prevention or guaranteed MFA protection. These need external authority or infrastructure. |
 
+3.7.4 additions (observe-only): daily scheduled scan, known-malware hash check of executables inside archives, brand look-alike DNS, browser redirect settings, camera/microphone use and new LAN devices. No ML verdict for archive contents yet.
+
 ## Standalone completion priorities
 
 1. Build and independently validate a maintained file-detection pipeline: authenticated

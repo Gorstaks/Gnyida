@@ -140,6 +140,9 @@ The system must detect the following indicators (log only):
 | T2-11 | Update/servicing-surface abuse (`UpdateServicingMonitor`): a servicing actor (`TrustedInstaller`/`tiworker`/`wusa`/`dism`/`dismhost`/`expand`/`extrac32`/`pkgmgr`) spawning a shell/LOLBin/credential tool; CAB/MSU extraction to a path outside WinSxS/servicing/Temp staging (CVE-2021-40444 `..\` class); an unsigned or non-Microsoft-signed binary named as a servicing actor; a plain-HTTP or non-Microsoft WSUS/`AutoConfigURL`-style update source - all LOLBin/servicing observe fuel, never a solo kill (composes with `RegistryMonitor` service-drop + `FileActivityMonitor` writes) |
 | T2-12 | Content smuggling in a container at rest (`ArchiveContentInspector` via `FileVerdictScanner`/`FileReputationEngine`): bounded, bomb-safe inspection of `.zip`-family archives and shallow scan of `.iso`/`.img` disk images for decompression-bomb ratios, nested archives, and embedded PE / script-host members. LogOnly `WeakObserveSeed` (file contents + names are attacker-controlled -> never a solo kill); seeds correlation so a later extract-and-detonate terminal completes a respondable chain. Fail-closed and hard-capped (container/total-decompressed <=512 MB, <=4096 entries, depth <=3, 8 s budget) so a zip bomb can never DoS the scanner |
 | T2-13 | Cross-filesystem execution (`CrossFilesystemExecutionMonitor`): unsigned binary loaded from network shares (SMB/UNC), WSL (`\\wsl$\`), container mounts, or mapped network drives - LogOnly observe fuel with confidence 0.35-0.65 (legitimate for development/shared builds; attacker ceiling: staging on remote system is visible once payload executes locally). Never a solo kill trigger; pairs with C2/injection/exfil for composite chains |
+| T2-14 | Stdin-staged PowerShell (`StdinStagedPowerShellRule`, 3.7.4): PowerShell whose command line runs code read from stdin/`$input` or ends in `-Command -`/`-File -` - LogOnly; a verified Sentinel management child is coalesced, never suppressed |
+| T2-15 | Known-malware executable inside an archive (3.7.4): exact SHA-256 of bounded inner PE entries via `HashReputationService` - LogOnly, archive untouched |
+| T2-16 | Redirect/privacy observations (3.7.4): brand look-alike DNS (`LookalikeDomainDetector`), browser home/search/proxy policy and default http/https handler changes (`BrowserRedirectGuard`), camera/mic use outside admin-only install roots (`CaptureDeviceUseMonitor`), new LAN device (`LanDeviceInventoryMonitor`) - all LogOnly |
 
 ### FR-4: Composite Detections
 
@@ -197,7 +200,7 @@ The system must implement two correlation engines that fire composite detections
 | File activity | FileSystemWatcher | None |
 | Process memory | Process.Modules enumeration + module count tracking | None |
 | Process ancestry | CreateToolhelp32Snapshot (~5s refresh) | WMI on constrained SKUs |
-| Webcam/Mic access | Process module enumeration (camera/mic DLL detection) | None |
+| Webcam/Mic access | Process module enumeration (camera/mic DLL detection); CapabilityAccessManager consent-store use (3.7.4) | None |
 | Hash reputation | Service-only bounded HTTPS SHA256 lookups; no file uploads or reporting | Exact current malware/known-file context; failures Unknown, never runtime trust |
 | Windows Event Log trail | Application log / source Sentinel (IDs 1000-1500) | Self-disables gracefully on stripped Windows |
 | PE / URL ML scoring | Offline FastTree models (`MlModels/pe_model.zip`, `url_model.zip`) | Skipped if models absent; soft signal only |

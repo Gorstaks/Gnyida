@@ -197,7 +197,11 @@ namespace Sentinel.Core
                     byte[] head = ReadEntryPrefix(entry, budget, result);
                     if (head.Length > 0)
                     {
-                        if (IsPe(head)) result.ContainsExecutable = true;
+                        if (IsPe(head))
+                        {
+                            result.ContainsExecutable = true;
+                            HashExecutableEntry(entry, entryName, depth, budget, result);
+                        }
                         if (IsZip(head) || IsGzip(head) || IsSevenZip(head) || IsRar(head))
                             looksArchive = true;
                     }
@@ -233,6 +237,47 @@ namespace Sentinel.Core
                         result.NestedDepthExceeded = true;
                     }
                 }
+            }
+        }
+
+        // Inner executables are hashed so exact known-malware content is recognised inside a
+        // container. This uses its own budget: reading a PE body in full must not make a large,
+        // legitimate archive look like a decompression bomb.
+        private const long MaxHashedEntryBytes = 64L * 1024 * 1024;
+        private const long MaxTotalHashedBytes = 256L * 1024 * 1024;
+        private const int MaxHashedEntries = 64;
+
+        private static void HashExecutableEntry(ZipArchiveEntry entry, string entryName, int depth, WalkBudget budget, ArchiveContentAnalysis result)
+        {
+            if (result.ExecutableEntries.Count >= MaxHashedEntries || budget.Expired) { result.ExecutableHashingIncomplete = true; return; }
+            long declared = entry.Length;
+            if (declared <= 0 || declared > MaxHashedEntryBytes || result.HashedBytes + declared > MaxTotalHashedBytes)
+            {
+                result.ExecutableHashingIncomplete = true;
+                return;
+            }
+            try
+            {
+                using var es = entry.Open();
+                using var sha = System.Security.Cryptography.SHA256.Create();
+                var buf = new byte[81920];
+                long total = 0;
+                int n;
+                while ((n = es.Read(buf, 0, buf.Length)) > 0)
+                {
+                    total += n;
+                    // A body longer than its declared size means a lying central directory: stop.
+                    if (total > declared || budget.Expired) { result.ExecutableHashingIncomplete = true; return; }
+                    sha.TransformBlock(buf, 0, n, null, 0);
+                }
+                sha.TransformFinalBlock(new byte[0], 0, 0);
+                result.HashedBytes += total;
+                result.ExecutableEntries.Add(new ArchiveExecutableEntry(entryName, depth,
+                    BitConverter.ToString(sha.Hash ?? new byte[0]).Replace("-", string.Empty), total));
+            }
+            catch (Exception ex) when (ex is IOException || ex is InvalidDataException || ex is NotSupportedException || ex is ObjectDisposedException)
+            {
+                result.ExecutableHashingIncomplete = true;
             }
         }
 
@@ -492,6 +537,11 @@ namespace Sentinel.Core
 
         /// <summary>A PE (MZ/PE) payload was found inside the container.</summary>
         public bool ContainsExecutable { get; set; }
+        /// <summary>SHA-256 of executable entries (bounded); used for exact known-malware lookup.</summary>
+        public List<ArchiveExecutableEntry> ExecutableEntries { get; } = new();
+        /// <summary>Some executables were not hashed (size, count, time or read limits).</summary>
+        public bool ExecutableHashingIncomplete { get; set; }
+        public long HashedBytes { get; set; }
 
         /// <summary>A scripting-host member (.hta/.js/.vbs/.ps1/.lnk/...) was found inside.</summary>
         public bool ContainsScriptHost { get; set; }
@@ -524,4 +574,12 @@ namespace Sentinel.Core
             return string.Join("; ", parts);
         }
     }
-}
+    /// <summary>One executable found inside a container, with its content hash.</summary>
+    public sealed class ArchiveExecutableEntry
+    {
+        public ArchiveExecutableEntry(string name, int depth, string sha256, long size) { Name = name; Depth = depth; Sha256 = sha256; Size = size; }
+        public string Name { get; }
+        public int Depth { get; }
+        public string Sha256 { get; }
+        public long Size { get; }
+    }}

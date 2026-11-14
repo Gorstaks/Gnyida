@@ -30,8 +30,9 @@ namespace Sentinel.Tests
         private static Process StartOwnedSleeper() => Process.Start(new ProcessStartInfo
         {
             FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
-                @"WindowsPowerShell\v1.0\powershell.exe"),
-            Arguments = "-NoProfile -NonInteractive -EncodedCommand " + Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes("Start-Sleep -Seconds 120")),
+                "PING.EXE"),
+            // Plain sleeper: hidden encoded PowerShell is blocked by AV behavior shields.
+            Arguments = "-n 120 127.0.0.1",
             UseShellExecute = false, CreateNoWindow = true
         })!;
 

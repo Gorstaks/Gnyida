@@ -20,7 +20,6 @@ namespace Sentinel.Tests
             Assert.Equal("Sentinel.Core", typeof(DreamJobCampaignMonitor).Namespace);
             Assert.Equal("Sentinel.Core", typeof(EdrKillerDetectionMonitor).Namespace);
             Assert.Equal("Sentinel.Core", typeof(HoneypotDllMonitor).Namespace);
-            Assert.Equal("Sentinel.Core", typeof(DecoyPipeMonitor).Namespace);
             Assert.Equal("Sentinel.Core", typeof(KernelModuleAuditMonitor).Namespace);
             Assert.Equal("Sentinel.Core", typeof(TokenPrivilegeAuditMonitor).Namespace);
             Assert.Equal("Sentinel.Core", typeof(UdpFlowMonitor).Namespace);

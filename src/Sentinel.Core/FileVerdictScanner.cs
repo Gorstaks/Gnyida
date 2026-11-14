@@ -595,6 +595,8 @@ namespace Sentinel.Core
                 {
                     await EmitArchiveContentObserveAsync(filePath, hash, archiveContent);
                 }
+                if (archiveContent != null && archiveContent.ExecutableEntries.Count > 0)
+                    await CheckArchiveExecutablesAsync(filePath, hash, archiveContent, ct).ConfigureAwait(false);
 
                 if (verdict == HashVerdict.Unsafe)
                 {
@@ -633,6 +635,51 @@ namespace Sentinel.Core
         /// It seeds correlation - if the payload is extracted and detonated, behavioral monitors
         /// supply the kill-grade terminal leg and the chain logic authorizes any response.
         /// </summary>
+        /// <summary>
+        /// Looks up every hashed executable inside a container against exact hash reputation.
+        /// A match is reported as Tier2 / LogOnly: nothing has run yet, and the container is left
+        /// in place. If the payload is extracted, the extracted file gets its own full scan and
+        /// file policy, and behavioral monitors cover anything it does when it runs.
+        /// </summary>
+        private async Task CheckArchiveExecutablesAsync(string filePath, string containerHash, ArchiveContentAnalysis ac, CancellationToken ct)
+        {
+            foreach (var entry in ac.ExecutableEntries)
+            {
+                ct.ThrowIfCancellationRequested();
+                HashVerdict v;
+                try { v = await _reputationService.GetVerdictAsync(entry.Sha256, ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "[FileVerdictScanner] Reputation lookup failed for {Entry} in {FilePath}", entry.Name, filePath);
+                    continue;
+                }
+                if (v != HashVerdict.Unsafe) continue;
+                _logger.LogWarning("[FileVerdictScanner] Known-malware executable inside archive: {FilePath} -> {Entry} (SHA256: {Hash})",
+                    filePath, entry.Name, entry.Sha256);
+                await _detectionEngine.EmitAsync(new DetectionEvent
+                {
+                    RuleName = "Archive: Known-Malware Executable Inside Container",
+                    Evidence = $"File={filePath}; entry={entry.Name}; depth={entry.Depth}; size={entry.Size}; entrySHA256={entry.Sha256}; containerSHA256={containerHash}",
+                    Reasoning = "An executable inside this archive matches a known-malware hash. It has not run. Delete the archive or keep it closed. No response is taken on the archive; an extracted copy is scanned and handled on its own.",
+                    Confidence = 0.60,
+                    Tier = DetectionTier.Tier2Indicator,
+                    AuthorizedResponse = ResponseAction.LogOnly,
+                    SignalType = SignalType.SuspiciousProcess,
+                    ProcessName = Path.GetFileName(filePath),
+                    ProcessId = 0,
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["FilePath"] = filePath,
+                        ["Entry"] = entry.Name,
+                        ["EntrySha256"] = entry.Sha256,
+                        ["ContainerSha256"] = containerHash,
+                        ["WeakObserveSeed"] = "true",
+                    }
+                }).ConfigureAwait(false);
+            }
+        }
+
         private async Task EmitArchiveContentObserveAsync(string filePath, string hash, ArchiveContentAnalysis ac)
         {
             try

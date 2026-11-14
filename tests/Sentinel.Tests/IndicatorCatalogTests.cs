@@ -28,7 +28,7 @@ namespace Sentinel.Tests
                 "campaign.dreamJob.cmdline", "campaign.dreamJob.domains", "campaign.dreamJob.ips", "campaign.text",
                 "campaignIoc.domainPatterns", "coercion.remoteAccessTools", "coercion.sessionTheftExtra",
                 "coercion.surveillanceExtra", "credAccess.dumpTools", "credRead.chatSessionStores", "credRead.sshKeySuffixes",
-                "credRead.suffixes", "decoyPipe.names", "edrKiller.fileNames", "edrKiller.names", "fileRep.suspiciousImports",
+                "credRead.suffixes", "edrKiller.fileNames", "edrKiller.names", "fileRep.suspiciousImports",
                 "fragment.credentialHarvest", "incident.attackKeywords", "lpe.toolNames", "mesh.processNames",
                 "ml.downloadTokens", "ml.iexTokens", "ml.lolbinTokens", "namedPipe.knownBadPatterns",
                 "privEsc.uacBypassPatterns", "ratArtifact.kgbMarkers", "remoteAccess.implantNames",

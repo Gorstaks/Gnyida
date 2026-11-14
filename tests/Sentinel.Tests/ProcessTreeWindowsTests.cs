@@ -1,7 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -18,28 +19,25 @@ namespace Sentinel.Tests
 
     public class ProcessTreeWindowsTests
     {
+        // The fixture tree is cmd.exe -> cmd.exe -> ping.exe, with ping as a plain sleeper. It uses no
+        // PowerShell and no encoded commands: hidden nested -EncodedCommand PowerShell is what AV
+        // behavior shields block as a stager, which made this fixture fail on machines with such AV.
+        private static readonly string SystemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        private static readonly string Cmd = Path.Combine(SystemDirectory, "cmd.exe");
+        private static readonly string Ping = Path.Combine(SystemDirectory, "PING.EXE");
+
         [WindowsContainmentFact]
         public async Task KillTree_VerifiesParentChildAndGrandchildExit_LeavesUnrelatedProcessRunning()
         {
-            string directory = Path.Combine(Path.GetTempPath(), "SentinelTree_" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(directory);
-            string childFile = Path.Combine(directory, "child.pid");
-            string grandchildFile = Path.Combine(directory, "grandchild.pid");
-            string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
-                "WindowsPowerShell", "v1.0", "powershell.exe");
-            string grandchildCode = PublishPid(grandchildFile) + "; Start-Sleep -Seconds 120";
-            string childCode = Spawn(powershell, grandchildCode) +
-                "; " + PublishPid(childFile) + "; Start-Sleep -Seconds 120";
-            string rootCode = Spawn(powershell, childCode) + "; Start-Sleep -Seconds 120";
-
+            string sleep = "\"" + Ping + "\" -n 120 127.0.0.1 >nul";
             Process? root = null, child = null, grandchild = null, unrelated = null;
             try
             {
-                root = Start(powershell, rootCode);
-                unrelated = Start(powershell, "Start-Sleep -Seconds 120");
+                root = Start(Cmd, "/d /c start /b \"\" \"" + Cmd + "\" /d /c " + sleep + " & " + sleep);
+                unrelated = Start(Ping, "-n 120 127.0.0.1");
                 int rootPid = root.Id;
-                int childPid = await ReadPidAsync(childFile);
-                int grandchildPid = await ReadPidAsync(grandchildFile);
+                int childPid = await WaitForChildAsync(rootPid, "cmd.exe");
+                int grandchildPid = await WaitForChildAsync(childPid, "ping.exe");
                 child = Process.GetProcessById(childPid);
                 grandchild = Process.GetProcessById(grandchildPid);
                 // Pin the original instances before containment, including for test cleanup.
@@ -73,66 +71,90 @@ namespace Sentinel.Tests
                         if (!process.HasExited) { process.Kill(); process.WaitForExit(5000); }
                     }
                     catch (InvalidOperationException) { /* fixture already exited */ }
+                    catch (System.ComponentModel.Win32Exception) { /* fixture exiting or access lost */ }
                     finally { process.Dispose(); }
                 }
-                Directory.Delete(directory, true);
             }
         }
 
-        private static string Encode(string code) => Convert.ToBase64String(Encoding.Unicode.GetBytes(code));
-        private static string PublishPid(string path) =>
-            "[IO.File]::WriteAllText(" + Quote(path + ".tmp") + ", [string]$PID); " +
-            "[IO.File]::Move(" + Quote(path + ".tmp") + ", " + Quote(path) + ")";
-        private static string Quote(string text) => "'" + text.Replace("'", "''") + "'";
-        private static string Spawn(string powershell, string code)
-            => "$psi = New-Object System.Diagnostics.ProcessStartInfo; " +
-               "$psi.FileName = " + Quote(powershell) + "; " +
-               "$psi.Arguments = " + Quote("-NoProfile -NonInteractive -EncodedCommand " + Encode(code)) + "; " +
-               "$psi.UseShellExecute = $false; $psi.CreateNoWindow = $true; " +
-               "[void][System.Diagnostics.Process]::Start($psi)";
-        private static Process Start(string executable, string code)
-            => Process.Start(new ProcessStartInfo(executable,
-                "-NoProfile -NonInteractive -EncodedCommand " + Encode(code)) { UseShellExecute = false, CreateNoWindow = true })
+        [WindowsContainmentFact]
+        public void ChildLookup_FindsOnlyDirectChildrenOfThatParent()
+        {
+            int self = Process.GetCurrentProcess().Id;
+            using var p = Start(Ping, "-n 30 127.0.0.1");
+            try
+            {
+                var deadline = Stopwatch.StartNew();
+                List<int> found;
+                do { found = FindChildren(self, "ping.exe"); } while (!found.Contains(p.Id) && deadline.Elapsed < TimeSpan.FromSeconds(5));
+                Assert.Contains(p.Id, found);
+                Assert.DoesNotContain(p.Id, FindChildren(self, "cmd.exe"));
+                Assert.DoesNotContain(p.Id, FindChildren(p.Id, "ping.exe"));
+            }
+            finally
+            {
+                try { if (!p.HasExited) { p.Kill(); p.WaitForExit(5000); } } catch (InvalidOperationException) { }
+            }
+        }
+
+        private static Process Start(string executable, string arguments)
+            => Process.Start(new ProcessStartInfo(executable, arguments) { UseShellExecute = false, CreateNoWindow = true })
                ?? throw new InvalidOperationException("Unable to start process-tree fixture.");
-        private static async Task<int> ReadPidAsync(string path)
+
+        private static async Task<int> WaitForChildAsync(int parentPid, string imageName)
         {
             var timer = Stopwatch.StartNew();
             while (timer.Elapsed < TimeSpan.FromSeconds(30))
             {
-                try
-                {
-                    using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
-                        FileShare.ReadWrite | FileShare.Delete);
-                    using var reader = new StreamReader(stream);
-                    if (int.TryParse(reader.ReadToEnd(), out int pid) && pid > 0) return pid;
-                }
-                catch (FileNotFoundException) { /* atomic publication has not completed */ }
-                catch (IOException ex) when ((ex.HResult & 0xffff) is 32 or 33)
-                { /* transient sharing/lock conflict; retain the existing bounded deadline */ }
+                var children = FindChildren(parentPid, imageName);
+                if (children.Count > 0) return children[0];
                 await Task.Delay(50);
             }
-            throw new TimeoutException("Process-tree fixture did not publish its PID.");
+            throw new TimeoutException("Process-tree fixture did not start " + imageName + " under PID " + parentPid + ".");
         }
 
-        [WindowsContainmentFact]
-        public async Task ReadPid_RetriesTransientExclusiveWriter()
+        // Kernel process table (Toolhelp), so the parent link is the OS record, not fixture output.
+        private static List<int> FindChildren(int parentPid, string imageName)
         {
-            string path = Path.Combine(Path.GetTempPath(), "SentinelPid_" + Guid.NewGuid().ToString("N"));
+            var result = new List<int>();
+            IntPtr snapshot = CreateToolhelp32Snapshot(0x00000002, 0);
+            if (snapshot == IntPtr.Zero || snapshot == new IntPtr(-1)) return result;
             try
             {
-                Task<int> read;
-                using (var writer = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                var entry = new PROCESSENTRY32 { dwSize = (uint)Marshal.SizeOf(typeof(PROCESSENTRY32)) };
+                for (bool ok = Process32First(snapshot, ref entry); ok; ok = Process32Next(snapshot, ref entry))
                 {
-                    var bytes = Encoding.UTF8.GetBytes("12345");
-                    writer.Write(bytes, 0, bytes.Length);
-                    writer.Flush();
-                    read = ReadPidAsync(path);
-                    await Task.Delay(150);
-                    Assert.False(read.IsCompleted);
+                    if (entry.th32ParentProcessID == (uint)parentPid &&
+                        string.Equals(entry.szExeFile, imageName, StringComparison.OrdinalIgnoreCase))
+                        result.Add((int)entry.th32ProcessID);
                 }
-                Assert.Equal(12345, await read);
             }
-            finally { File.Delete(path); }
+            finally { CloseHandle(snapshot); }
+            return result;
         }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct PROCESSENTRY32
+        {
+            public uint dwSize;
+            public uint cntUsage;
+            public uint th32ProcessID;
+            public IntPtr th32DefaultHeapID;
+            public uint th32ModuleID;
+            public uint cntThreads;
+            public uint th32ParentProcessID;
+            public int pcPriClassBase;
+            public uint dwFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string szExeFile;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "Process32FirstW", SetLastError = true)]
+        private static extern bool Process32First(IntPtr snapshot, ref PROCESSENTRY32 entry);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "Process32NextW", SetLastError = true)]
+        private static extern bool Process32Next(IntPtr snapshot, ref PROCESSENTRY32 entry);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr handle);
     }
 }

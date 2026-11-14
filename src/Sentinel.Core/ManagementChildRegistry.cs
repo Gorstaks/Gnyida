@@ -84,6 +84,7 @@ namespace Sentinel.Core
             detection.Confidence <= 0.65 &&
             (detection.RuleName == "PowerShell: Encoded Command Observation" ||
              detection.RuleName == "File Reputation: Suspicious Binary Executed" ||
-             detection.RuleName == "Named Pipe: High-Entropy Name (Non-System Owner)");
+             detection.RuleName == "Named Pipe: High-Entropy Name (Non-System Owner)" ||
+             detection.RuleName == StdinStagedPowerShellRule.RuleTitle);
     }
 }

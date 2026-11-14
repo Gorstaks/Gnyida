@@ -285,7 +285,7 @@ New detection capabilities (code existed in 2.1.8; **wired in 2.2.0**):
 | AmsiIntegrityCheck | Detects AMSI/ETW function prologue patching | Kernel-level memory modification (BYOVD) |
 | EdrKillerDetectionMonitor | **Name-only observe fuel** (LogOnly, not President's Law). Catches default tool names. | Rename the binary (always) |
 | HoneypotDllMonitor | Decoy DLLs in `{install}\honeypot\` (never next to Sentinel.exe) | Not touching that folder |
-| DecoyPipeMonitor | C2 honeypot named pipes (default CobaltStrike/Metasploit names) | Using non-standard pipe names for C2 |
+| DecoyPipeMonitor | Retired in 3.7.4: creating C2-default pipe names looked like a beacon to AV behavior shields. `NamedPipeMonitor` covers real pipes | n/a |
 | KernelModuleAuditMonitor | NtQuerySystemInformation detects stealth BYOVD loads; logs pre-existing RTCore64/WinRing0 | Already having kernel control to hide from NtQSI |
 | TokenPrivilegeAuditMonitor | SeDebugPrivilege/SeImpersonate from user-writable paths | Running from a non-user-writable path (Program Files) |
 
@@ -422,7 +422,7 @@ See [design.md](design.md) for the full component inventory (all MonitorGroups +
 - **AmsiIntegrityCheck** (v2.1.8 code / **registered v2.2.0**) - AMSI/ETW function prologue integrity monitoring
 - **EdrKillerDetectionMonitor** (v2.2.0) - Known EDR-killer **process-name observe** (LogOnly; rename bypasses)
 - **HoneypotDllMonitor** (v2.2.0) - Decoy DLL tripwires in `{install}\honeypot\` (not the exe directory)
-- **DecoyPipeMonitor** (v2.2.0) - C2 honeypot named pipes (default CobaltStrike/Metasploit names)
+- **DecoyPipeMonitor** (v2.2.0, retired 3.7.4) - C2 honeypot named pipes
 - **KernelModuleAuditMonitor** (v2.2.0) - NtQuerySystemInformation stealth driver detection; logs pre-existing BYOVD-capable modules
 - **TokenPrivilegeAuditMonitor** (v2.2.0) - Dangerous token privilege enumeration
 - **WebDashboardService** (v2.2.0, hardened 3.7.1) - Bearer header for `/api/*`; tray `?token=` only for `GET /` and `/ws/events`; Referer is not auth; token never embedded in HTML; `Host`/`Origin` pinned; CSP
@@ -783,7 +783,7 @@ The retained `worker/` server is deployed independently. Its evidence route stor
 
 **Mitigation:**
 - Honeypot DLLs catch untargeted sideload scanners that probe every subdirectory
-- Decoy pipe names catch default C2 configs
+- (Retired 3.7.4) Decoy pipe names caught default C2 configs
 - These are defense-in-depth - NOT the primary detection mechanism
 
 **Residual risk:** LOW for targeted attackers (they'll just avoid). Useful against automated tools.
@@ -842,7 +842,7 @@ Hard-to-bypass detections (require kernel access to evade):
 | Process injection (ETW ThreatIntel) | HIGH | MEDIUM |
 | Credential Guard disablement | HIGH | MEDIUM |
 | Hardware security downgrade | HIGH | MEDIUM |
-| Decoy pipe connection (C2 honeypot) | HIGH | LOW |
+| Decoy pipe connection (C2 honeypot, retired 3.7.4) | HIGH | LOW |
 | Honeypot DLL access (sideload probe) | HIGH | LOW |
 | PowerShell Script Block patterns | HIGH | MEDIUM |
 | Kernel module load (NtQSI baseline) | HIGH | MEDIUM |
