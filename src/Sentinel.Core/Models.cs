@@ -171,8 +171,10 @@ namespace Sentinel.Core
         /// <summary>
         /// Proactive file inspection: open, hash and signature-check files just because they
         /// were created, changed or exist on disk. Covers FileVerdictScanner's realtime watchers
-        /// and drive walk, FileActivityMonitor's writer lookup and System32 signature checks, and
-        /// DriverLoadMonitor's hashing of .sys files dropped in user folders.
+        /// and drive walk, FileActivityMonitor's writer lookup and System32 signature checks,
+        /// DriverLoadMonitor's hashing of .sys files dropped in user folders (3.7.6), and
+        /// LnkShortcutMonitor, ScriptExecutionMonitor's script-drop check, PrintSpoolerMonitor's
+        /// driver-DLL signature check and the unattended ScheduledScanService (3.7.7).
         /// Default FALSE since 3.7.6 (no touch until proven malicious). A userland handle on a
         /// freshly written file makes installers that open it exclusively fail with 0x20 (seen
         /// with NVIDIA driver staging). Process images that actually run are still inspected.

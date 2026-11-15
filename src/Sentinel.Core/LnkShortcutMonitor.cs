@@ -17,7 +17,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Sentinel.Core
 {
-    public sealed class LnkShortcutMonitor : BackgroundService
+    public sealed class LnkShortcutMonitor : BackgroundService, IMonitorStartupTask
     {
         private readonly DetectionEngine _detectionEngine;
         private readonly JsonlEventLogger _eventLogger;
@@ -62,16 +62,30 @@ namespace Sentinel.Core
             DetectionEngine detectionEngine,
             JsonlEventLogger eventLogger,
             QuarantineManager quarantineManager,
-            ILogger<LnkShortcutMonitor> logger)
+            ILogger<LnkShortcutMonitor> logger,
+            SentinelConfig? config = null)
         {
             _detectionEngine = detectionEngine;
             _eventLogger = eventLogger;
             _quarantineManager = quarantineManager;
             _logger = logger;
+            _proactiveFileInspection = (config ?? new SentinelConfig()).EnableProactiveFileInspection;
         }
+
+        // Every finding here comes from reading a shortcut's content and can quarantine it,
+        // so the whole monitor runs only with proactive file inspection on.
+        private readonly bool _proactiveFileInspection;
+
+        public string CompletionDescription =>
+            "Proactive file inspection is off by policy (no touch until proven malicious). Shortcut files are not read or quarantined; a process launched from a shortcut is still inspected when it runs.";
 
         protected override async Task ExecuteAsync(CancellationToken ct)
         {
+            if (!_proactiveFileInspection)
+            {
+                _logger.LogInformation("[LnkShortcutMonitor] {Reason}", CompletionDescription);
+                return;
+            }
             _logger.LogInformation("[LnkShortcutMonitor] Starting - watching for malicious .lnk files");
 
             // Start watchers on all target directories

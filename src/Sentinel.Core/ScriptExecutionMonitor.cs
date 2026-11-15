@@ -83,11 +83,17 @@ namespace Sentinel.Core
             Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
         };
 
-        public ScriptExecutionMonitor(DetectionEngine de, ILogger<ScriptExecutionMonitor> l)
+        public ScriptExecutionMonitor(DetectionEngine de, ILogger<ScriptExecutionMonitor> l, SentinelConfig? config = null)
         {
             _detectionEngine = de;
             _logger = l;
+            _proactiveFileInspection = (config ?? new SentinelConfig()).EnableProactiveFileInspection;
         }
+
+        // The script-drop check reads dropped script content and can quarantine it on content
+        // alone, so it runs only with proactive file inspection on. Execution, parent-child,
+        // AMSI and SAM checks are behavioral and always run.
+        private readonly bool _proactiveFileInspection;
 
         protected override async Task ExecuteAsync(CancellationToken ct)
         {
@@ -103,7 +109,7 @@ namespace Sentinel.Core
                     await CheckParentChildAnomalies(ct);
                     await CheckAmsiIntegrity(ct);
                     await CheckSamHiveExtraction(ct);
-                    await CheckScriptFileDrops(ct);
+                    if (_proactiveFileInspection) await CheckScriptFileDrops(ct);
 
                     // Expire old alerts (cooldown)
                     var cutoff = DateTime.UtcNow.AddMinutes(-2);

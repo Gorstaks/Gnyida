@@ -52,11 +52,15 @@ namespace Sentinel.Core
 
         public PrintSpoolerMonitor(
             DetectionEngine detectionEngine,
-            ILogger<PrintSpoolerMonitor> logger)
+            ILogger<PrintSpoolerMonitor> logger,
+            SentinelConfig? config = null)
         {
             _detectionEngine = detectionEngine;
             _logger = logger;
+            _proactiveFileInspection = (config ?? new SentinelConfig()).EnableProactiveFileInspection;
         }
+
+        private readonly bool _proactiveFileInspection;
 
         protected override async Task ExecuteAsync(CancellationToken ct)
         {
@@ -307,56 +311,80 @@ namespace Sentinel.Core
                         // New DLL appeared in printer driver directory - potential PrintNightmare
                         _alertedDriverPaths[dllPath] = 0;
 
-                        // Check if the DLL is Authenticode signed
-                        bool isSigned = SecurityValidation.VerifyAuthenticodeSignature(dllPath);
+                        // The Authenticode check opens the DLL, so it runs only with proactive
+                        // file inspection on. Otherwise the plant is reported from metadata only.
+                        bool? isSigned = _proactiveFileInspection
+                            ? SecurityValidation.VerifyAuthenticodeSignature(dllPath)
+                            : (bool?)null;
                         var fileInfo = new FileInfo(dllPath);
                         bool isRecent = (DateTime.UtcNow - fileInfo.CreationTimeUtc).TotalMinutes < 5;
 
-                        double confidence = 0.75;
-                        var response = ResponseAction.LogOnly;
-
-                        if (!isSigned && isRecent)
-                        {
-                            confidence = 0.92;
-                            response = ResponseAction.QuarantineAndKill;
-                        }
-                        else if (!isSigned)
-                        {
-                            confidence = 0.85;
-                            response = ResponseAction.Quarantine;
-                        }
-                        else if (isRecent)
-                        {
-                            confidence = 0.70;
-                        }
-
-                        await _detectionEngine.EmitAsync(new DetectionEvent
-                        {
-                            RuleName = "Print Spooler: PrintNightmare Driver DLL Planted",
-                            Evidence = $"New DLL appeared in printer driver directory: '{dllPath}'. " +
-                                       $"Signed: {isSigned}, Created: {fileInfo.CreationTimeUtc:O}, Size: {fileInfo.Length} bytes.",
-                            Reasoning = "A new DLL was planted in the Windows printer driver directory after Sentinel's baseline. " +
-                                        "This is the primary indicator of PrintNightmare (CVE-2021-34527) exploitation where " +
-                                        "AddPrinterDriverEx is called with a malicious DLL path. The spooler loads this DLL as SYSTEM, " +
-                                        "giving the attacker immediate privilege escalation.",
-                            Confidence = confidence,
-                            Tier = DetectionTier.Tier1Behavioral,
-                            AuthorizedResponse = response,
-                            SignalType = SignalType.SuspiciousProcess,
-                            ProcessName = "spoolsv",
-                            ProcessId = GetSpoolerPid(),
-                            Metadata = new Dictionary<string, string>
-                            {
-                                ["DllPath"] = dllPath,
-                                ["IsSigned"] = isSigned.ToString(),
-                                ["IsRecent"] = isRecent.ToString(),
-                                ["CVE"] = "CVE-2021-34527"
-                            }
-                        });
+                        var evt = BuildDriverDllPlantEvent(dllPath, isSigned, isRecent,
+                            fileInfo.CreationTimeUtc, fileInfo.Length);
+                        evt.ProcessId = GetSpoolerPid();
+                        await _detectionEngine.EmitAsync(evt);
                     }
                 }
                 catch { }
             }
+        }
+
+        /// <summary>
+        /// isSigned == null means the DLL was not opened (no touch until proven malicious):
+        /// a new file in the driver directory alone is Tier2 / LogOnly correlation context.
+        /// The spoolsv child-process check remains the behavioral signal.
+        /// </summary>
+        internal static DetectionEvent BuildDriverDllPlantEvent(string dllPath, bool? isSigned, bool isRecent,
+            DateTime createdUtc, long size)
+        {
+            double confidence = 0.75;
+            var response = ResponseAction.LogOnly;
+            var tier = DetectionTier.Tier1Behavioral;
+
+            if (isSigned == null)
+            {
+                confidence = isRecent ? 0.60 : 0.50;
+                tier = DetectionTier.Tier2Indicator;
+            }
+            else if (!isSigned.Value && isRecent)
+            {
+                confidence = 0.92;
+                response = ResponseAction.QuarantineAndKill;
+            }
+            else if (!isSigned.Value)
+            {
+                confidence = 0.85;
+                response = ResponseAction.Quarantine;
+            }
+            else if (isRecent)
+            {
+                confidence = 0.70;
+            }
+
+            string signedText = isSigned?.ToString() ?? "not checked";
+            return new DetectionEvent
+            {
+                RuleName = "Print Spooler: PrintNightmare Driver DLL Planted",
+                Evidence = $"New DLL appeared in printer driver directory: '{dllPath}'. " +
+                           $"Signed: {signedText}, Created: {createdUtc:O}, Size: {size} bytes.",
+                Reasoning = "A new DLL was planted in the Windows printer driver directory after Sentinel's baseline. " +
+                            "This is the primary indicator of PrintNightmare (CVE-2021-34527) exploitation where " +
+                            "AddPrinterDriverEx is called with a malicious DLL path. The spooler loads this DLL as SYSTEM, " +
+                            "giving the attacker immediate privilege escalation." +
+                            (isSigned == null ? " The DLL was not opened (proactive file inspection off), so this is context only." : ""),
+                Confidence = confidence,
+                Tier = tier,
+                AuthorizedResponse = response,
+                SignalType = SignalType.SuspiciousProcess,
+                ProcessName = "spoolsv",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["DllPath"] = dllPath,
+                    ["IsSigned"] = signedText,
+                    ["IsRecent"] = isRecent.ToString(),
+                    ["CVE"] = "CVE-2021-34527"
+                }
+            };
         }
 
         private async Task DetectSpoolerChildProcesses(CancellationToken ct)

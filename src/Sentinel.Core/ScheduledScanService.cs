@@ -20,16 +20,26 @@ namespace Sentinel.Core
         private readonly ScanEngine _scanEngine;
         private readonly ILogger<ScheduledScanService> _logger;
         private readonly string _statePath;
-        public ScheduledScanService(ScanEngine scanEngine, ILogger<ScheduledScanService> logger)
+        public ScheduledScanService(ScanEngine scanEngine, ILogger<ScheduledScanService> logger, SentinelConfig? config = null)
         {
             _scanEngine = scanEngine;
             _logger = logger;
             _statePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Sentinel", "scheduled-scan.json");
+            _proactiveFileInspection = (config ?? new SentinelConfig()).EnableProactiveFileInspection;
         }
+
+        // An unattended full scan opens every file on disk, so it runs only with proactive file
+        // inspection on. Scans the user starts from the dashboard are unaffected.
+        private readonly bool _proactiveFileInspection;
         internal static bool IsDue(DateTime? lastRunUtc, DateTime nowUtc)
             => lastRunUtc == null || nowUtc - lastRunUtc.Value >= Period || lastRunUtc.Value > nowUtc;
         protected override async Task ExecuteAsync(CancellationToken ct)
         {
+            if (!_proactiveFileInspection)
+            {
+                _logger.LogInformation("[ScheduledScan] Off by policy (no touch until proven malicious); on-demand scans still run.");
+                return;
+            }
             _logger.LogInformation("[ScheduledScan] Started (daily)");
             try { await Task.Delay(StartupGrace, ct); } catch (OperationCanceledException) { return; }
             while (!ct.IsCancellationRequested)

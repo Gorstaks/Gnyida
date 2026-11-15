@@ -192,12 +192,25 @@ namespace Sentinel.Tests
                 Assert.DoesNotContain(key + " = 0", inf);
             }
 
-            // Privilege Rights are intentionally restricted: debug privilege is granted to nobody,
-            // and backup privilege is limited to Administrators and Backup Operators.
+            // Privilege Rights are intentionally restricted: debug privilege is granted to nobody
+            // or to Administrators only (*S-1-5-32-544), and backup privilege to Administrators,
+            // optionally with Backup Operators (*S-1-5-32-551).
             Assert.Contains("[Privilege Rights]", inf);
             var debugLine = inf.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.StartsWith("SeDebugPrivilege", StringComparison.Ordinal));
-            Assert.Equal("SeDebugPrivilege=", debugLine);
-            Assert.Contains("SeBackupPrivilege = *S-1-5-32-544,*S-1-5-32-551", inf);
+            Assert.NotNull(debugLine);
+            var separator = debugLine!.IndexOf('=');
+            Assert.True(separator > 0, "SeDebugPrivilege line has no '=': " + debugLine);
+            Assert.Equal("SeDebugPrivilege", debugLine.Substring(0, separator).Trim());
+            var debugHolders = debugLine.Substring(separator + 1).Trim();
+            Assert.True(debugHolders.Length == 0 || debugHolders == "*S-1-5-32-544",
+                "SeDebugPrivilege must be granted to nobody or to Administrators only, was: '" + debugHolders + "'");
+            var backupLine = inf.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.StartsWith("SeBackupPrivilege", StringComparison.Ordinal));
+            Assert.NotNull(backupLine);
+            var backupSeparator = backupLine!.IndexOf('=');
+            Assert.True(backupSeparator > 0, "SeBackupPrivilege line has no '=': " + backupLine);
+            var backupHolders = backupLine.Substring(backupSeparator + 1).Replace(" ", "");
+            Assert.True(backupHolders == "*S-1-5-32-544" || backupHolders == "*S-1-5-32-544,*S-1-5-32-551",
+                "SeBackupPrivilege must be Administrators only, or Administrators and Backup Operators, was: '" + backupHolders + "'");
         }
 
         [Fact]

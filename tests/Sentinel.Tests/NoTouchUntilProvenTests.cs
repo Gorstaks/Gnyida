@@ -22,6 +22,47 @@ namespace Sentinel.Tests
             Assert.False(config.EnableAggressiveUnsignedDllSweep);
         }
 
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void PrintNightmarePlantWithoutSignatureCheckIsTier2LogOnly(bool recent)
+        {
+            var evt = PrintSpoolerMonitor.BuildDriverDllPlantEvent(@"C:\Windows\System32\spool\drivers\x64\3\new.dll",
+                isSigned: null, isRecent: recent, DateTime.UtcNow, 4096);
+            Assert.Equal(DetectionTier.Tier2Indicator, evt.Tier);
+            Assert.Equal(ResponseAction.LogOnly, evt.AuthorizedResponse);
+            Assert.Equal("not checked", evt.Metadata!["IsSigned"]);
+
+            // Tier2 log-only contract: dispatch policy can never arm a response for it.
+            evt.AuthorizedResponse = ResponseAction.QuarantineAndKill;
+            ResponsePolicy.EnforceDispatchPolicy(evt);
+            Assert.Equal(ResponseAction.LogOnly, evt.AuthorizedResponse);
+        }
+
+        [Fact]
+        public void PrintNightmareUnsignedRecentPlantStaysTier1WhenInspectionEnabled()
+        {
+            var evt = PrintSpoolerMonitor.BuildDriverDllPlantEvent(@"C:\Windows\System32\spool\drivers\x64\3\new.dll",
+                isSigned: false, isRecent: true, DateTime.UtcNow, 4096);
+            Assert.Equal(DetectionTier.Tier1Behavioral, evt.Tier);
+            Assert.Equal(ResponseAction.QuarantineAndKill, evt.AuthorizedResponse);
+        }
+
+        [Fact]
+        public async Task LnkShortcutMonitorCompletesAsPolicyStartupTaskWithoutReadingShortcuts()
+        {
+            using var monitor = new LnkShortcutMonitor(null!, null!, null!, NullLogger<LnkShortcutMonitor>.Instance);
+            Assert.IsAssignableFrom<IMonitorStartupTask>(monitor);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await monitor.StartAsync(cts.Token);
+            var execute = monitor.ExecuteTask;
+            Assert.NotNull(execute);
+            var finished = await Task.WhenAny(execute!, Task.Delay(TimeSpan.FromSeconds(5), cts.Token));
+            Assert.Same(execute, finished);
+            Assert.Equal(TaskStatus.RanToCompletion, execute!.Status);
+            await monitor.StopAsync(CancellationToken.None);
+        }
+
         [Fact]
         public async Task FileVerdictScannerCompletesAsPolicyStartupTaskWithoutWatchers()
         {

@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.7.7] - 2026-11-15
+
+### Changed - no touch until proven malicious, remaining file readers
+
+3.7.6 listed the monitors that still read or quarantined files on their own. With `SentinelConfig.EnableProactiveFileInspection=false` (the default) they now do neither:
+
+- **`LnkShortcutMonitor`** starts no shortcut watchers and no initial shortcut scan, and never quarantines a `.lnk` file. It completes as an `IMonitorStartupTask` with the policy as its reason. A process started from a shortcut is still inspected when it runs. (`LnkUncGuard` is not registered, so nothing changes there.)
+- **`ScriptExecutionMonitor`** skips the script-drop check. That check read dropped scripts and could quarantine one on content alone. The script-execution, parent-child, AMSI and SAM checks are behavioural and still run.
+- **`PrintSpoolerMonitor`**: a new DLL in the printer driver directory is no longer opened for an Authenticode check. It is reported from metadata only as `Print Spooler: PrintNightmare Driver DLL Planted`, Tier2 / LogOnly, `IsSigned=not checked`. Before, an unsigned plant was Tier1 with Quarantine / QuarantineAndKill on the signature result alone. With inspection on, the old Tier1 decisions are unchanged. The spoolsv child-process check (behavioural) still runs.
+- **`ScheduledScanService`** no longer runs the unattended 24 h full scan. Scans the user starts are unaffected.
+- Unchanged by design: `CveClassCoverageMonitor` checks signatures of processes that are already running (acting), and `MotwBypassMonitor` only queries the `Zone.Identifier` attribute, which is not subject to share modes.
+
+### Tests
+
+- `NoTouchUntilProvenTests`: a PrintNightmare plant without a signature check is Tier2Indicator / LogOnly, and the dispatch policy keeps it LogOnly even if a response is requested. An unsigned recent plant stays Tier1Behavioral / QuarantineAndKill when inspection is enabled. `LnkShortcutMonitor` completes as a policy startup task.
+- `GSecurityInf_EnablesAuditingAndDoesNotOverrideGlobalUserRights` now accepts the 3.7.5 policy. `SeDebugPrivilege` may be granted to nobody or to Administrators only (`*S-1-5-32-544`). `SeBackupPrivilege` may be Administrators only, or Administrators and Backup Operators (`*S-1-5-32-551`). Any other holder still fails the test.
+- Solution builds 0 warnings / 0 errors (`-warnaserror`). Full suite: 3,764 passed, 1 skipped, 1 failed. The failure, `SelfIsolationRepairsDuplicatesAndRepeatedApplyDoesNotGrowRuleCount`, predates 3.7.6 and depends on live firewall state.
 ## [3.7.6] - 2026-11-15
 
 ### Changed - no touch until proven malicious (file inspection)
@@ -14,7 +31,7 @@ Owner rule: Sentinel does not open, hash, signature-check or quarantine a file j
   - `DriverLoadMonitor` no longer hashes `.sys` files dropped in user folders. The name-based report is unchanged, and a driver that is actually loaded is still hashed.
 - **`EnableAggressiveUnsignedDllSweep` now defaults `false`** (it was `true` from the release that expanded it). It quarantined unsigned modules on sight and killed the processes holding them. Unsigned is not proof of malice. It remains compiled-only.
 - **Also in this release:** `FileVerdictScanner.IsOsServicingTree` skips `%windir%\System32\DriverStore\Temp` (SYSTEM-only write ACL, canonical path, `..` traversal and look-alike user folders not skipped). The realtime handler checks excluded folders before `IsScannable`, which opens unknown-extension files. `IsOsServicingTree` returns false instead of throwing for an unresolvable path. These apply only if proactive inspection is turned back on.
-- **Detection impact.** A known-malware file is no longer recognised when it lands on disk. It is recognised when it runs or when a process behaves maliciously. Kill and quarantine authority is unchanged, because it already requires behavioural proof. Not changed (still read files they watch): `LnkShortcutMonitor`/`LnkUncGuard` (`.lnk` content), `ScriptExecutionMonitor` script drops, `CveCoverageMonitors` signature checks on recent downloads, `PrintSpoolerMonitor` new spool driver DLLs, and the 24 h `ScheduledScanService`.
+- **Detection impact.** A known-malware file is no longer recognised when it lands on disk. It is recognised when it runs or when a process behaves maliciously. Kill and quarantine authority is unchanged, because it already requires behavioural proof. The remaining file readers were moved under the same policy in 3.7.7.
 
 ### Tests
 
