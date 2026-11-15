@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Sentinel.Core
 {
-    public class FileVerdictScanner : BackgroundService, ISensorProgressSource
+    public class FileVerdictScanner : BackgroundService, ISensorProgressSource, IMonitorStartupTask
     {
         public SensorProgress Progress { get; } = new(TimeSpan.FromSeconds(30))
             { Scope = "File watcher subscription checks; does not prove every file was delivered/scanned. Overflow starts local watcher recovery and a fresh content walk; healthy subscriptions do not establish recovery until enumeration completes." };
@@ -49,12 +49,23 @@ namespace Sentinel.Core
 
         // Only real OS-owned servicing trees are omitted; a folder named mount/ntlite/uup
         // or an unrelated process with a servicing name can never disable scanning globally.
+        // System32\DriverStore\Temp is PnP's transient staging area (SYSTEM-only write ACL).
+        // Opening files there during driver import makes the copy fail with a sharing
+        // violation (0x20). Imported packages land in DriverStore\FileRepository, which
+        // stays scanned.
         internal static bool IsOsServicingTree(string path, string windowsDirectory)
         {
-            if (string.IsNullOrWhiteSpace(windowsDirectory)) return false;
-            string candidate = Path.GetFullPath(path).Replace('/', '\\').TrimEnd('\\');
-            string root = Path.GetFullPath(windowsDirectory).Replace('/', '\\').TrimEnd('\\');
-            foreach (var part in new[] { "winsxs", "servicing" })
+            if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(windowsDirectory)) return false;
+            string candidate, root;
+            try
+            {
+                candidate = Path.GetFullPath(path).Replace('/', '\\').TrimEnd('\\');
+                root = Path.GetFullPath(windowsDirectory).Replace('/', '\\').TrimEnd('\\');
+            }
+            // Unresolvable path (too long, invalid characters): not excluded, so it is still scanned.
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException || ex is System.Security.SecurityException)
+            { return false; }
+            foreach (var part in new[] { "winsxs", "servicing", @"System32\DriverStore\Temp" })
             {
                 string tree = root + "\\" + part;
                 if (candidate.Equals(tree, StringComparison.OrdinalIgnoreCase) ||
@@ -89,7 +100,8 @@ namespace Sentinel.Core
             FileReputationEngine reputationEngine,
             DetectionEngine detectionEngine,
             FileScanIndex scanIndex,
-            ILogger<FileVerdictScanner> logger, QuarantineManager? quarantine = null, JsonlEventLogger? audit = null)
+            ILogger<FileVerdictScanner> logger, QuarantineManager? quarantine = null, JsonlEventLogger? audit = null,
+            SentinelConfig? config = null)
         {
             _reputationService = reputationService;
             _reputationEngine = reputationEngine;
@@ -97,7 +109,15 @@ namespace Sentinel.Core
             _scanIndex = scanIndex;
             _quarantine = quarantine; _audit = audit;
             _logger = logger;
+            _proactive = (config ?? new SentinelConfig()).EnableProactiveFileInspection;
+            if (!_proactive)
+                Progress.Scope = "Off by policy (SentinelConfig.EnableProactiveFileInspection=false): no file is opened because it was created, changed or exists on disk.";
         }
+
+        private readonly bool _proactive;
+
+        public string CompletionDescription =>
+            "Proactive file inspection is off by policy (no touch until proven malicious). No watchers or drive walk run; process images that execute are still inspected by other monitors.";
 
         // A coverage run that lasts at least this long is treated as healthy; restart delays reset after it.
         private static readonly TimeSpan CoverageHealthyRunThreshold = TimeSpan.FromMinutes(10);
@@ -116,6 +136,13 @@ namespace Sentinel.Core
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            if (!_proactive)
+            {
+                // Completes as a startup task (IMonitorStartupTask) so the monitor group records
+                // the policy instead of reporting an unavailable sensor or restarting it.
+                _logger.LogInformation("[FileVerdictScanner] {Reason}", CompletionDescription);
+                return;
+            }
             int consecutiveCoverageLosses = 0;
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -384,7 +411,12 @@ namespace Sentinel.Core
         private void QueueRealtimeScan(string path)
         {
             var ct = _realtimeToken;
-            if (ct.IsCancellationRequested || IsSentinelOwnPath(path) || !IsScannable(path)) return;
+            // Path-only exclusions must run before IsScannable: for unknown extensions
+            // (SETxxxx.tmp, .bin) IsScannable opens the file to read the PE header, and
+            // that handle alone fails PnP staging in DriverStore\Temp with 0x20.
+            if (ct.IsCancellationRequested || IsSentinelOwnPath(path) ||
+                IsOsServicingTree(path, Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ||
+                !IsScannable(path)) return;
             if (!_pendingPaths.TryAdd(path, 0)) { _pendingPaths.TryUpdate(path, 1, 0); return; }
             if (!_scanTaskThrottle.Wait(0)) { _pendingPaths.TryRemove(path, out _); RealtimeGap(); return; }
             _ = Task.Run(async () =>

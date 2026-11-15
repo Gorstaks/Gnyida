@@ -159,13 +159,26 @@ namespace Sentinel.Core
         /// <summary>
         /// AGGRESSIVE mode: walks ready drive roots for unsigned loadable modules
         /// (.dll/.winmd/.ocx/.cpl/.ax/.node/.drv/...) and quarantines them with hardened removal
-        /// (kill holders + takeown/icacls so locked modules leave disk immediately). Default TRUE
-        /// on this repeat-target host - the sweep mirrors the PS Antivirus.ps1 DLL remover.
+        /// (kill holders + takeown/icacls so locked modules leave disk immediately).
+        /// Default FALSE since 3.7.6: "unsigned" is not proof of malice, and the owner's rule is
+        /// that Sentinel touches nothing until it is proven malicious.
         /// Still compiled-only: disk JSON does NOT enable it (EncryptedConfigStore has no case for
         /// this key and all JSON sources are stripped), so a planted file can neither arm NOR
-        /// disarm it. To disarm, change this initializer and rebuild.
+        /// disarm it. To re-arm, change this initializer and rebuild.
         /// </summary>
-        public bool EnableAggressiveUnsignedDllSweep { get; set; } = true;
+        public bool EnableAggressiveUnsignedDllSweep { get; set; } = false;
+
+        /// <summary>
+        /// Proactive file inspection: open, hash and signature-check files just because they
+        /// were created, changed or exist on disk. Covers FileVerdictScanner's realtime watchers
+        /// and drive walk, FileActivityMonitor's writer lookup and System32 signature checks, and
+        /// DriverLoadMonitor's hashing of .sys files dropped in user folders.
+        /// Default FALSE since 3.7.6 (no touch until proven malicious). A userland handle on a
+        /// freshly written file makes installers that open it exclusively fail with 0x20 (seen
+        /// with NVIDIA driver staging). Process images that actually run are still inspected.
+        /// Compiled-only like the sweep above: EncryptedConfigStore has no case for this key.
+        /// </summary>
+        public bool EnableProactiveFileInspection { get; set; } = false;
 
         /// <summary>
         /// v2.7.6: Operator-defined DOMAIN blocks, enforced by the proven forum.hr-style path -

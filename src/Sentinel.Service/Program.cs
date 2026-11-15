@@ -894,7 +894,7 @@ namespace Sentinel.Service
                     services.AddSingleton<IRegisteredModuleSource, HklmRegisteredModuleSource>();
                     services.AddSingleton<TrustedHostModuleIntegrityMonitor>();
                     // Opt-in aggressive unsigned-DLL drive sweep (gated behind
-                    // SentinelConfig.EnableAggressiveUnsignedDllSweep, compiled default FALSE).
+                    // SentinelConfig.EnableAggressiveUnsignedDllSweep, compiled default FALSE since 3.7.6).
                     services.AddSingleton<AggressiveUnsignedDllSweepMonitor>();
                     // Autonomous suspicious-root guard: detects roots the OS trusted-root program
                     // does not vouch for (no AuthRoot-CTL / MS-program stamp) + the explicit distrust

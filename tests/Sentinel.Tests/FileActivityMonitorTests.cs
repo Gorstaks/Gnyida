@@ -16,13 +16,13 @@ namespace Sentinel.Tests
             Directory.CreateDirectory(_tempPath);
         }
 
-        private FileActivityMonitor CreateMonitor(out SignerTrustService signerTrust)
+        private FileActivityMonitor CreateMonitor(out SignerTrustService signerTrust, bool proactiveFileInspection = false)
         {
             var logger = NullLogger<FileActivityMonitor>.Instance;
             var trustLogger = NullLogger<SignerTrustService>.Instance;
             signerTrust = new SignerTrustService(trustLogger);
             
-            var config = new SentinelConfig { WatchPath = _tempPath };
+            var config = new SentinelConfig { WatchPath = _tempPath, EnableProactiveFileInspection = proactiveFileInspection };
 
             return new FileActivityMonitor(null!, null!, config, logger, signerTrust);
         }
@@ -65,9 +65,17 @@ namespace Sentinel.Tests
         }
 
         [Fact]
-        public void IsTrustedSystemWriter_PidZeroMicrosoftSignedFile_ReturnsTrue()
+        public void IsTrustedSystemWriter_PidZero_DefaultPolicyDoesNotOpenFileAndStaysUntrusted()
         {
+            // No touch until proven malicious: the file is not opened to prove a signature.
             using var monitor = CreateMonitor(out _);
+            var cmdPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+            Assert.False(monitor.IsTrustedSystemWriter(0, "unknown", cmdPath));
+        }
+        [Fact]
+        public void IsTrustedSystemWriter_PidZeroMicrosoftSignedFile_ReturnsTrueWhenProactiveInspectionEnabled()
+        {
+            using var monitor = CreateMonitor(out _, proactiveFileInspection: true);
             
             // 1. Verify embedded-signed Microsoft/Dotnet binary (should always succeed)
             var dotnetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "host", "fxr");

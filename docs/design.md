@@ -230,7 +230,7 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 | `RansomwareIoMonitor` | High-frequency I/O rate monitoring for bulk rename/encrypt patterns | continuous |
 | `BeaconingDetector` | Statistical CV analysis of connection intervals per (PID, Remote, Port) | 30s |
 | `BehavioralBaselineService` | Learns normal processes, paths, parent-child, network destinations | continuous |
-| `FileVerdictScanner` | Background local file analysis + ADS tagging; external hash verdict stays Unknown | background walk |
+| `FileVerdictScanner` | Background local file analysis; external hash verdict stays Unknown. Off by default since 3.7.6 (`EnableProactiveFileInspection=false`, no touch until proven malicious): completes as a startup task with no watchers or walk | background walk (only when enabled) |
 | `ConsultantSignalIngestor` | Tails external consultant signal JSONL under ProgramData; owner-checked. Emits via `SubmitConsultantSignalAsync` (sticky **Tier2 + LogOnly** - never kill/isolate) | continuous |
 | `GhostProcessMonitor` | Detects PIDs with network connections but empty/unresolvable process names | 15s |
 | `EphemeralProcessMonitor` | Catches short-lived processes via Prefetch + Event 4688 polling | 5s |

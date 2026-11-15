@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.7.6] - 2026-11-15
+
+### Changed - no touch until proven malicious (file inspection)
+
+Owner rule: Sentinel does not open, hash, signature-check or quarantine a file just because it was created, changed or exists on disk. File content is read only for something that has already acted. Process images that run are still inspected, and on-demand and scheduled `ScanEngine` scans still work.
+
+- **Symptom.** With Sentinel running, the NVIDIA 621.14 installer failed, and so did `pnputil /add-driver` and Device Manager. `setupapi.dev.log` showed `Error 32` on the first copy out of the staging folder `%TEMP%\{guid}\` (for example `_nvngx.dll` and `gsp_ga10x.bin`). With the Sentinel services stopped, the same package (`nvaci.inf`) staged.
+- **Cause.** Sentinel opened every freshly written file: `FileVerdictScanner` ran a PE-header probe, a hash and a signature check, the signature check holding a share-read-only lease. `FileActivityMonitor` ran a writer-lookup open, and `DriverLoadMonitor` hashed dropped `.sys` files. Setup opens its staged files exclusively, so any Sentinel handle fails that open. A test showed that plain `CopyFile` succeeds next to a Sentinel-style read handle and an exclusive open does not. Folder exclusions cannot fix this class of problem.
+- **`SentinelConfig.EnableProactiveFileInspection` (new, compiled default `false`, compiled-only).** When false:
+  - `FileVerdictScanner` starts no drive watchers and no drive walk. It completes as an `IMonitorStartupTask` with the policy as its reason, so the monitor group records it as completed instead of unavailable. Its progress stays `Unknown`; it never claims coverage.
+  - `FileActivityMonitor` no longer opens a file to probe for locks before the Restart Manager writer lookup. Restart Manager queries through an attribute-only open, which is not subject to share modes. Signature fast-paths for System32 writes and for unresolved (PID 0) writers are skipped. An unresolved writer stays untrusted (fail closed). The System32 write report is Tier2 / LogOnly, so this can add log entries but no response.
+  - `DriverLoadMonitor` no longer hashes `.sys` files dropped in user folders. The name-based report is unchanged, and a driver that is actually loaded is still hashed.
+- **`EnableAggressiveUnsignedDllSweep` now defaults `false`** (it was `true` from the release that expanded it). It quarantined unsigned modules on sight and killed the processes holding them. Unsigned is not proof of malice. It remains compiled-only.
+- **Also in this release:** `FileVerdictScanner.IsOsServicingTree` skips `%windir%\System32\DriverStore\Temp` (SYSTEM-only write ACL, canonical path, `..` traversal and look-alike user folders not skipped). The realtime handler checks excluded folders before `IsScannable`, which opens unknown-extension files. `IsOsServicingTree` returns false instead of throwing for an unresolvable path. These apply only if proactive inspection is turned back on.
+- **Detection impact.** A known-malware file is no longer recognised when it lands on disk. It is recognised when it runs or when a process behaves maliciously. Kill and quarantine authority is unchanged, because it already requires behavioural proof. Not changed (still read files they watch): `LnkShortcutMonitor`/`LnkUncGuard` (`.lnk` content), `ScriptExecutionMonitor` script drops, `CveCoverageMonitors` signature checks on recent downloads, `PrintSpoolerMonitor` new spool driver DLLs, and the 24 h `ScheduledScanService`.
+
+### Tests
+
+- New `NoTouchUntilProvenTests`: both flags default off, and `FileVerdictScanner` completes as a policy startup task without watchers and reports `Unknown` progress.
+- `FileActivityMonitorTests`: PID 0 writer is untrusted without opening the file by default. The signed-file trust path is tested with proactive inspection enabled.
+- `AttackerChosenFolderNamesCannotDisableFileCoverage` covers `DriverStore\Temp` (skipped), `DriverStore\FileRepository`, `DriverStore\Temp\..\FileRepository`, a look-alike user Temp path and an unresolvable path (all scanned).
+- Solution builds 0 warnings / 0 errors (`-warnaserror`). Full suite: 3,758 passed, 1 skipped, 3 failed, none in changed code. Two were already failing on 3.7.5: `GSecurityInf_EnablesAuditingAndDoesNotOverrideGlobalUserRights` (the 3.7.5 `GSecurity.inf` grants `SeDebugPrivilege` to Administrators) and `SelfIsolationRepairsDuplicatesAndRepeatedApplyDoesNotGrowRuleCount` (live firewall state). `NativeEtwFiltersRetainProcessStartsAndDiscloseProviderAccess` is intermittent (passed on rerun).
 ## [3.7.5] - 2026-11-15
 
 - Hardened security policy (GSecurity.inf)

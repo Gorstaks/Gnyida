@@ -275,7 +275,7 @@ namespace Sentinel.Core
                         var attrs = File.GetAttributes(e.FullPath);
                         if ((attrs & FileAttributes.ReparsePoint) != 0)
                         {
-                            var reparseCreator = GetProcessUsingFile(e.FullPath);
+                            var reparseCreator = GetProcessUsingFile(e.FullPath, _config.EnableProactiveFileInspection);
                             var cloud = August2026CveHeuristics.IsCloudPlaceholderAttributes((int)attrs);
                             var hive = August2026CveHeuristics.IsHiveFilePath(e.FullPath);
                             var knownSync = August2026CveHeuristics.IsKnownCloudSyncClient(reparseCreator.name)
@@ -354,7 +354,8 @@ namespace Sentinel.Core
             // Optimize: if it is a write of a valid Microsoft-signed file to a protected OS directory,
             // allow it immediately without doing a process lookup. This avoids sharing locks/violations
             // (e.g. during DirectX or redistributable installations).
-            if ((e.ChangeType == WatcherChangeTypes.Created || e.ChangeType == WatcherChangeTypes.Changed) &&
+            if (_config.EnableProactiveFileInspection &&
+                (e.ChangeType == WatcherChangeTypes.Created || e.ChangeType == WatcherChangeTypes.Changed) &&
                 IsProtectedOsDirectory(pathLower) &&
                 !pathLower.Contains(@"\drivers\etc\"))
             {
@@ -377,7 +378,7 @@ namespace Sentinel.Core
             bool needWriter = DllUnloadEngine.IsSideloadTargetFileName(e.FullPath)
                 || IsProtectedOsDirectory(pathLower)
                 || SecurityFileScope.IsRelevantOrHighRisk(e.FullPath);
-            var processInfo = needWriter ? GetProcessUsingFile(e.FullPath) : (pid: 0, name: "unknown");
+            var processInfo = needWriter ? GetProcessUsingFile(e.FullPath, _config.EnableProactiveFileInspection) : (pid: 0, name: "unknown");
 
             // System-wide DLL sideload plant: known system DLL names written outside System32
             if ((e.ChangeType == WatcherChangeTypes.Created || e.ChangeType == WatcherChangeTypes.Changed) &&
@@ -467,7 +468,7 @@ namespace Sentinel.Core
                 return;
             }
 
-            var processInfo = GetProcessUsingFile(e.FullPath);
+            var processInfo = GetProcessUsingFile(e.FullPath, _config.EnableProactiveFileInspection);
 
             // Feed mass-rename counter for ransomware behavioral detection
             _ransomwareIoMonitor?.RecordRename(processInfo.pid, processInfo.name);
@@ -499,7 +500,10 @@ namespace Sentinel.Core
             }
         }
 
-        private static (int pid, string name) GetProcessUsingFile(string filePath)
+        // probeOpen=false (default policy): no data handle is opened on the file. Restart Manager
+        // still reports the holder; it queries process IDs through an attribute-only open, which
+        // does not take part in share-mode checks, so it cannot fail another process's open.
+        private static (int pid, string name) GetProcessUsingFile(string filePath, bool probeOpen)
         {
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
             {
@@ -507,7 +511,7 @@ namespace Sentinel.Core
             }
 
             // Retry loop to handle temporary sharing violations (e.g. while process is writing the file)
-            int retries = 5;
+            int retries = probeOpen ? 5 : 0;
             while (retries > 0)
             {
                 try
@@ -728,6 +732,9 @@ namespace Sentinel.Core
             // only trust it if the file itself is signed by a trusted publisher.
             if (pid == 0)
             {
+                // Without proactive inspection the file is not opened to prove a signature, so an
+                // unresolved writer stays untrusted (fail closed; callers only log for System32 writes).
+                if (!_config.EnableProactiveFileInspection) return false;
                 for (int i = 0; i < 3; i++)
                 {
                     try

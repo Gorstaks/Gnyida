@@ -152,11 +152,16 @@ namespace Sentinel.Core
             @"C:\Windows\SysWOW64\drivers",
         };
 
-        public DriverLoadMonitor(DetectionEngine detectionEngine, ILogger<DriverLoadMonitor> logger)
+        public DriverLoadMonitor(DetectionEngine detectionEngine, ILogger<DriverLoadMonitor> logger, SentinelConfig? config = null)
         {
             _detectionEngine = detectionEngine;
             _logger = logger;
+            _proactiveFileInspection = (config ?? new SentinelConfig()).EnableProactiveFileInspection;
         }
+
+        // Off by default: a dropped .sys is not opened/hashed until it is actually loaded
+        // (the load path below still hashes the resolved image).
+        private readonly bool _proactiveFileInspection;
 
         protected override async Task ExecuteAsync(CancellationToken ct)
         {
@@ -328,13 +333,17 @@ namespace Sentinel.Core
                         // Hash the file for blocklist check
                         string hash = "";
                         bool hashMatch = false;
-                        try
+                        if (_proactiveFileInspection)
                         {
-                            using var fs = new FileStream(sysFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                            hash = ConvertHex.ToHexString(System.Security.Cryptography.Sha256Net48.HashData(fs));
-                            hashMatch = VulnerableDriverHashes.Contains(hash);
+                            try
+                            {
+                                using var fs = new FileStream(sysFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                                hash = ConvertHex.ToHexString(System.Security.Cryptography.Sha256Net48.HashData(fs));
+                                hashMatch = VulnerableDriverHashes.Contains(hash);
+                            }
+                            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                            { _logger.LogDebug(ex, "[DriverLoadMonitor] Dropped driver not hashed: {Path}", sysFile); }
                         }
-                        catch { }
 
                         double confidence = (isKnownVulnerable || hashMatch) ? 0.95 : 0.75;
 

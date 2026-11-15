@@ -215,6 +215,11 @@ namespace Sentinel.Tests
         [InlineData(@"C:\Users\owner\Downloads\ntlite\payload.exe", false)]
         [InlineData(@"C:\Users\owner\Downloads\Windows\WinSxS\payload.exe", false)]
         [InlineData(@"C:\Windows\Tasks\payload.exe", false)]
+        [InlineData(@"C:\Windows\System32\DriverStore\Temp\{779c8291}\gsp_ga10x.bin", true)]
+        [InlineData(@"C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64\nvlddmkm.sys", false)]
+        [InlineData(@"C:\Windows\System32\DriverStore\Temp\..\FileRepository\x.sys", false)]
+        [InlineData(@"C:\Users\owner\AppData\Local\Temp\System32\DriverStore\Temp\payload.exe", false)]
+        [InlineData("C:\\Windows\\System32\\DriverStore\\Temp\\bad|name.tmp", false)]
         public void AttackerChosenFolderNamesCannotDisableFileCoverage(string path, bool excluded)
             => Assert.Equal(excluded, FileVerdictScanner.IsOsServicingTree(path, @"C:\Windows"));
         [Fact]
