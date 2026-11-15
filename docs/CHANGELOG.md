@@ -1,4 +1,9 @@
 # Changelog
+
+## [3.7.5] - 2026-11-15
+
+- Hardened security policy (GSecurity.inf)
+
 ## [3.7.4] - 2026-11-14
 ### Fixed - Avast flagged the service as `IDP.SEMS.HackTool.CobaltStrike1`
 Avast's behavior shield (not a signature) quarantined `Sentinel.Service.exe` and, in the same session, `powershell.exe` (`IDP.HELU.PSE96%s_cmd`). The chest entries are virtual (sizes of 2 TB, original file untouched). The setup `.exe` files were flagged `Win32:Malware-gen`, which is a static/ML verdict on the unsigned installer.
