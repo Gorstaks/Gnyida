@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.7.8] - 2026-11-17
+### Fixed - service memory leak in the DetectionEngine drain loop (9.9 GB after two days)
+Full incident record, evidence and regression rules: [MEMORY_LEAK_3.7.8.md](MEMORY_LEAK_3.7.8.md). Read it before changing the drain loop, `DualLaneWait`, or any code that waits on a channel or token in a loop.
+- **Root cause.** `DetectionEngine.ProcessTelemetryQueueAsync` started a fresh `WaitToReadAsync` on both the priority and normal lanes on every idle pass and raced them with `Task.WhenAny`. `WhenAny` does not cancel the loser. Nearly every wake-up was a normal-lane item, so the priority-lane wait stayed pending. Each pending wait stayed in the channel's waiter list and registered on the service-lifetime token (`_cts.Token`), so the GC could never free it. About one wait leaked per idle-to-busy transition.
+- **Evidence (3.7.7 heap dump, 9.84 GB, taken with ProcDump and analyzed with ClrMD).** VMMap: Managed Heap 9,538 MB of 9,980 MB committed; native heap 121 MB, Private Data 187 MB. Dump: 90.2 M objects, with 15.79 M each of `Channels.AsyncOperation<bool>` (1,686 MB), `Task<bool>` (1,205 MB), `CancellationCallbackInfo` (843 MB), `List<object>` (603 MB) and `ValueTaskSourceAsTask` (602 MB), about 4.9 GB in total. Referrers showed the channel's linked waiter list with a token registration per entry. The service had processed 16.8 M telemetry events.
+- **Fix.** New internal `DualLaneWait` keeps at most one outstanding `WaitToReadAsync` per lane and re-issues a wait only after it completes. The drain loop uses it in place of the inline waits. The priority-first drain order, one-normal-item-per-pass rule and exit check are unchanged. At most two waits are pending for the life of the service.
+- **Why 3.7.3 did not fix it.** 3.7.3 capped three caches from code reading and no dump. Those caps are harmless hygiene but none of those structures held the memory. The leak was pending async operations, which a search for unbounded collections cannot find.
+- **Other racing waits audited.** Every `Task.WhenAny` in `src/` was reviewed (`BoundedIpcRequest`, `DashboardSocketClients`, `LanDeviceInventoryMonitor`, `WindowsFirewallPolicyBridge`, `ContextBus`). All use per-call tokens, self-completing delays or a single outstanding wait. No change. `BoundedIpcRequest.WithinDeadlineAsync` would leak if a caller passed a service-lifetime token; the three current callers pass a per-call deadline token.
+- **Ruled out by the dump, not changed:** a 534 MB `Int64[]` block (unreachable garbage, 2 of 2,637 rooted) and 271 k `BoundedEtwDispatcher` queue segments (dead chains behind the four live queues). Free heap space (3.8 GB) was an effect of the leak, not a second leak.
+### Added
+- `tools/diagnostics/heap-dump/`: the ClrMD analyzer sources (`HeapTypeStats`, `HeapReferrers`) and the procedure used (VMMap, ProcDump, type summary, referrer scan). Not part of the solution and not built by CI.
+### Constraints honored
+- Userland only. No detection, tier, deduplication, response, or Tier2 LogOnly behavior changed. The Tier2 never-acts rule is untouched. No new host mutation.
+- `DetectionEngine` still drains the priority lane fully before one normal item, so terminal-class telemetry never queues behind the normal sweep.
+- DI, cancellation and exception handling unchanged: cancellation still unwinds through the loop-top `ThrowIfCancellationRequested`.
+### Testing
+- New `DualLaneWaitTests` (4): the never-written lane is waited on exactly once across 500 idle-to-busy cycles (the 3.7.7 code waited 500 times); a completed wait is re-issued; a cancelled wait is reported as cancelled; completed channels report no more data.
+- Hook constraints checked: no Tier1/Tier2 rule, response contract or host mutation changed, so no new rule tests apply.
+- `Sentinel.Tests` with `-warnaserror`: 3,761 passed, 9 skipped, 0 failed. Pipeline tests including the new ones: 33 of 33.
+- **Not yet verified on a running service.** Acceptance: after 24 h of uptime, working set in the hundreds of MB and no `[SentinelHealthCheck] High memory usage`. If it still grows, follow `tools/diagnostics/heap-dump/README.md` and record the result in `MEMORY_LEAK_3.7.8.md`.
 ## [3.7.7] - 2026-11-15
 
 ### Changed - no touch until proven malicious, remaining file readers

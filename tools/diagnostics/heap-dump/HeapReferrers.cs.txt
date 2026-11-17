@@ -1,0 +1,58 @@
+// Who holds objects of a given type? Samples N instances of the type, finds the heap objects that
+// reference them and checks whether they are direct GC roots. Works on .NET Framework dumps via ClrMD.
+// Usage:  dotnet run -c Release -- <dump.dmp> "<exact type name>" [sampleCount]
+//   e.g.  ... sentinel.dmp "System.Threading.Channels.AsyncOperation<System.Boolean>" 5
+// See README.md in this folder for setup and how to read the output.
+//
+// Reading the output:
+//   - An instance referenced only by other instances of the same type is a linked structure (for example a
+//     channel's waiter list). Follow it to the structure's owner.
+//   - An instance with NO heap referrer that is NOT a direct root is unreachable garbage that has not been
+//     collected yet. It is not a leak.
+//   - An instance that is a direct root (Stack, PinnedHandle, Static, ...) is alive because of that root.
+using System.Diagnostics;
+using Microsoft.Diagnostics.Runtime;
+
+var path = args[0];
+var typeName = args[1];
+int sample = args.Length > 2 ? int.Parse(args[2]) : 5;
+using var dt = DataTarget.LoadDump(path);
+using var rt = dt.ClrVersions[0].CreateRuntime();
+var heap = rt.Heap;
+var sw = Stopwatch.StartNew();
+
+var targets = new List<ulong>();
+long count = 0;
+foreach (var obj in heap.EnumerateObjects())
+{
+    if (obj.Type?.Name != typeName) continue;
+    count++;
+    if (targets.Count < sample) targets.Add(obj.Address);
+}
+Console.WriteLine($"{count:N0} instances of {typeName} ({sw.Elapsed.TotalSeconds:N0}s); sampling {targets.Count}");
+
+var rootInfo = new Dictionary<ulong, string>();
+foreach (var root in heap.EnumerateRoots())
+{
+    var a = root.Object.Address;
+    if (a != 0 && !rootInfo.ContainsKey(a)) rootInfo[a] = $"{root.RootKind} {root.Object.Type?.Name}";
+}
+
+var set = new HashSet<ulong>(targets);
+var holders = new Dictionary<ulong, List<string>>();
+foreach (var obj in heap.EnumerateObjects())
+{
+    if (obj.Type == null || !obj.Type.ContainsPointers) continue;
+    foreach (var r in obj.EnumerateReferences())
+    {
+        if (!set.Contains(r.Address)) continue;
+        if (!holders.TryGetValue(r.Address, out var l)) holders[r.Address] = l = new();
+        if (l.Count < 4) l.Add($"{obj.Type.Name} @{obj.Address:x}");
+    }
+}
+Console.WriteLine($"referrer scan done ({sw.Elapsed.TotalSeconds:N0}s)");
+foreach (var a in targets)
+{
+    holders.TryGetValue(a, out var l);
+    Console.WriteLine($"{a:x}  holders: {(l == null ? "none" : string.Join(" | ", l))}  root: {(rootInfo.TryGetValue(a, out var ri) ? ri : "no")}");
+}

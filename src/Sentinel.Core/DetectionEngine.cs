@@ -206,6 +206,10 @@ namespace Sentinel.Core
                 var priorityReader = _priorityChannel.Reader;
                 var normalReader = _telemetryChannel.Reader;
 
+                // At most one outstanding readability wait per lane, reused across idle passes (see
+                // DualLaneWait: fresh waits per pass leaked ~5 GB of pending waiters in 3.7.7).
+                var lanes = new DualLaneWait<QueuedTelemetry, QueuedTelemetry>(priorityReader, normalReader);
+
                 // Single drain loop awaiting readability on EITHER lane. Each iteration FIRST fully
                 // drains the priority lane, THEN consumes a single normal-lane item, then loops back
                 // to re-check priority first - so terminal-class telemetry never queues behind the
@@ -228,9 +232,7 @@ namespace Sentinel.Core
                     }
 
                     // Both lanes are momentarily empty - wait until either becomes readable.
-                    var priorityWait = priorityReader.WaitToReadAsync(ct).AsTask();
-                    var normalWait = normalReader.WaitToReadAsync(ct).AsTask();
-                    var ready = await Task.WhenAny(priorityWait, normalWait);
+                    var ready = await lanes.WaitAsync(ct);
 
                     // If the completed wait reports no more data AND both channels are complete,
                     // exit; otherwise loop and let the TryRead drains above pick up new items.
