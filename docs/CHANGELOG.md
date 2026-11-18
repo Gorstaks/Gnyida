@@ -15,12 +15,18 @@ An audit of every equality and string comparison in `src/` found no `==` used on
 - Name-based exemptions that now ignore case (`explorer`, spooler children, `conhost`) are no weaker than before. Anyone who chooses the name could already choose the lowercase form.
 ### Fixed - CI security-template gate
 - `SecurityTemplate.Tests.ps1` failed the 3.7.8 build: `Shipping policy must grant SeDebugPrivilege to no one (found '*S-1-5-32-544')`. The 3.7.5 `GSecurity.inf` grants `SeDebugPrivilege` and `SeLoadDriverPrivilege` to Administrators only, and `SeBackupPrivilege` to Administrators only. 3.7.7 updated `V220SecurityHardeningTests` to accept that policy, but not this script. The script now applies the same rule: those two privileges may be held by no one or by Administrators only, `SeBackupPrivilege` by Administrators with or without Backup Operators. `SeTcbPrivilege`, `SeCreateTokenPrivilege`, `SeEnableDelegationPrivilege`, `SeTrustedCredManAccessPrivilege` and `SeCreatePermanentPrivilege` must still be granted to no one, and broad-group grants, duplicates, weakened password settings and forced-off FIPS still fail.
+### Fixed - unbounded waits in `IsolationResponseEngine` (CI test host hang)
+- The first 3.7.9 CI run aborted: the test host produced no output for 3 minutes while `IsolationResponseEngineTests.HandleIsoThreatAsync_NonExistentPid_DoesNotThrow` was in flight. `HandleIsoThreatAsync` waited without a deadline on a PowerShell `Dismount-DiskImage` child, which loads the Storage module and can stall. The same unbounded pattern was in the VM kill, `Stop-VM` and `docker.exe` paths. In production, one stuck child would stall that response indefinitely.
+- Every wait in the engine is now bounded: 10 s for a killed target process, 60 s for a child command, after which the child is killed and the timeout is logged. The ISO path still goes on to quarantine the image after a dismount timeout. `docker.exe` stdout and stderr are read concurrently; sequential reads could deadlock when stderr filled.
+### Fixed - timing-dependent pipeline tests
+- `Pipeline_ClickFixFromBrowser_DetectedWithHighConfidence` slept a fixed 500 ms and then read the log, which was too short with coverage on a CI runner. It now polls with a 10 s deadline. `Pipeline_MultipleDetectionsSamePid_GroupedIntoSingleIncident` had the same race and now polls for the incident and the scoring profile.
 ### Constraints honored
 - Userland only. No new response action, no Tier2 rule gains authority, no new host mutation.
 - Every widened match is on an existing Tier1 path whose evidence is unchanged apart from casing.
 ### Testing
 - New `CaseInsensitiveComparisonTests` (28 cases): `.exe` stripping in any case, extension matching, campaign IOC in three casings, sideloading masquerade with real casings, console host casing (impostor path still not exempt), dynamic-rule operators and invariant numeric text.
-- Solution builds 0 warnings / 0 errors (`-warnaserror`). `Sentinel.Tests`: 3,788 passed, 9 skipped, 1 failed. The failure, `EndpointProtectionWindowsTests.CorrelatedVictimResponseVerifiesRealExitAndPreservesUnrelatedProcess`, is intermittent and predates this change: on the unmodified 3.7.8 code it failed 2 of 4 class runs.
+- New `IsolationResponseEngineTests.WaitOrKill_StuckChild_IsKilledAtDeadline`: a test-owned `ping` sleeper is killed at a 300 ms deadline.
+- Solution builds 0 warnings / 0 errors (`-warnaserror`). The CI test command (coverage, `--blame-hang 3m`) run locally: 3,790 passed, 9 skipped, 0 failed. `EndpointProtectionWindowsTests.CorrelatedVictimResponseVerifiesRealExitAndPreservesUnrelatedProcess` is intermittent on this workstation and predates this change (2 of 4 class runs failed on unmodified 3.7.8 code). It passed in the CI endpoint job.
 - `SecurityTemplate.Tests.ps1`, `LocalFirewallPolicy.Tests.ps1` and `ReleaseArtifacts.Tests.ps1` pass locally.
 
 ## [3.7.8] - 2026-11-17

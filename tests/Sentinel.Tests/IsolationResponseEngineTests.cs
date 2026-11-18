@@ -30,6 +30,25 @@ namespace Sentinel.Tests
         }
 
         [Fact]
+        public async Task WaitOrKill_StuckChild_IsKilledAtDeadline()
+        {
+            // 3.7.9 regression: an unbounded wait on Dismount-DiskImage hung the CI test host.
+            // A test-owned ping sleeper stands in for a stuck child process.
+            using var child = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "PING.EXE"),
+                Arguments = "-n 120 127.0.0.1",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            })!;
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            bool exited = await IsolationResponseEngine.WaitOrKillAsync(child, TimeSpan.FromMilliseconds(300));
+            Assert.False(exited);
+            Assert.True(child.WaitForExit(5000), "Timed-out child was not killed");
+            Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10));
+        }
+
+        [Fact]
         public async Task HandleIsoThreatAsync_NonExistentPid_DoesNotThrow()
         {
             // Should handle gracefully - PID doesn't exist

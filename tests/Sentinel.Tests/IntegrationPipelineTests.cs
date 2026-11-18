@@ -137,6 +137,33 @@ namespace Sentinel.Tests
         }
 
         /// <summary>Wait for pipeline output with a bounded deadline, without assuming runner speed.</summary>
+        /// <summary>Polls until ANY needle appears (10 s deadline); returns the log either way.</summary>
+        private async Task<string> WaitForAnyLogAsync(params string[] needles)
+        {
+            string log = string.Empty;
+            var elapsed = System.Diagnostics.Stopwatch.StartNew();
+            while (elapsed.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                log = ReadLogFile();
+                if (needles.Any(n => log.Contains(n)))
+                    return log;
+                await Task.Delay(25);
+            }
+            return log;
+        }
+
+        /// <summary>Polls a condition (10 s deadline). Fixed sleeps race the background pipeline on slow CI runners.</summary>
+        private static async Task<bool> EventuallyAsync(Func<bool> condition)
+        {
+            var elapsed = System.Diagnostics.Stopwatch.StartNew();
+            while (elapsed.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                if (condition()) return true;
+                await Task.Delay(25);
+            }
+            return condition();
+        }
+
         private async Task<string> WaitForLogAsync(params string[] needles)
         {
             string log = string.Empty;
@@ -357,16 +384,16 @@ namespace Sentinel.Tests
             var fusedContext = _fusionEngine.FeedEvent(telemetry);
             _detectionEngine.SubmitTelemetry(fusedContext);
 
-            await Task.Delay(500);
-
-            var logContent = ReadLogFile();
+            // Poll instead of a fixed 500 ms sleep: with coverage on a CI runner the pipeline can
+            // take longer than that to log (3.7.9 CI failure).
+            var logContent = await WaitForAnyLogAsync("ClickFixDetectionRule", "ReverseShellRule");
             // Should trigger ClickFix or ReverseShell rule
             Assert.True(logContent.Contains("ClickFixDetectionRule") || logContent.Contains("ReverseShellRule"),
                 "Expected ClickFix or ReverseShell detection to fire");
 
-            var profile = _scoringEngine.GetProcessProfile(1900000021);
-            Assert.NotNull(profile);
-            Assert.True(profile!.MaxConfidence >= 0.80);
+            // Scoring follows logging; wait for the profile rather than reading it immediately.
+            Assert.True(await EventuallyAsync(() => (_scoringEngine.GetProcessProfile(1900000021)?.MaxConfidence ?? 0) >= 0.80),
+                "Expected a scoring profile with MaxConfidence >= 0.80");
         }
 
         /// <summary>
@@ -439,7 +466,8 @@ namespace Sentinel.Tests
 
             var ctx2 = _fusionEngine.FeedEvent(telemetry2);
             _detectionEngine.SubmitTelemetry(ctx2);
-            await Task.Delay(500);
+            await EventuallyAsync(() => _incidentManager.GetIncidentForPid(1900000029) != null &&
+                                        (_scoringEngine.GetProcessProfile(1900000029)?.DetectionCount ?? 0) >= 1);
 
             // Verify incident manager grouped them (at least the first detection created an incident)
             var incident = _incidentManager.GetIncidentForPid(1900000029);

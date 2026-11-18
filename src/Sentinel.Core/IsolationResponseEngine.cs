@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
@@ -20,6 +21,36 @@ namespace Sentinel.Core
     {
         private readonly ILogger<IsolationResponseEngine> _logger;
         private readonly JsonlEventLogger _eventLogger;
+
+        // Every wait on a child or target process is bounded so one stuck process cannot stall
+        // the response pipeline (an unbounded Dismount-DiskImage hung the 3.7.9 CI test host).
+        internal static readonly TimeSpan KillWaitTimeout = TimeSpan.FromSeconds(10);
+        internal static readonly TimeSpan ChildProcessTimeout = TimeSpan.FromSeconds(60);
+
+        private static async Task WaitForExitBoundedAsync(Process process, TimeSpan timeout)
+        {
+            using var cts = new CancellationTokenSource(timeout);
+            try { await process.WaitForExitAsync(cts.Token); }
+            catch (OperationCanceledException) { /* reported by the caller's verification */ }
+        }
+
+        /// <summary>Waits for a child process; kills it on timeout. True if it exited in time.</summary>
+        internal static async Task<bool> WaitOrKillAsync(Process process, TimeSpan timeout)
+        {
+            using var cts = new CancellationTokenSource(timeout);
+            try
+            {
+                await process.WaitForExitAsync(cts.Token);
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(); }
+                catch (InvalidOperationException) { }
+                catch (System.ComponentModel.Win32Exception) { }
+                return false;
+            }
+        }
 
         public IsolationResponseEngine(
             ILogger<IsolationResponseEngine> logger,
@@ -48,7 +79,8 @@ namespace Sentinel.Core
                 using var process = Process.GetProcessById(processId);
                 var processName = process.ProcessName;
                 process.KillTree();
-                await process.WaitForExitAsync();
+                // Bounded: a protected or stuck process must not stall the response pipeline.
+                await WaitForExitBoundedAsync(process, KillWaitTimeout);
 
                 _logger.LogWarning("[IsolationResponse] Killed ISO-hosted process {ProcessName} (PID {ProcessId})",
                     processName, processId);
@@ -71,10 +103,19 @@ namespace Sentinel.Core
                 dismount.StartInfo.RedirectStandardError = true;
 
                 dismount.Start();
-                var stderr = await dismount.StandardError.ReadToEndAsync();
-                await dismount.WaitForExitAsync();
+                var stderrTask = dismount.StandardError.ReadToEndAsync();
+                // Bounded: Dismount-DiskImage loads the Storage module and can stall indefinitely
+                // (seen on CI runners). On timeout the PowerShell child is killed, which also
+                // closes stderr so the read completes.
+                bool timedOut = !await WaitOrKillAsync(dismount, ChildProcessTimeout);
+                var stderr = await stderrTask;
 
-                if (dismount.ExitCode == 0)
+                if (timedOut)
+                {
+                    _logger.LogWarning("[IsolationResponse] Dismount-DiskImage timed out after {Seconds}s for {IsoPath}",
+                        ChildProcessTimeout.TotalSeconds, isoPath);
+                }
+                else if (dismount.ExitCode == 0)
                 {
                     _logger.LogWarning("[IsolationResponse] Dismounted ISO {IsoPath}", isoPath);
                 }
@@ -265,7 +306,7 @@ namespace Sentinel.Core
                 if (actionTaken != "HyperV_WmiStop")
                 {
                     process.KillTree();
-                    await process.WaitForExitAsync();
+                    await WaitForExitBoundedAsync(process, KillWaitTimeout);
                 }
 
                 _logger.LogWarning("[IsolationResponse] Terminated VM {VmName} - process {ProcessName} (PID {VmHostProcessId}), action={ActionTaken}",
@@ -308,8 +349,15 @@ namespace Sentinel.Core
                 ps.StartInfo.RedirectStandardError = true;
 
                 ps.Start();
-                var stderr = await ps.StandardError.ReadToEndAsync();
-                await ps.WaitForExitAsync();
+                var stderrTask = ps.StandardError.ReadToEndAsync();
+                if (!await WaitOrKillAsync(ps, ChildProcessTimeout))
+                {
+                    await stderrTask;
+                    _logger.LogWarning("[IsolationResponse] Stop-VM timed out after {Seconds}s for {VmName}",
+                        ChildProcessTimeout.TotalSeconds, vmName);
+                    return false;
+                }
+                var stderr = await stderrTask;
 
                 if (ps.ExitCode == 0)
                 {
@@ -372,9 +420,20 @@ namespace Sentinel.Core
             };
 
             process.Start();
-            var output = await process.StandardOutput.ReadToEndAsync();
-            var error = await process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
+            // Read both pipes concurrently (sequential reads can deadlock when stderr fills) and
+            // bound the wait: an unresponsive Docker daemon must not stall the response pipeline.
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            bool exited = await WaitOrKillAsync(process, ChildProcessTimeout);
+            var output = await outputTask;
+            var error = await errorTask;
+
+            if (!exited)
+            {
+                _logger.LogWarning("[IsolationResponse] docker {Command} timed out after {Seconds}s",
+                    command, ChildProcessTimeout.TotalSeconds);
+                return string.Empty;
+            }
 
             if (process.ExitCode != 0)
             {
