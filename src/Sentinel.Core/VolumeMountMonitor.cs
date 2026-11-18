@@ -856,7 +856,7 @@ namespace Sentinel.Core
                 // session. We use WMI Win32_LogonSession + registry approach as fallback.
 
                 // Method 1: Check registry for persistent SUBST (Run keys across all user profiles)
-                var profileList = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList");
+                using var profileList = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList");
                 if (profileList != null)
                 {
                     foreach (var sidString in profileList.GetSubKeyNames())

@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.8.0] - 2026-11-18
+### Changed - nobody holds "Debug programs"
+- `GSecurity.inf` now sets `SeDebugPrivilege=` (granted to no one) instead of Administrators only (`*S-1-5-32-544`). Administrators and anything running in an elevated session can no longer enable the privilege, so they cannot attach a debugger to or read the memory of processes they do not own. SYSTEM (including the Sentinel service) keeps the privilege as part of its token, which this policy cannot remove.
+- Side effect: tools that need the privilege (attaching Visual Studio to services or elevated processes, Process Explorer's full view, some installers) stop working until an administrator re-grants it.
+- Both policy gates already accepted "no one": `V220SecurityHardeningTests.GSecurityInf_EnablesAuditingAndDoesNotOverrideGlobalUserRights` and `SecurityTemplate.Tests.ps1`.
+### Fixed - registry key handle leak in `VolumeMountMonitor`
+- The SUBST scan opened `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList` without disposing it, leaking one registry handle per scan until finalization. It is now a `using` declaration. An audit of the other native resources (field-held timers, watchers, semaphores, pipes, WMI watchers, Windows hooks, raw process, token and file handles, and `OpenSubKey` results) found no other leak.
+### Constraints honored
+- Userland only. No new detection rule, response action or host mutation path. Tier2 stays LogOnly.
+### Testing
+- Solution builds 0 warnings / 0 errors (`-warnaserror`). Full suite: 3,790 passed, 9 skipped, 0 failed. `SecurityTemplate.Tests.ps1` passes.
+- The local `release.ps1` Defender gate (`tools/validation/WindowsDefenderScan.ps1`) could not run on the build workstation: Microsoft Defender is not installed there. The owner published 3.8.0 with `push.ps1` anyway, so the locally built installer was not Defender-scanned before upload.
+
 ## [3.7.9] - 2026-11-17
 ### Fixed - case-sensitive comparisons on case-insensitive Windows names
 An audit of every equality and string comparison in `src/` found no `==` used on a type without equality and no reference compare of arrays (hashes use hex strings or `SequenceEqual`). The real gaps were string checks that ignored how Windows treats names: file names, extensions, process names, paths, GUIDs and service names are case-insensitive, and account names are localized.
