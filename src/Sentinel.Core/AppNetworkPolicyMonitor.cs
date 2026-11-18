@@ -213,7 +213,7 @@ namespace Sentinel.Core
             if (string.IsNullOrWhiteSpace(remoteAddress)) return;
 
             var stem = Sentinel.Core.StringNet48.ReplaceIgnoreCase(processName, ".exe", "");
-            if (string.IsNullOrWhiteSpace(stem) || stem.Equals("unknown")) return;
+            if (string.IsNullOrWhiteSpace(stem) || string.Equals(stem, "unknown", StringComparison.OrdinalIgnoreCase)) return;
 
             // HARDENING v1.3.0: NetworkAllowlist now requires Authenticode signature verification.
             // Previously, name-only matching meant an attacker could name their binary "chrome.exe"
@@ -351,6 +351,12 @@ namespace Sentinel.Core
         /// </summary>
         private readonly System.Collections.Concurrent.ConcurrentDictionary<int, bool> _allowlistVerificationCache = new();
 
+        // Case-insensitive: "SVCHOST" must get the Windows-directory check, not the signer check.
+        private static readonly HashSet<string> SystemEntryStems = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "svchost", "lsass", "sihost", "taskhostw", "RuntimeBroker", "SearchHost", "System"
+        };
+
         private bool IsVerifiedAllowlistProcess(int pid, string stem)
         {
             if (_allowlistVerificationCache.TryGetValue(pid, out var cached))
@@ -370,13 +376,7 @@ namespace Sentinel.Core
                 var pathLower = imagePath!.ToLowerInvariant();
 
                 // System processes (svchost, lsass, etc.) must reside in Windows directory
-                bool isSystemEntry = stem.Equals("svchost") ||
-                                     stem.Equals("lsass") ||
-                                     stem.Equals("sihost") ||
-                                     stem.Equals("taskhostw") ||
-                                     stem.Equals("RuntimeBroker") ||
-                                     stem.Equals("SearchHost") ||
-                                     stem.Equals("System");
+                bool isSystemEntry = SystemEntryStems.Contains(stem);
 
                 if (isSystemEntry)
                 {

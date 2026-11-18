@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -50,22 +51,28 @@ namespace Sentinel.Core
             if (prop == null) return false;
 
             var rawValue = prop.GetValue(target);
-            string strValue = rawValue?.ToString() ?? string.Empty;
+            // Culture-invariant text so numbers/dates render the same on every locale, and
+            // case-insensitive matching because the allowlisted fields are Windows paths, process
+            // names, command lines and enum names: re-casing them must not evade a rule.
+            string strValue = rawValue is IFormattable formattable
+                ? formattable.ToString(null, CultureInfo.InvariantCulture)
+                : rawValue?.ToString() ?? string.Empty;
+            string value = Value ?? string.Empty;
 
             switch (Operator.ToLowerInvariant())
             {
                 case "equals":
-                    return strValue.Equals(Value);
+                    return string.Equals(strValue, value, StringComparison.OrdinalIgnoreCase);
                 case "notequals":
-                    return !strValue.Equals(Value);
+                    return !string.Equals(strValue, value, StringComparison.OrdinalIgnoreCase);
                 case "contains":
-                    return strValue.Contains(Value);
+                    return strValue.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
                 case "notcontains":
-                    return !strValue.Contains(Value);
+                    return strValue.IndexOf(value, StringComparison.OrdinalIgnoreCase) < 0;
                 case "startswith":
-                    return strValue.StartsWith(Value);
+                    return strValue.StartsWith(value, StringComparison.OrdinalIgnoreCase);
                 case "endswith":
-                    return strValue.EndsWith(Value);
+                    return strValue.EndsWith(value, StringComparison.OrdinalIgnoreCase);
                 default:
                     return false;
             }
@@ -478,7 +485,7 @@ namespace Sentinel.Core
             {
                 foreach (var rule in _rules)
                 {
-                    if (!rule.EventType.Equals(eventTypeName))
+                    if (!string.Equals(rule.EventType, eventTypeName, StringComparison.OrdinalIgnoreCase))
                         continue;
 
                     bool matchesAll = true;

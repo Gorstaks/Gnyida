@@ -393,7 +393,9 @@ namespace Sentinel.Core
             var sb = new StringBuilder(input.Length);
             while (idx < input.Length)
             {
-                var found = input.IndexOf(oldValue, idx);
+                // Must be OrdinalIgnoreCase: the bare overload is case- AND culture-sensitive, so
+                // "CMD.EXE" kept its ".EXE" and every name-stem compare downstream missed it.
+                var found = input.IndexOf(oldValue, idx, StringComparison.OrdinalIgnoreCase);
                 if (found < 0)
                 {
                     sb.Append(input, idx, input.Length - idx);

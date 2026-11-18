@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
@@ -168,7 +169,7 @@ namespace Sentinel.Core
                     var tokenInfo = GetProcessTokenUser(pid);
                     if (tokenInfo == null) continue;
 
-                    // Detect: non-service process running with SYSTEM/LocalService/NetworkService token
+                    // Detect: non-service process running with a SYSTEM (S-1-5-18) token
                     if (tokenInfo.Value.IsSystemToken && !IsExpectedSystemProcess(processName, pid))
                     {
                         string imagePath = SecurityValidation.GetProcessImagePath(pid) ?? "";
@@ -355,12 +356,12 @@ namespace Sentinel.Core
 
                 try
                 {
-                    string userName = GetTokenUserName(hToken);
-                    bool isSystem = userName.Equals("SYSTEM") ||
-                                    userName.Equals("LOCAL SERVICE") ||
-                                    userName.Equals("NETWORK SERVICE") ||
-                                    userName.Contains("NT AUTHORITY\\SYSTEM") ||
-                                    userName.EndsWith("\\SYSTEM");
+                    string userName = GetTokenUserName(hToken, out var userSid);
+                    // Decide on the SID (S-1-5-18), not the account name: names are localized
+                    // ("AUTORITE NT\Système") and LookupAccountSid returns "DOMAIN\NAME", so the
+                    // former bare "LOCAL SERVICE"/"NETWORK SERVICE" compares never matched. Those two
+                    // accounts stay out of scope: adding them would be a new kill-grade detection.
+                    bool isSystem = userSid != null && userSid.IsWellKnown(WellKnownSidType.LocalSystemSid);
 
                     bool hasImpersonate = CheckImpersonatePrivilege(hToken);
 
@@ -376,8 +377,9 @@ namespace Sentinel.Core
             finally { CloseHandle(hProcess); }
         }
 
-        private string GetTokenUserName(IntPtr hToken)
+        private string GetTokenUserName(IntPtr hToken, out SecurityIdentifier? userSid)
         {
+            userSid = null;
             GetTokenInformation(hToken, TokenUser, IntPtr.Zero, 0, out int needed);
             if (needed <= 0) return "Unknown";
 
@@ -388,6 +390,8 @@ namespace Sentinel.Core
                     return "Unknown";
 
                 IntPtr sidPtr = Marshal.ReadIntPtr(buffer);
+                try { userSid = new SecurityIdentifier(sidPtr); }
+                catch (ArgumentException) { userSid = null; }
 
                 var nameBuilder = new System.Text.StringBuilder(256);
                 var domainBuilder = new System.Text.StringBuilder(256);

@@ -1102,7 +1102,7 @@ namespace Sentinel.Core
                             n.Equals("dismhost",         StringComparison.OrdinalIgnoreCase) ||
                             n.Equals("ntlite",           StringComparison.OrdinalIgnoreCase) ||
                             n.Equals("tiworker",         StringComparison.OrdinalIgnoreCase) ||
-                            n.Equals("trustedinstaller"))
+                            n.Equals("trustedinstaller", StringComparison.OrdinalIgnoreCase))
                             return true;
                     }
                     catch { }

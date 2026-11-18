@@ -235,19 +235,19 @@ namespace Sentinel.Core
         /// </summary>
         internal static bool IsStockWindowsConsoleHost(string processName, string? imagePath)
         {
-            var stem = (processName ?? string.Empty)
-                .Replace(".exe", "")
+            // Case-insensitive: ETW and Process.ProcessName can report "CONHOST.EXE" / "OpenConsole".
+            var stem = StringNet48.ReplaceIgnoreCase(processName ?? string.Empty, ".exe", "")
                 .Trim();
             if (stem.Length == 0) return false;
 
-            bool nameIsConsole =
-                stem.Equals("conhost") ||
-                stem.Equals("openconsole");
+            bool isConhost = string.Equals(stem, "conhost", StringComparison.OrdinalIgnoreCase);
+            bool nameIsConsole = isConhost ||
+                string.Equals(stem, "openconsole", StringComparison.OrdinalIgnoreCase);
 
             if (!nameIsConsole) return false;
 
             if (string.IsNullOrWhiteSpace(imagePath))
-                return stem.Equals("conhost");
+                return isConhost;
 
             try
             {

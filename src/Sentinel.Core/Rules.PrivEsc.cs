@@ -25,7 +25,9 @@ namespace Sentinel.Core
                         image.Contains(pattern))
                     {
                         // Skip legitimate uses - these only trigger when spawned by non-explorer parents
-                        if (pattern.EndsWith(".exe") && pt.ParentProcessName?.Equals("explorer") == true)
+                        // The real shell image is "Explorer.EXE"; compare the stem case-insensitively.
+                        if (pattern.EndsWith(".exe") && pt.ParentProcessName != null &&
+                            string.Equals(StringNet48.ReplaceIgnoreCase(pt.ParentProcessName, ".exe", ""), "explorer", StringComparison.OrdinalIgnoreCase))
                             continue;
 
                         // Skip COM auto-elevation: when auto-elevate binaries are launched with

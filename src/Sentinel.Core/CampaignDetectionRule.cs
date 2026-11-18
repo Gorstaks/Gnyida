@@ -105,17 +105,20 @@ namespace Sentinel.Core
                 var imageFileName = !string.IsNullOrEmpty(proc.ImagePath)
                     ? Path.GetFileName(proc.ImagePath)
                     : null;
+                // Windows file names are case-insensitive: "Beacon.EXE" is the same file as "beacon.exe".
                 if (indicators.FileNames.Any(f =>
-                    proc.ProcessName.Equals(f) ||
-                    (imageFileName != null && imageFileName.Equals(f))))
+                    string.Equals(proc.ProcessName, f, StringComparison.OrdinalIgnoreCase) ||
+                    (imageFileName != null && string.Equals(imageFileName, f, StringComparison.OrdinalIgnoreCase))))
                 {
                     confidence += 0.4;
                     matches.Add($"File name matches {campaign.Key}");
                 }
 
                 // Check process name pattern
+                // Case-insensitive like the file name above, or "Beacon.EXE" scores 0.4 and stays
+                // under the 0.5 threshold. A pattern alone (0.3) still cannot fire the rule.
                 if (indicators.ProcessPatterns.Any(p =>
-                    proc.ProcessName.Contains(p)))
+                    proc.ProcessName.IndexOf(p, StringComparison.OrdinalIgnoreCase) >= 0))
                 {
                     confidence += 0.3;
                     matches.Add($"Process name pattern matches {campaign.Key}");

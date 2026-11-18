@@ -218,7 +218,8 @@ namespace Sentinel.Core
             // Check if already watched
             lock (_watchers)
             {
-                if (_watchers.Any(w => w.Path.Equals(path)))
+                // Windows paths are case-insensitive: "C:\Data" and "c:\data" are one folder.
+                if (_watchers.Any(w => string.Equals(w.Path, path, StringComparison.OrdinalIgnoreCase)))
                     return;
             }
 

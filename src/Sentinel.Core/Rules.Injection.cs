@@ -96,6 +96,11 @@ namespace Sentinel.Core
     {
         public string Name => "DllSideloadingDetectionRule";
 
+        private static readonly HashSet<string> SystemToolNames = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "onedrive", "msoju", "winword", "excel", "powershell", "cmd"
+        };
+
         public DetectionEvent? Evaluate(FusedTelemetryContext context)
         {
             if (context.TriggeringEvent is ProcessTelemetry pt)
@@ -113,15 +118,18 @@ namespace Sentinel.Core
                     // user-writable path is a classic sideload/masquerade (T1574.002). The genuine
                     // tool lives in System32 / Program Files.
                     var procName = Sentinel.Core.StringNet48.ReplaceIgnoreCase(pt.ProcessName, ".exe", "");
-                    bool isSystemToolName = procName.Equals("onedrive") ||
-                                            procName.Equals("msoju") ||
-                                            procName.Equals("winword") ||
-                                            procName.Equals("excel") ||
-                                            procName.Equals("powershell") ||
-                                            procName.Equals("cmd");
+                    // Case-insensitive: the real images are "OneDrive.exe" and "WINWORD.EXE", so the
+                    // former lowercase-only compare let a masquerade with the genuine casing through.
+                    bool isSystemToolName = SystemToolNames.Contains(procName);
 
                     if (isSystemToolName)
                     {
+                        // Genuine per-user Microsoft installs (OneDrive lives in %LOCALAPPDATA%) are
+                        // Microsoft-signed. The signer, not the path or name, is the anchor; an
+                        // impostor cannot produce a valid Microsoft signature.
+                        if (WindowsServicingTrust.IsMicrosoftSigned(pt.ImagePath))
+                            return null;
+
                         // The developer-build exclusion (\bin\debug, \bin\release, .nuget) is a
                         // path fragment an attacker fully controls - dropping a fake "powershell.exe"
                         // under any "...\bin\debug\..." folder previously bypassed this KILL entirely.

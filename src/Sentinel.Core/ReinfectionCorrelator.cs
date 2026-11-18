@@ -407,17 +407,13 @@ namespace Sentinel.Core
             catch { return null; }
         }
 
-        private static bool IsExecutableExtension(string ext)
+        private static readonly HashSet<string> ExecutableExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
-            return ext.Equals(".exe") ||
-                   ext.Equals(".dll") ||
-                   ext.Equals(".scr") ||
-                   ext.Equals(".com") ||
-                   ext.Equals(".bat") ||
-                   ext.Equals(".cmd") ||
-                   ext.Equals(".ps1") ||
-                   ext.Equals(".vbs") ||
-                   ext.Equals(".js");
-        }
+            ".exe", ".dll", ".scr", ".com", ".bat", ".cmd", ".ps1", ".vbs", ".js"
+        };
+
+        // Windows extensions are case-insensitive: a dormant copy renamed to ".EXE" must still be found.
+        internal static bool IsExecutableExtension(string? ext) =>
+            !string.IsNullOrEmpty(ext) && ExecutableExtensions.Contains(ext!);
     }
 }

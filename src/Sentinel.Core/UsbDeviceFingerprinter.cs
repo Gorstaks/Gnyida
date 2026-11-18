@@ -710,6 +710,7 @@ namespace Sentinel.Core
 
         private const int SPDRP_DEVICEDESC = 0x00000000;
         private const int SPDRP_CLASSGUID = 0x00000008;
+        private static readonly Guid HidClassGuid = new("745a17a0-74d3-11d0-b6fe-00a0c90f57da");
         private const int SPDRP_SERVICE = 0x00000004;
         private const int SPDRP_FRIENDLYNAME = 0x0000000C;
 
@@ -812,11 +813,12 @@ namespace Sentinel.Core
                     string classGuidStr = GetDeviceProperty(deviceInfoSet, ref deviceInfoData, SPDRP_CLASSGUID);
                     string service = GetDeviceProperty(deviceInfoSet, ref deviceInfoData, SPDRP_SERVICE);
 
-                    bool isHid = classGuidStr.Equals("{745a17a0-74d3-11d0-b6fe-00a0c90f57da}") ||
-                                 service.Equals("HidUsb");
+                    // GUIDs and service names are case-insensitive; SetupAPI does not fix their casing.
+                    bool isHid = (Guid.TryParse(classGuidStr, out var classGuid) && classGuid == HidClassGuid) ||
+                                 string.Equals(service, "HidUsb", StringComparison.OrdinalIgnoreCase);
 
-                    bool isMassStorage = service.Equals("USBSTOR");
-                    bool isComposite = service.Equals("usbccgp");
+                    bool isMassStorage = string.Equals(service, "USBSTOR", StringComparison.OrdinalIgnoreCase);
+                    bool isComposite = string.Equals(service, "usbccgp", StringComparison.OrdinalIgnoreCase);
 
                     bool isFailedEnum = IsFailedEnumerationSignals(vid, name);
 

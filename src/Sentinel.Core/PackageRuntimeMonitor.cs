@@ -44,6 +44,12 @@ namespace Sentinel.Core
             "bash", "sh", "wsl"
         };
 
+        // Case-insensitive: process names and Windows paths can arrive in any casing.
+        private static readonly HashSet<string> HighRiskChildren = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "mshta", "certutil", "powershell", "pwsh"
+        };
+
         private static readonly string[] PackageTreeFragments =
         {
             @"\node_modules\", @"\site-packages\", @"\.cargo\", @"\packages\",
@@ -138,8 +144,7 @@ namespace Sentinel.Core
             {
                 var name = Path.GetFileName(e.FullPath);
                 if (string.IsNullOrEmpty(name)) return;
-                if (!DevConfigNames.Any(n => name.Equals(n) ||
-                                            name.Equals(".cursorrules")))
+                if (!DevConfigNames.Any(n => string.Equals(name, n, StringComparison.OrdinalIgnoreCase)))
                     return;
                 // Ignore huge trees noise: only shallow-ish paths (<=6 segments under profile)
                 var parts = e.FullPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -227,17 +232,17 @@ namespace Sentinel.Core
 
                 if (!parentIsPkg) continue;
 
-                var childBare = childName.EndsWith(".exe")
+                var childBare = childName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
                     ? childName[..^4]
                     : childName;
 
                 var dangerousChild = DangerousChildren.Contains(childName) || DangerousChildren.Contains(childBare);
                 var inPackageTree = path != null && PackageTreeFragments.Any(f =>
-                    path.Contains(f));
+                    path.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0);
                 var isExeDrop = path != null &&
-                    (path.EndsWith(".exe") ||
-                     path.EndsWith(".dll") ||
-                     path.EndsWith(".scr")) &&
+                    (path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                     path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+                     path.EndsWith(".scr", StringComparison.OrdinalIgnoreCase)) &&
                     inPackageTree;
 
                 if (!dangerousChild && !isExeDrop) continue;
@@ -248,10 +253,7 @@ namespace Sentinel.Core
                 _alertCooldown[key] = now;
 
                 var high = dangerousChild && (
-                    childBare.Equals("mshta") ||
-                    childBare.Equals("certutil") ||
-                    childBare.Equals("powershell") ||
-                    childBare.Equals("pwsh"));
+                    HighRiskChildren.Contains(childBare));
 
                 _ = _detectionEngine.EmitAsync(new DetectionEvent
                 {

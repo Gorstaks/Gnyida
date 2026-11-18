@@ -311,7 +311,7 @@ namespace Sentinel.Core
                             var mods = NativeProcessMemory.EnumModules(proc.Id);
                             moduleCount = mods.Count;
                             amsiLoaded = mods.Any(m =>
-                                m.Name.Equals("amsi.dll"));
+                                string.Equals(m.Name, "amsi.dll", StringComparison.OrdinalIgnoreCase));
                         }
                         catch { continue; }
 

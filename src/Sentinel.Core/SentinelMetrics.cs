@@ -51,6 +51,10 @@ namespace Sentinel.Core
                 case ResponseExecutionStatus.Failed: Interlocked.Increment(ref _responsesFailed); break;
                 case ResponseExecutionStatus.Refused: Interlocked.Increment(ref _responsesRefused); break;
                 case ResponseExecutionStatus.PartiallyCompleted: Interlocked.Increment(ref _responsesPartial); break;
+                // Attempted (unverified) has no bucket of its own: a completed Attempted outcome always
+                // carries an Attempted effect, so it is counted in _responsesAttempted below. An
+                // uncompleted one is still in flight and is counted when it completes.
+                case ResponseExecutionStatus.Attempted: break;
             }
             if (result.Effects.Count > 0) Interlocked.Increment(ref _responsesAttempted);
         }

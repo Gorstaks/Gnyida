@@ -1,5 +1,28 @@
 # Changelog
 
+## [3.7.9] - 2026-11-17
+### Fixed - case-sensitive comparisons on case-insensitive Windows names
+An audit of every equality and string comparison in `src/` found no `==` used on a type without equality and no reference compare of arrays (hashes use hex strings or `SequenceEqual`). The real gaps were string checks that ignored how Windows treats names: file names, extensions, process names, paths, GUIDs and service names are case-insensitive, and account names are localized.
+- **`StringNet48.ReplaceIgnoreCase` did not ignore case.** It used the bare `IndexOf(string, int)` overload, which is case- and culture-sensitive, so `CMD.EXE` kept its `.EXE` and every stem compare after it missed. It now uses `OrdinalIgnoreCase`. This corrects the 26 callers that strip `.exe` from a process name.
+- **`DynamicCondition.Evaluate` (signed dynamic rules).** `Equals`, `NotEquals`, `Contains`, `NotContains`, `StartsWith` and `EndsWith` are now `OrdinalIgnoreCase`, so re-casing a command line or path no longer evades a rule. Numeric and date fields render with the invariant culture. The rule `EventType` match is case-insensitive.
+- **`CampaignDetectionRule`.** File-name IOCs and process-name patterns are matched case-insensitively; `Beacon.EXE` previously scored 0 instead of 0.7. A pattern alone (0.3) still cannot reach the 0.5 threshold.
+- **`ReinfectionCorrelator`.** Dormant copies with upper-case extensions (`.EXE`, `.Dll`) are no longer skipped.
+- **`DllSideloadingDetectionRule`.** The system-tool names are matched case-insensitively. Before, the real casings `OneDrive` and `WINWORD` never matched, so a masquerade using them was missed. Because the genuine OneDrive runs from `%LOCALAPPDATA%`, a Microsoft-signed image (`WindowsServicingTrust.IsMicrosoftSigned`, embedded or catalog) is now exempt. The signer is the anchor; the name and path are not.
+- **`TokenTheftMonitor`.** SYSTEM is identified by SID (`S-1-5-18`) instead of the account name. `LookupAccountSid` returns `DOMAIN\NAME`, so the bare `LOCAL SERVICE` / `NETWORK SERVICE` compares never matched, and `\SYSTEM` fails on localized Windows (`AUTORITE NT\Système`). LocalService and NetworkService remain out of scope, as they were in practice: including them would be a new kill-grade detection that needs its own false-positive review.
+- **False-positive fixes from names that never matched:** `PrintSpoolerMonitor` (`PrintFilterPipelineSvc`), `VolumeMountMonitor` (`TrustedInstaller`), `ParentPidSpoofDetector.IsStockWindowsConsoleHost` (`CONHOST.EXE`, `OpenConsole`), `ScriptExecutionMonitor` (`amsi.dll`), `AppNetworkPolicyMonitor` (`SVCHOST` now gets the Windows-directory check), `Rules.PrivEsc` (`Explorer.EXE` parent).
+- **Smaller fixes:** `UsbDeviceFingerprinter` parses the class GUID and compares service names case-insensitively. `PackageRuntimeMonitor` matches dev-config names, package-tree path fragments, extensions and high-risk children case-insensitively. `FileActivityMonitor` no longer adds a duplicate watcher for a differently cased path.
+- `SentinelMetrics.RecordResponseOutcome` lists `Attempted` explicitly. No counting change: an Attempted outcome is already counted through its effects.
+- Name-based exemptions that now ignore case (`explorer`, spooler children, `conhost`) are no weaker than before. Anyone who chooses the name could already choose the lowercase form.
+### Fixed - CI security-template gate
+- `SecurityTemplate.Tests.ps1` failed the 3.7.8 build: `Shipping policy must grant SeDebugPrivilege to no one (found '*S-1-5-32-544')`. The 3.7.5 `GSecurity.inf` grants `SeDebugPrivilege` and `SeLoadDriverPrivilege` to Administrators only, and `SeBackupPrivilege` to Administrators only. 3.7.7 updated `V220SecurityHardeningTests` to accept that policy, but not this script. The script now applies the same rule: those two privileges may be held by no one or by Administrators only, `SeBackupPrivilege` by Administrators with or without Backup Operators. `SeTcbPrivilege`, `SeCreateTokenPrivilege`, `SeEnableDelegationPrivilege`, `SeTrustedCredManAccessPrivilege` and `SeCreatePermanentPrivilege` must still be granted to no one, and broad-group grants, duplicates, weakened password settings and forced-off FIPS still fail.
+### Constraints honored
+- Userland only. No new response action, no Tier2 rule gains authority, no new host mutation.
+- Every widened match is on an existing Tier1 path whose evidence is unchanged apart from casing.
+### Testing
+- New `CaseInsensitiveComparisonTests` (28 cases): `.exe` stripping in any case, extension matching, campaign IOC in three casings, sideloading masquerade with real casings, console host casing (impostor path still not exempt), dynamic-rule operators and invariant numeric text.
+- Solution builds 0 warnings / 0 errors (`-warnaserror`). `Sentinel.Tests`: 3,788 passed, 9 skipped, 1 failed. The failure, `EndpointProtectionWindowsTests.CorrelatedVictimResponseVerifiesRealExitAndPreservesUnrelatedProcess`, is intermittent and predates this change: on the unmodified 3.7.8 code it failed 2 of 4 class runs.
+- `SecurityTemplate.Tests.ps1`, `LocalFirewallPolicy.Tests.ps1` and `ReleaseArtifacts.Tests.ps1` pass locally.
+
 ## [3.7.8] - 2026-11-17
 ### Fixed - service memory leak in the DetectionEngine drain loop (9.9 GB after two days)
 Full incident record, evidence and regression rules: [MEMORY_LEAK_3.7.8.md](MEMORY_LEAK_3.7.8.md). Read it before changing the drain loop, `DualLaneWait`, or any code that waits on a channel or token in a loop.
