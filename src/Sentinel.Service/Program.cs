@@ -835,6 +835,7 @@ namespace Sentinel.Service
                         var monitors = SafeMonitorResolver.Build(sp,
                             ("FirewallIntegrityMonitor",        s => s.GetRequiredService<FirewallIntegrityMonitor>()),
                             ("SecureBootIntegrityMonitor",      s => s.GetRequiredService<SecureBootIntegrityMonitor>()),
+                            ("SystemFileAclDriftMonitor",       s => s.GetRequiredService<SystemFileAclDriftMonitor>()),
                             ("WindowsUpdateIntegrityMonitor",   s => s.GetRequiredService<WindowsUpdateIntegrityMonitor>()),
                             ("ScheduledTaskMonitor",            s => s.GetRequiredService<ScheduledTaskMonitor>()),
                             ("CriticalServiceGuard",            s => s.GetRequiredService<CriticalServiceGuard>()),
@@ -902,6 +903,8 @@ namespace Sentinel.Service
                     services.AddSingleton<Sentinel.Core.Monitors.RootStoreGuard>();
                     services.AddSingleton<FirewallIntegrityMonitor>();
                     services.AddSingleton<SecureBootIntegrityMonitor>();
+                    services.AddSingleton<SystemFileAclRepairer>();
+                    services.AddSingleton<SystemFileAclDriftMonitor>();
                     services.AddSingleton<WindowsUpdateIntegrityMonitor>();
                     services.AddSingleton<ScheduledTaskMonitor>();
                     services.AddSingleton<CriticalServiceGuard>();

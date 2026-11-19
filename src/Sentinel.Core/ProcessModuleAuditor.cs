@@ -23,6 +23,9 @@ namespace Sentinel.Core
         public bool IsKeepTree { get; set; }
         public bool IsAppDirectory { get; set; }
         public bool IsUserWritableDrop { get; set; }
+        /// <summary>Real-DACL answer: a non-admin principal can write the file or its folder. Observe-only context; the path-list IsUserWritableDrop stays the verdict input.</summary>
+        public bool IsAclWritable { get; set; }
+        public string AclWritableReason { get; set; } = string.Empty;
         public bool Allowed { get; set; }
         public string VerdictReason { get; set; } = string.Empty;
         public string Md5Hash { get; set; } = string.Empty;
@@ -160,6 +163,9 @@ namespace Sentinel.Core
                     // Path trees
                     entry.IsKeepTree = ModuleIdentity.IsKeepTree(mod.Path);
                     entry.IsUserWritableDrop = ModuleIdentity.IsUserWritableDrop(mod.Path);
+                    var acl = WritableLocationAcl.Evaluate(mod.Path);
+                    entry.IsAclWritable = !acl.Ok;
+                    entry.AclWritableReason = acl.Ok ? string.Empty : acl.Reason;
                     entry.IsAppDirectory = !string.IsNullOrEmpty(procDir) &&
                         ModuleIdentity.IsUnderDirectory(Path.GetDirectoryName(mod.Path), procDir);
 

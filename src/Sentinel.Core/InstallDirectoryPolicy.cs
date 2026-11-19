@@ -16,7 +16,7 @@ namespace Sentinel.Core
     {
         // static readonly, not const: an enum constant of this type-forwarded framework type sends
         // coverlet's Mono.Cecil instrumenter into an infinite type-forward resolution (CI stack overflow).
-        private static readonly FileSystemRights WriteLike =
+        internal static readonly FileSystemRights WriteLike =
             FileSystemRights.WriteData | FileSystemRights.AppendData | FileSystemRights.CreateFiles |
             FileSystemRights.CreateDirectories | FileSystemRights.WriteAttributes | FileSystemRights.WriteExtendedAttributes |
             FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles |
@@ -86,7 +86,7 @@ namespace Sentinel.Core
             return false;
         }
 
-        private static bool IsTrusted(SecurityIdentifier sid)
+        internal static bool IsTrusted(SecurityIdentifier sid)
             => sid.IsWellKnown(WellKnownSidType.LocalSystemSid) ||
                sid.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid) ||
                string.Equals(sid.Value, "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464", StringComparison.Ordinal); // NT SERVICE\TrustedInstaller
