@@ -447,6 +447,13 @@ internal static class Rotator
         }
 
         RequireLocalEnabledAccount(account);
+        // The boot task runs this exe as SYSTEM. Refuse before any change if a non-admin could replace it.
+        string? untrusted = FindUntrustedExecutableLocation(Process.GetCurrentProcess().MainModule.FileName);
+        if (untrusted != null)
+        {
+            Rotator.Log("Install refused: the SYSTEM boot task would run an executable that non-administrators can replace (" + untrusted + "). Install it under Program Files and run it from there.");
+            return 1;
+        }
         EnsureStateDirectory();
 
         // Clear any earlier installation first (idempotent reinstall, or migration from an older release).
@@ -605,6 +612,88 @@ internal static class Rotator
         }
     }
 
+    // Principals allowed to own or modify the executable that the SYSTEM boot task will run.
+    private static readonly string[] TrustedWriterSids =
+    {
+        "S-1-5-18",      // SYSTEM
+        "S-1-5-32-544",  // Administrators
+        "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464", // TrustedInstaller
+        "S-1-3-0",       // CREATOR OWNER (a placeholder that only takes effect on new children)
+    };
+    private const FileSystemRights ReplaceRights =
+        FileSystemRights.WriteData | FileSystemRights.AppendData | FileSystemRights.Delete |
+        FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.ChangePermissions |
+        FileSystemRights.TakeOwnership;
+    // Rights on an ancestor directory that allow renaming or replacing the child that leads to the exe.
+    // Create-only rights (such as Users creating folders under C:\) cannot replace an existing child.
+    private const FileSystemRights AncestorReplaceRights =
+        FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles |
+        FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
+    /// <summary>
+    /// The boot task runs this executable as SYSTEM, so it must not be replaceable by a non-administrator.
+    /// Returns null when the file, its directory and every ancestor are controlled only by trusted principals,
+    /// otherwise a description of the first problem found.
+    /// </summary>
+    internal static string? FindUntrustedExecutableLocation(string exePath)
+    {
+        try
+        {
+            string full = Path.GetFullPath(exePath);
+            if (full.StartsWith(@"\\", StringComparison.Ordinal))
+                return "the executable is on a network path";
+            var file = new FileInfo(full);
+            if (!file.Exists) return "the executable does not exist";
+            if ((file.Attributes & FileAttributes.ReparsePoint) != 0)
+                return "the executable is a reparse point";
+            string? problem = CheckSecurity(file.GetAccessControl(), full, ReplaceRights, "file");
+            if (problem != null) return problem;
+            DirectoryInfo? dir = file.Directory;
+            bool first = true;
+            while (dir != null)
+            {
+                if ((dir.Attributes & FileAttributes.ReparsePoint) != 0)
+                    return "'" + dir.FullName + "' is a reparse point";
+                // The containing directory also guards sibling files (config, assemblies); ancestors only guard the name.
+                FileSystemRights rights = first ? ReplaceRights : AncestorReplaceRights;
+                problem = CheckSecurity(dir.GetAccessControl(), dir.FullName, rights, "directory");
+                if (problem != null) return problem;
+                first = false;
+                dir = dir.Parent;
+            }
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidOperationException || ex is ArgumentException || ex is NotSupportedException)
+        {
+            // Fail closed: if the ACL cannot be read, it cannot be trusted.
+            return "its permissions could not be read (" + ex.Message + ")";
+        }
+    }
+    private static string? CheckSecurity(FileSystemSecurity security, string path, FileSystemRights dangerous, string kind)
+    {
+        var owner = security.GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier;
+        // The owner can always rewrite the ACL, so it must be trusted too.
+        if (owner == null || !IsTrustedWriter(owner))
+            return kind + " '" + path + "' is owned by " + (owner?.Value ?? "an unknown principal");
+        foreach (FileSystemAccessRule rule in security.GetAccessRules(true, true, typeof(SecurityIdentifier)))
+        {
+            if (rule.AccessControlType != AccessControlType.Allow) continue;
+            // An inherit-only rule applies to children, not to this object; the children's own ACLs reflect it.
+            if ((rule.PropagationFlags & PropagationFlags.InheritOnly) != 0) continue;
+            if ((rule.FileSystemRights & dangerous) == 0) continue;
+            var sid = (SecurityIdentifier)rule.IdentityReference;
+            if (IsTrustedWriter(sid)) continue;
+            return kind + " '" + path + "' can be modified by " + sid.Value;
+        }
+        return null;
+    }
+    private static bool IsTrustedWriter(SecurityIdentifier sid)
+    {
+        foreach (string trusted in TrustedWriterSids)
+        {
+            if (sid.Value.Equals(trusted, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
     private static bool IsAdministrator()
     {
         using (WindowsIdentity identity = WindowsIdentity.GetCurrent())

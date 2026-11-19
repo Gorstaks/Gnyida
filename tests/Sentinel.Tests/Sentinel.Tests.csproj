@@ -52,6 +52,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sentinel.Core\Sentinel.Core.csproj" />
     <Compile Include="..\..\tools\Sentinel.ExploitShield\ShieldCycle.cs" Link="Shared\ExploitShield\ShieldCycle.cs" />
+    <Compile Include="..\..\src\Sentinel.Agent\ProtectionSummary.cs" Link="Shared\Agent\ProtectionSummary.cs" />
+    <Compile Include="..\..\src\Sentinel.Agent\WebView2Installer.cs" Link="Shared\Agent\WebView2Installer.cs" />
     <Compile Include="..\..\tools\Sentinel.ExploitShield\ShieldPosture.cs" Link="Shared\ExploitShield\ShieldPosture.cs" />
     <Compile Include="..\..\tools\Sentinel.ExploitShield\PublicExploitSource.cs" Link="Shared\ExploitShield\PublicExploitSource.cs" />
     <Compile Include="..\..\tools\Sentinel.ExploitShield\WindowsSecurityUpdates.cs" Link="Shared\ExploitShield\WindowsSecurityUpdates.cs" />

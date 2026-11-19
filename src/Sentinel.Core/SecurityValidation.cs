@@ -134,9 +134,9 @@ namespace Sentinel.Core
             {
                 var normalizedPath = Path.GetFullPath(fullPath);
                 var normalizedDir = Path.GetFullPath(expectedDir);
-                if (!normalizedDir.EndsWith(Path.DirectorySeparatorChar.ToString()))
+                if (!normalizedDir.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
                     normalizedDir += Path.DirectorySeparatorChar;
-                return normalizedPath.StartsWith(normalizedDir);
+                return normalizedPath.StartsWith(normalizedDir, StringComparison.OrdinalIgnoreCase);
             }
             catch { return false; }
         }
@@ -183,8 +183,8 @@ namespace Sentinel.Core
                 {
                     var winRoot = Path.GetFullPath(windows).TrimEnd('\\') + "\\";
                     var winTemp = Path.Combine(windows, "Temp").ToLowerInvariant() + "\\";
-                    if (lower.StartsWith(winRoot.ToLowerInvariant()) &&
-                        !lower.StartsWith(winTemp))
+                    if (lower.StartsWith(winRoot.ToLowerInvariant(), StringComparison.Ordinal) &&
+                        !lower.StartsWith(winTemp, StringComparison.Ordinal))
                         return true;
                 }
 

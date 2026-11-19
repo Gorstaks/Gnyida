@@ -408,10 +408,16 @@ namespace Sentinel.Core
         /// </summary>
         private async Task<string> RunDockerCommandAsync(string command, string arguments)
         {
+            string? docker = SystemTools.Docker();
+            if (docker == null)
+            {
+                _logger.LogWarning("[IsolationResponse] docker {Command} skipped: Docker CLI not found at its install location", command);
+                return string.Empty;
+            }
             using var process = new Process();
             process.StartInfo = new ProcessStartInfo
             {
-                FileName = "docker.exe",
+                FileName = docker,
                 Arguments = $"{command} {arguments}",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

@@ -176,14 +176,17 @@ internal static class Scheduler
         };
         using (Process process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start schtasks.exe."))
         {
-            string stdout = process.StandardOutput.ReadToEnd();
-            string stderr = process.StandardError.ReadToEnd();
+            // Drain both pipes concurrently so a full stderr pipe cannot deadlock the child, and
+            // wait with a timeout before reading so a hung schtasks.exe cannot block us forever.
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
             if (!process.WaitForExit(60000))
             {
-                process.Kill();
+                try { process.Kill(); } catch (InvalidOperationException) { /* exited meanwhile */ }
                 throw new TimeoutException("schtasks.exe did not finish within 60 seconds.");
             }
-            output = (stdout + stderr).Trim();
+            process.WaitForExit(); // flush async stream readers
+            output = (stdoutTask.GetAwaiter().GetResult() + stderrTask.GetAwaiter().GetResult()).Trim();
             return process.ExitCode;
         }
     }

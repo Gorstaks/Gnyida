@@ -355,7 +355,7 @@ namespace Sentinel.Core
             {
                 // schtasks /run is user-context safe and works without COM Task Scheduler API.
                 // The task runs as S-1-5-32-545 (Users) so it can write HKCU of the logged-on user.
-                var psi = new ProcessStartInfo("schtasks.exe", "/run /tn \"ShowAllTrayIcons\"")
+                var psi = new ProcessStartInfo(SystemTools.System32("schtasks.exe"), "/run /tn \"ShowAllTrayIcons\"")
                 {
                     CreateNoWindow = true,
                     UseShellExecute = false,

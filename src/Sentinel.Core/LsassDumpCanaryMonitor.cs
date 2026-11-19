@@ -319,7 +319,7 @@ namespace Sentinel.Core
         {
             // Simple extraction: look for Name="fieldName">value<
             var marker = $"Name=\"{fieldName}\">";
-            var idx = xml.IndexOf(marker);
+            var idx = xml.IndexOf(marker, StringComparison.Ordinal);
             if (idx < 0) return null;
             idx += marker.Length;
             var endIdx = xml.IndexOf('<', idx);

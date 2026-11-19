@@ -219,7 +219,7 @@ namespace Sentinel.Agent
                     // header). Still subject to the Host/Origin checks above.
                     await ServeIcon(response).ConfigureAwait(false);
                 }
-                else if (path.StartsWith("/api/"))
+                else if (path.StartsWith("/api/", StringComparison.Ordinal))
                 {
                     // Bearer in the Authorization header is the only authenticator for XHR.
                     // Referer is ignored - it is client-controlled on HttpListener. The query
@@ -253,6 +253,9 @@ namespace Sentinel.Agent
 
             switch (path)
             {
+                case "/api/summary":
+                    await HandleSummary(response).ConfigureAwait(false);
+                    break;
                 case "/api/status":
                     await HandleStatus(response).ConfigureAwait(false);
                     break;
@@ -593,6 +596,27 @@ namespace Sentinel.Agent
             return diff == 0;
         }
 
+        /// <summary>Overview figures: verified threats stopped in the last 7 days (see ProtectionSummary).</summary>
+        private async Task HandleSummary(HttpListenerResponse response)
+        {
+            ProtectionSummary summary;
+            try { summary = ProtectionSummary.Read(_eventLogPaths); }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "[WebDashboard] Summary unavailable");
+                await WriteJson(response, new { ok = false, error = "summary_unavailable" }).ConfigureAwait(false);
+                return;
+            }
+            await WriteJson(response, new
+            {
+                ok = true,
+                threatsStopped = summary.ThreatsStopped,
+                responsesFailed = summary.ResponsesFailed,
+                lastThreatStoppedUtc = summary.LastThreatStoppedUtc?.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
+                windowDays = (int)ProtectionSummary.Window.TotalDays,
+                windowComplete = summary.WindowComplete,
+            }).ConfigureAwait(false);
+        }
         private async Task HandleStatus(HttpListenerResponse response)
         {
             bool serviceRunning = false;

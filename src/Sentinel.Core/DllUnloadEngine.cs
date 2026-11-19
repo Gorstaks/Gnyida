@@ -146,7 +146,8 @@ namespace Sentinel.Core
             {
                 var imagePath = SecurityValidation.GetProcessImagePath(processId);
                 if (SelfPathGuard.IsInstalledNanoAvBinary(imagePath)) return Task.CompletedTask;
-                if (!NativeProcessMemory.CanInspect(processId, imagePath))
+                // Unloading a module is a mutation of the process; games stay excluded here even though they are scanned.
+                if (!NativeProcessMemory.CanInspect(processId, imagePath) || NativeProcessMemory.IsGameWorkload(processId, imagePath))
                     return Task.CompletedTask;
                 if (string.Equals(modulePath, imagePath, StringComparison.OrdinalIgnoreCase))
                     return Task.CompletedTask;
@@ -481,7 +482,7 @@ namespace Sentinel.Core
                 }
                 var hostileLoaded = new List<(string Path, IntPtr Base, int Size)>();
 
-                if (NativeProcessMemory.CanInspect(processId, imagePath))
+                if (NativeProcessMemory.CanInspect(processId, imagePath) && !NativeProcessMemory.IsGameWorkload(processId, imagePath))
                 {
                     foreach (var mod in NativeProcessMemory.EnumModules(processId))
                     {
@@ -869,17 +870,17 @@ namespace Sentinel.Core
         {
             var win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
             var lower = directory.ToLowerInvariant();
-            return lower.StartsWith((win + @"\system32").ToLowerInvariant()) ||
-                   lower.StartsWith((win + @"\syswow64").ToLowerInvariant()) ||
-                   lower.StartsWith((win + @"\winsxs").ToLowerInvariant()) ||
-                   lower.StartsWith((win + @"\servicing").ToLowerInvariant());
+            return lower.StartsWith((win + @"\system32").ToLowerInvariant(), StringComparison.Ordinal) ||
+                   lower.StartsWith((win + @"\syswow64").ToLowerInvariant(), StringComparison.Ordinal) ||
+                   lower.StartsWith((win + @"\winsxs").ToLowerInvariant(), StringComparison.Ordinal) ||
+                   lower.StartsWith((win + @"\servicing").ToLowerInvariant(), StringComparison.Ordinal);
         }
 
         private static bool IsProtectedPath(string? path)
         {
             if (string.IsNullOrEmpty(path)) return false;
-            return path!.StartsWith(@"C:\Windows\") ||
-                   path.StartsWith(@"C:\Program Files") ||
+            return path!.StartsWith(@"C:\Windows\", StringComparison.Ordinal) ||
+                   path.StartsWith(@"C:\Program Files", StringComparison.Ordinal) ||
                    path.Contains(@"\AppData\Local\Google\") ||
                    path.Contains(@"\AppData\Local\Microsoft\") ||
                    path.Contains(@"\AppData\Local\Programs\") ||

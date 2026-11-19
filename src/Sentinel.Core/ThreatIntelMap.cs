@@ -66,14 +66,26 @@ namespace Sentinel.Core
     }
 
     /// <summary>
-    /// PIDs that just did remote TI. EtwThreatIntelMonitor scans only these
+    /// PIDs worth a memory inspection, with the reason each one was marked. EtwThreatIntelMonitor scans only these
     /// (no full-system 5s EnumModules - that was the LatencyMon hard-fault source).
+    ///
+    /// A mark carries flags, not one slot, so a weak reason can never hide or downgrade a strong one:
+    ///   Evidence  - the kernel Threat-Intelligence provider saw an injection-related call by this process. That provider
+    ///               needs a protected anti-malware process, so on a SYSTEM-only install it is denied (Win32 5) and this
+    ///               flag is never set.
+    ///   Sweep     - a periodic round-robin visited this process. Gives coverage without the provider.
+    ///   ImageLoad - this process loaded a module (kernel-process provider, which does work without protection).
+    /// Sweep and ImageLoad marks are weak: payload inspection only, and only of pages already resident, so they cannot
+    /// cause hard faults.
     /// </summary>
     public static class InjectionSuspectBoard
     {
-        private static readonly ConcurrentDictionary<int, (DateTimeOffset When, bool PayloadOnly)> Pids = new();
-        private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(2);
+        [Flags]
+        internal enum MarkKind { None = 0, Sweep = 1, ImageLoad = 2, Evidence = 4 }
 
+        private const int SoftCap = 8192;
+        private static readonly ConcurrentDictionary<int, (DateTimeOffset When, bool PayloadOnly, MarkKind Kinds)> Pids = new();
+        private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(2);
         // Most recent ETW-TI captured call-stack frames per caller PID. Stashed cheaply on
         // the ETW callback thread; the heavy per-frame memory classification runs off-thread
         // in EtwThreatIntelMonitor (same reason the module walk lives there, not here).
@@ -85,11 +97,51 @@ namespace Sentinel.Core
         {
             if (pid <= 4) return;
             var now = DateTimeOffset.UtcNow;
-            Pids[pid] = (now, payloadOnly);
+            Pids[pid] = (now, payloadOnly, MarkKind.Evidence);
+        }
+
+        /// <summary>
+        /// Adds a weak reason. An existing Evidence mark keeps its payload-only setting; a new or expired entry is
+        /// payload-only. Cheap enough for the ETW callback thread: one dictionary write.
+        /// </summary>
+        internal static void MarkWeak(int pid, MarkKind kind)
+        {
+            if (pid <= 4 || kind == MarkKind.None || (kind & MarkKind.Evidence) != 0) return;
+            var now = DateTimeOffset.UtcNow;
+            if (Pids.Count >= SoftCap) PruneExpired(now);
+            Pids.AddOrUpdate(pid,
+                _ => (now, true, kind),
+                (_, old) => now - old.When > Ttl ? (now, true, kind) : (now, old.PayloadOnly, old.Kinds | kind));
+        }
+
+        /// <summary>Removes one weak reason once it has been acted on; the entry goes when no reason is left.</summary>
+        internal static void ClearWeak(int pid, MarkKind kind)
+        {
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                if (!Pids.TryGetValue(pid, out var old)) return;
+                var left = old.Kinds & ~(kind & ~MarkKind.Evidence);
+                if (left == old.Kinds) return;
+                bool done = left == MarkKind.None
+                    ? ((ICollection<KeyValuePair<int, (DateTimeOffset, bool, MarkKind)>>)Pids).Remove(new KeyValuePair<int, (DateTimeOffset, bool, MarkKind)>(pid, old))
+                    : Pids.TryUpdate(pid, (old.When, old.PayloadOnly, left), old);
+                if (done) return;
+            }
         }
 
         internal static bool IsPayloadOnly(int pid) =>
             !Pids.TryGetValue(pid, out var entry) || entry.PayloadOnly;
+
+        /// <summary>True when the only reasons for this PID are weak ones (no Threat-Intelligence evidence).</summary>
+        internal static bool IsWeakOnly(int pid) =>
+            Pids.TryGetValue(pid, out var entry) && (entry.Kinds & MarkKind.Evidence) == 0;
+
+        internal static bool TryGetKinds(int pid, out MarkKind kinds)
+        {
+            bool found = Pids.TryGetValue(pid, out var entry);
+            kinds = found ? entry.Kinds : MarkKind.None;
+            return found;
+        }
 
         /// <summary>
         /// Stash a captured user-mode return-address chain for later off-thread analysis.
@@ -116,9 +168,24 @@ namespace Sentinel.Core
             return entry.Frames;
         }
 
-        public static int[] Snapshot()
+        /// <summary>The payload scanner's candidates: Threat-Intelligence evidence and periodic sweeps.</summary>
+        public static int[] Snapshot() => Snapshot(MarkKind.Sweep | MarkKind.Evidence);
+
+        /// <summary>PIDs that carry at least one of the wanted reasons. Also expires old entries.</summary>
+        internal static int[] Snapshot(MarkKind wanted)
         {
             var now = DateTimeOffset.UtcNow;
+            PruneExpired(now);
+            var list = new List<int>(Pids.Count);
+            foreach (var kv in Pids)
+            {
+                if ((kv.Value.Kinds & wanted) != 0) list.Add(kv.Key);
+            }
+            return list.ToArray();
+        }
+
+        private static void PruneExpired(DateTimeOffset now)
+        {
             foreach (var kv in Pids)
             {
                 if (now - kv.Value.When > Ttl)
@@ -129,10 +196,13 @@ namespace Sentinel.Core
                 if (now - kv.Value.When > Ttl)
                     StackFrames.TryRemove(kv.Key, out _);
             }
-            var keys = Pids.Keys;
-            var arr = new int[keys.Count];
-            keys.CopyTo(arr, 0);
-            return arr;
+        }
+
+        /// <summary>Test seam: forgets every mark.</summary>
+        internal static void ResetForTests()
+        {
+            Pids.Clear();
+            StackFrames.Clear();
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Security.Cryptography.X509Certificates;
@@ -248,7 +248,7 @@ namespace Sentinel.Core
                 using var cert = X509Certificate2.CreateFromSignedFile(filePath);
 #pragma warning restore SYSLIB0057
                 var subject = cert.Subject;
-                var cnStart = subject.IndexOf("CN=");
+                var cnStart = subject.IndexOf("CN=", StringComparison.Ordinal);
                 if (cnStart < 0) return subject;
 
                 cnStart += 3;

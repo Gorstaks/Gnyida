@@ -79,17 +79,17 @@ namespace Sentinel.Core
         private static readonly Regex DownloadCradleRegex = new(
             @"(iex|invoke-expression|\.invoke)\s*[\(\{]?\s*\(?\s*(new-object\s+net\.webclient|invoke-webrequest|invoke-restmethod|wget|curl|" +
             @"start-bitstransfer|\[net\.webclient\]|downloadstring|downloaddata|downloadfile|net\.sockets\.tcpclient)",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         // Obfuscation indicators
         private static readonly Regex TickObfuscation = new(@"`[a-zA-Z]", RegexOptions.Compiled);
         private static readonly Regex ConcatObfuscation = new(@"('\s*\+\s*'){3,}|(""\s*\+\s*""){3,}", RegexOptions.Compiled);
         private static readonly Regex CharArrayObfuscation = new(
-            @"\[char\]\s*\d+.*\[char\]\s*\d+.*\[char\]\s*\d+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            @"\[char\]\s*\d+.*\[char\]\s*\d+.*\[char\]\s*\d+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
         private static readonly Regex FormatStringObfuscation = new(
             @"-f\s*'[^']{1,3}'\s*,\s*'[^']{1,3}'\s*,\s*'[^']{1,3}'", RegexOptions.Compiled);
         private static readonly Regex ReverseObfuscation = new(
-            @"\[\-1\.\.\-\d+\]|\-join\s*\(\s*'[^']+'\s*\[\s*\d+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            @"\[\-1\.\.\-\d+\]|\-join\s*\(\s*'[^']+'\s*\[\s*\d+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         // .NET reflection loading patterns
         private static readonly string[] ReflectionPatterns = new[]
@@ -624,9 +624,9 @@ namespace Sentinel.Core
                         if (string.IsNullOrEmpty(cmdLine)) continue;
 
                         var cmdLower = cmdLine.ToLowerInvariant();
-                        int encIdx = cmdLower.IndexOf("-encodedcommand ");
-                        if (encIdx < 0) encIdx = cmdLower.IndexOf("-enc ");
-                        if (encIdx < 0) encIdx = cmdLower.IndexOf("-e ");
+                        int encIdx = cmdLower.IndexOf("-encodedcommand ", StringComparison.Ordinal);
+                        if (encIdx < 0) encIdx = cmdLower.IndexOf("-enc ", StringComparison.Ordinal);
+                        if (encIdx < 0) encIdx = cmdLower.IndexOf("-e ", StringComparison.Ordinal);
                         if (encIdx < 0) continue;
 
                         // Extract the base64 blob
@@ -939,11 +939,11 @@ namespace Sentinel.Core
             }
 
             // Replace/split abuse: multiple -replace or .replace() calls
-            int replaceCount = Regex.Matches(script, @"-replace|\.replace\(", RegexOptions.IgnoreCase).Count;
+            int replaceCount = Regex.Matches(script, @"-replace|\.replace\(", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Count;
             if (replaceCount >= 5) score += 1;
 
             // Variable name obfuscation: $env: abuse, ${} syntax with random names
-            if (Regex.IsMatch(script, @"\$\{[a-f0-9]{8,}\}", RegexOptions.IgnoreCase)) score += 1;
+            if (Regex.IsMatch(script, @"\$\{[a-f0-9]{8,}\}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)) score += 1;
 
             return Math.Min(score, 10);
         }

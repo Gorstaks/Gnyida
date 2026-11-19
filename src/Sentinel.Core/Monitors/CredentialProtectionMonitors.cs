@@ -581,7 +581,7 @@ namespace Sentinel.Core
                     _logger.LogDebug(ex, "[NullSessionGuard] Failed to create FCM block via COM, falling back to netsh");
 
                     // Fallback: use netsh directly
-                    var psi = new ProcessStartInfo("netsh",
+                    var psi = new ProcessStartInfo(SystemTools.System32("netsh.exe"),
                         $"advfirewall firewall add rule name=\"{FcmFirewallRuleName}\" " +
                         $"dir=out action=block protocol=tcp remoteport={FcmPort}")
                     {
@@ -1002,7 +1002,7 @@ namespace Sentinel.Core
 
                 var psi = new ProcessStartInfo
                 {
-                    FileName = "secedit.exe",
+                    FileName = SystemTools.System32("secedit.exe"),
                     Arguments = args,
                     UseShellExecute = false,
                     CreateNoWindow = true,

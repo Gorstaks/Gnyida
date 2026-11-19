@@ -102,11 +102,11 @@ namespace Sentinel.Core
 
         private static readonly Regex CveIdRegex = new Regex(
             @"CVE-\d{4}-\d{4,}",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         private static readonly Regex EncodedPsRegex = new Regex(
             @"(-enc|-encodedcommand|-e\s+[A-Za-z0-9+/=]{20,}|FromBase64String|IEX\s*\(|Invoke-Expression)",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         public static bool IsStagingPath(string? path)
         {

@@ -2,7 +2,6 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
-using Microsoft.Win32;
 
 namespace Sentinel.Agent
 {
@@ -10,10 +9,10 @@ namespace Sentinel.Agent
     /// Thin shell form hosting an embedded browser that displays the Sentinel web dashboard
     /// served by <see cref="WebDashboardService"/> on localhost.
     ///
-    /// v3.0.6: prefers the Edge/Chromium WebView2 control (modern CSS/JS, no IE11 quirks) and
-    /// falls back to the legacy WinForms <see cref="WebBrowser"/> (IE11 emulation) when the Edge
-    /// WebView2 Runtime is not installed - so a host without the runtime still gets a working
-    /// Settings window instead of a crash (graceful degradation, NFR-2).
+    /// The page needs the Edge/Chromium WebView2 control. Until 3.8 a host without the WebView2 Runtime fell back to
+    /// the WinForms WebBrowser (IE11 emulation); the redesigned page uses CSS the IE engine can't render, so that host
+    /// now gets a native panel that says what to install, instead of a broken window (graceful degradation, NFR-2).
+    /// WebView2 ships with current Windows 10 and 11.
     ///
     /// v3.2.7: WebView2 types are isolated in <see cref="WebView2Host"/> so the CLR never
     /// JIT-compiles WebView2 method bodies when the assemblies are absent. Previously a
@@ -27,14 +26,13 @@ namespace Sentinel.Agent
     {
         private readonly string _launchUrl;
         private readonly string _version;
-        private WebBrowser? _legacyBrowser;
 
         public AgentDashboardForm(string version, string launchUrl)
         {
             _launchUrl = launchUrl;
             _version = version;
 
-            Text = $"Sentinel Dashboard \u2014 v{version}";
+            Text = "Sentinel";
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(980, 640);
             Size = new Size(1200, 780);
@@ -78,7 +76,7 @@ namespace Sentinel.Agent
             }
 
             if (!webViewStarted)
-                StartLegacyBrowser();
+                ShowWebView2Required();
         }
 
         // Called by WebView2Host on the STA thread when WebView2 init fails at runtime.
@@ -88,7 +86,7 @@ namespace Sentinel.Agent
             _fellBack = true;
             ReportWebView2Unavailable(reason);
             MarkLegacyMode();
-            StartLegacyBrowser();
+            ShowWebView2Required();
         }
 
         private bool _fellBack;
@@ -112,7 +110,7 @@ namespace Sentinel.Agent
         }
 
         /// <summary>
-        /// Records that WebView2 is unavailable and the dashboard is falling back to IE11.
+        /// Records that WebView2 is unavailable, so the window shows the install notice instead of the page.
         /// Written to agent_runtime.log (not agent_crash.log — this is a status notice, not a crash).
         /// </summary>
         private void ReportWebView2Unavailable(string reason)
@@ -122,65 +120,119 @@ namespace Sentinel.Agent
                 var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
                 var logPath = Path.Combine(programData, "Sentinel", "agent_runtime.log");
                 var msg = $"[{DateTime.UtcNow:o}] [Info] WebView2 unavailable: {reason}. " +
-                          "Dashboard using the legacy IE11 WebBrowser control. " +
-                          "Install the Microsoft Edge WebView2 Runtime (Evergreen) to enable the modern dashboard." +
+                          "Settings window shows the install notice. " +
+                          "Install the Microsoft Edge WebView2 Runtime (Evergreen) to use it." +
                           Environment.NewLine;
                 File.AppendAllText(logPath, msg);
                 System.Diagnostics.Trace.TraceWarning(
-                    "Sentinel: WebView2 unavailable ({0}); using legacy IE11 browser for dashboard.", reason);
+                    "Sentinel: WebView2 unavailable ({0}); settings window needs the WebView2 Runtime.", reason);
             }
             catch { /* logging is best-effort */ }
         }
 
         private void MarkLegacyMode()
         {
-            try { Text = $"Sentinel Dashboard \u2014 v{_version} (legacy browser \u2014 WebView2 unavailable)"; }
+            try { Text = "Sentinel"; }
             catch { /* cosmetic */ }
         }
 
         /// <summary>
-        /// Legacy WinForms WebBrowser (IE11 emulation) path. Used when WebView2 / its runtime is
-        /// unavailable so Settings always renders something usable.
+        /// Shown when WebView2 can't start. Plain WinForms, so it works on any Windows. It deliberately offers no
+        /// "open in your browser" link: the launch URL carries the session token, which would end up in browser history.
         /// </summary>
-        private void StartLegacyBrowser()
+        private void ShowWebView2Required()
         {
-            SetBrowserEmulationMode();
-
-            var browser = new WebBrowser
+            SuspendLayout();
+            Controls.Clear();
+            var panel = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill,
-                ScriptErrorsSuppressed = true,
-                IsWebBrowserContextMenuEnabled = false,
-                AllowWebBrowserDrop = false,
-                WebBrowserShortcutsEnabled = true
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(48),
+                BackColor = Color.FromArgb(0x11, 0x13, 0x18),
             };
-            Controls.Add(browser);
-            _legacyBrowser = browser;
-
-            try
+            var title = new Label
             {
-                browser.Navigate(_launchUrl);
-            }
-            catch (Exception ex)
+                Text = "This window needs Microsoft Edge WebView2", AutoSize = true, ForeColor = Color.FromArgb(0xEE, 0xF0, 0xF4),
+                Font = new Font("Segoe UI", 16f, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10),
+            };
+            var body = new Label
             {
-                browser.DocumentText = $@"
-                    <html><body style='background:#0d1117;color:#e6edf3;font-family:Segoe UI,sans-serif;padding:40px'>
-                    <h2>Dashboard Unavailable</h2>
-                    <p>Could not connect to the embedded dashboard server.</p>
-                    <p style='color:#8b949e'>{System.Net.WebUtility.HtmlEncode(ex.Message)}</p>
-                    <p style='color:#8b949e'>URL: {System.Net.WebUtility.HtmlEncode(_launchUrl)}</p>
-                    </body></html>";
-            }
+                Text = "Sentinel shows its settings with WebView2, a free Microsoft component that comes with Windows 10 and 11. " +
+                       "It isn't installed or working on this PC. Sentinel keeps protecting the PC either way; only this window is affected." +
+                       Environment.NewLine + Environment.NewLine +
+                       "Sentinel can install it for you. It downloads from Microsoft and installs only for your account, so no administrator approval is needed.",
+                AutoSize = true, MaximumSize = new Size(620, 0), ForeColor = Color.FromArgb(0xA3, 0xA9, 0xB6),
+                Font = new Font("Segoe UI", 10.5f), Margin = new Padding(0, 0, 0, 22),
+            };
+            var install = new Button
+            {
+                Text = "Install WebView2", AutoSize = true, FlatStyle = FlatStyle.Flat, Padding = new Padding(14, 6, 14, 6),
+                BackColor = Color.FromArgb(0x5B, 0x9D, 0xFF), ForeColor = Color.White, Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+            };
+            install.FlatAppearance.BorderSize = 0;
+            var progress = new Label
+            {
+                Text = "", AutoSize = true, MaximumSize = new Size(620, 0), ForeColor = Color.FromArgb(0xA3, 0xA9, 0xB6),
+                Font = new Font("Segoe UI", 10f), Margin = new Padding(0, 14, 0, 0),
+            };
+            install.Click += (s, e) => InstallWebView2(install, progress);
+            var close = new Button
+            {
+                Text = "Close", AutoSize = true, FlatStyle = FlatStyle.Flat, Padding = new Padding(14, 6, 14, 6), Margin = new Padding(0, 10, 0, 0),
+                BackColor = Color.FromArgb(0x22, 0x26, 0x30), ForeColor = Color.FromArgb(0xEE, 0xF0, 0xF4), Font = new Font("Segoe UI", 10f),
+            };
+            close.FlatAppearance.BorderSize = 0;
+            close.Click += (s, e) => Close();
+            panel.Controls.Add(title, 0, 0);
+            panel.Controls.Add(body, 0, 1);
+            panel.Controls.Add(install, 0, 2);
+            panel.Controls.Add(close, 0, 3);
+            panel.Controls.Add(progress, 0, 4);
+            Controls.Add(panel);
+            ResumeLayout();
         }
 
-        protected override void Dispose(bool disposing)
+        /// <summary>
+        /// Installs WebView2 on a background thread (no async/await on the Agent STA thread, NFR-6), then tries to open
+        /// the page again on the UI thread.
+        /// </summary>
+        private void InstallWebView2(Button install, Label progress)
         {
-            if (disposing)
+            install.Enabled = false;
+            progress.Text = "Downloading WebView2 from Microsoft and installing it. This can take a minute...";
+            System.Threading.Tasks.Task.Run(() => WebView2Installer.DownloadAndInstall()).ContinueWith(t =>
             {
-                try { _legacyBrowser?.Dispose(); } catch { }
-                _legacyBrowser = null;
+                var outcome = t.Status == System.Threading.Tasks.TaskStatus.RanToCompletion ? t.Result : WebView2Installer.Outcome.InstallerFailed;
+                try { BeginInvoke(new Action(() => AfterWebView2Install(outcome, install, progress))); }
+                catch (InvalidOperationException) { /* window closed while installing */ }
+            }, System.Threading.Tasks.TaskScheduler.Default);
+        }
+
+        private void AfterWebView2Install(WebView2Installer.Outcome outcome, Button install, Label progress)
+        {
+            if (IsDisposed) return;
+            if (outcome == WebView2Installer.Outcome.Installed)
+            {
+                Controls.Clear();
+                _fellBack = false;
+                bool started = false;
+                try { started = WebView2Host.TryStart(this, _launchUrl, _version, OnFallbackRequested); }
+                catch (Exception ex) when (IsWebView2AssemblyException(ex)) { started = false; }
+                if (!started)
+                {
+                    ShowWebView2Required();
+                    MessageBox.Show(this, "WebView2 is installed. Close this window and open Sentinel again from the tray icon.",
+                        "Sentinel", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                return;
             }
-            base.Dispose(disposing);
+            install.Enabled = true;
+            progress.Text = outcome switch
+            {
+                WebView2Installer.Outcome.DownloadFailed => "The download didn't work. Check your internet connection and try again.",
+                WebView2Installer.Outcome.NotSignedByMicrosoft => "The downloaded file wasn't signed by Microsoft, so Sentinel didn't run it. Try again later.",
+                WebView2Installer.Outcome.TimedOut => "The installer is taking unusually long. It may still finish; reopen Sentinel in a few minutes.",
+                _ => "The installer didn't finish. You can also get WebView2 from microsoft.com/edge/webview2.",
+            };
         }
 
         /// <summary>
@@ -212,26 +264,5 @@ namespace Sentinel.Agent
             }
         }
 
-        /// <summary>
-        /// Sets the FEATURE_BROWSER_EMULATION registry key for this process so the legacy
-        /// WebBrowser control renders in IE11 Edge mode (CSS grid/flexbox). Only relevant on the
-        /// fallback path; harmless otherwise.
-        /// </summary>
-        private static void SetBrowserEmulationMode()
-        {
-            try
-            {
-                var exeName = Path.GetFileName(Application.ExecutablePath);
-                using var key = Registry.CurrentUser.CreateSubKey(
-                    @"Software\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_BROWSER_EMULATION",
-                    RegistryKeyPermissionCheck.ReadWriteSubTree);
-                // 11001 = IE11 Edge mode
-                key?.SetValue(exeName, 11001, RegistryValueKind.DWord);
-            }
-            catch
-            {
-                // Best effort - dashboard still works in quirks mode, just uglier
-            }
-        }
     }
 }

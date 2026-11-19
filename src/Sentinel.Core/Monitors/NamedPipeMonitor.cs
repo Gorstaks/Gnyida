@@ -40,7 +40,7 @@ namespace Sentinel.Core
         private readonly HashSet<string> _alertedPipes = new(StringComparer.OrdinalIgnoreCase);
 
         // Known-bad pipe name patterns (C2 frameworks, lateral movement, priv-esc tools)
-        private static readonly Regex[] KnownBadPatterns = IndicatorCatalog.List("namedPipe.knownBadPatterns").Select(p => new Regex(p, RegexOptions.Compiled | RegexOptions.IgnoreCase)).ToArray();
+        private static readonly Regex[] KnownBadPatterns = IndicatorCatalog.List("namedPipe.knownBadPatterns").Select(p => new Regex(p, RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)).ToArray();
 
         // Well-known legitimate pipe patterns to never alert on
         private static readonly HashSet<string> LegitimatePatterns = new(StringComparer.OrdinalIgnoreCase)

@@ -202,7 +202,7 @@ namespace Sentinel.Tests
         public void BrowserApiSuppressionStillQueuesItsTargetWithoutAuthorizingAction(string caller)
         {
             var candidates = new List<int>();
-            var rule = new ThreatIntelInjectionRule((pid, payloadOnly) => { Assert.True(payloadOnly); candidates.Add(pid); });
+            var rule = new ThreatIntelInjectionRule((pid, payloadOnly) => { Assert.True(payloadOnly); candidates.Add(pid); }, _ => BrowserSandboxPolicy.Verdict.SandboxModel);
             var result = rule.Evaluate(new FusedTelemetryContext
             {
                 TriggeringEvent = new ThreatIntelTelemetry { ProcessId = 5151, ProcessName = caller,

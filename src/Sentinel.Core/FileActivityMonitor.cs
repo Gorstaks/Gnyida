@@ -122,7 +122,7 @@ namespace Sentinel.Core
                                 name.Equals("Default") ||
                                 name.Equals("Default User") ||
                                 name.Equals("All Users") ||
-                                name.StartsWith("."))
+                                name.StartsWith(".", StringComparison.Ordinal))
                             {
                                 continue;
                             }
@@ -771,7 +771,7 @@ namespace Sentinel.Core
                  var imagePath = SecurityValidation.GetProcessImagePath(pid);
                  if (!string.IsNullOrEmpty(imagePath))
                  {
-                     if (imagePath!.StartsWith(@"C:\Windows\") ||
+                     if (imagePath!.StartsWith(@"C:\Windows\", StringComparison.Ordinal) ||
                          imagePath.Contains(@"\Windows Defender\") ||
                          imagePath.Contains(@"\Microsoft Security Client\") ||
                          imagePath.Contains(@"\Sentinel\"))

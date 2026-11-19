@@ -135,7 +135,7 @@ namespace Sentinel.Core
                         name.Equals("Default", StringComparison.OrdinalIgnoreCase) ||
                         name.Equals("Default User", StringComparison.OrdinalIgnoreCase) ||
                         name.Equals("All Users", StringComparison.OrdinalIgnoreCase) ||
-                        name.StartsWith("."))
+                        name.StartsWith(".", StringComparison.Ordinal))
                         continue;
                     results.Add(dir);
                 }

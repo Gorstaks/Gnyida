@@ -324,7 +324,7 @@ namespace Sentinel.Core
         private static int ExtractDebugPort(string cmdLine)
         {
             const string flag = "--remote-debugging-port=";
-            int idx = cmdLine.IndexOf(flag);
+            int idx = cmdLine.IndexOf(flag, StringComparison.Ordinal);
             if (idx < 0) return -1;
 
             int start = idx + flag.Length;
@@ -468,7 +468,7 @@ namespace Sentinel.Core
                 {
                     var val = name.GetString();
                     // Skip MSG_ placeholders that need i18n resolution
-                    if (val != null && !val.StartsWith("__MSG_"))
+                    if (val != null && !val.StartsWith("__MSG_", StringComparison.Ordinal))
                         return val;
                 }
             }

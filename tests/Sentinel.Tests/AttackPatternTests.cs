@@ -207,7 +207,7 @@ namespace Sentinel.Tests
         [InlineData("electron")]
         public void Injection_BrowserExemption_NoFire(string browser)
         {
-            var rule = new ThreatIntelInjectionRule();
+            var rule = new ThreatIntelInjectionRule((_, _) => { }, _ => BrowserSandboxPolicy.Verdict.SandboxModel);
             var result = rule.Evaluate(MakeContext(new ThreatIntelTelemetry
             {
                 ProcessName = browser, ProcessId = 11,

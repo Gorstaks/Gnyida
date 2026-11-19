@@ -237,7 +237,7 @@ namespace Sentinel.Agent
                     // net48: ProcessStartInfo.ArgumentList is not available
                     Process.Start(new ProcessStartInfo
                     {
-                        FileName = "notepad.exe",
+                        FileName = System.IO.Path.Combine(Environment.SystemDirectory, "notepad.exe"),
                         UseShellExecute = true,
                         Arguments = "\"" + logFile + "\""
                     });

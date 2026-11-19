@@ -448,7 +448,7 @@ namespace Sentinel.Core
                     var remotePort = (int)((row.remotePort & 0xFF) << 8 | (row.remotePort & 0xFF00) >> 8);
 
                     // Skip loopback and link-local
-                    if (remoteIp.StartsWith("127.") || remoteIp == "0.0.0.0") continue;
+                    if (remoteIp.StartsWith("127.", StringComparison.Ordinal) || remoteIp == "0.0.0.0") continue;
 
                     string processName = "unknown";
                     try

@@ -293,7 +293,8 @@ namespace Sentinel.Tests
         [InlineData("electron")]
         public void ThreatIntelInjectionRule_SkipsBrowsers(string browserName)
         {
-            var rule = new ThreatIntelInjectionRule();
+            // A genuine browser calling into its own family (the sandbox model) is exempt.
+            var rule = new ThreatIntelInjectionRule((_, _) => { }, _ => BrowserSandboxPolicy.Verdict.SandboxModel);
             var tit = new ThreatIntelTelemetry
             {
                 ProcessName = browserName,

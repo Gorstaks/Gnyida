@@ -94,7 +94,9 @@ namespace Sentinel.Core
             try
             {
                 // Query running containers via docker CLI
-                var psi = new ProcessStartInfo("docker", "ps --format \"{{.ID}} {{.Image}} {{.Command}}\" --no-trunc")
+                string? docker = SystemTools.Docker();
+                if (docker == null) return; // Docker CLI is not at its install location: skip, never search PATH
+                var psi = new ProcessStartInfo(docker, "ps --format \"{{.ID}} {{.Image}} {{.Command}}\" --no-trunc")
                 {
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -105,10 +107,8 @@ namespace Sentinel.Core
                 using var proc = Process.Start(psi);
                 if (proc == null) return;
 
-                var output = await proc.StandardOutput.ReadToEndAsync();
-                await proc.WaitForExitAsync(ct);
-
-                if (proc.ExitCode != 0) return;
+                var output = await BoundedProcess.ReadOutputAsync(proc, 15000, ct); // deadline covers the read as well as the wait
+                if (!proc.HasExited || proc.ExitCode != 0) return;
 
                 foreach (var line in output.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
                 {
@@ -134,7 +134,9 @@ namespace Sentinel.Core
 
             try
             {
-                var psi = new ProcessStartInfo("docker", $"inspect {containerId} --format " +
+                string? docker = SystemTools.Docker();
+                if (docker == null) return;
+                var psi = new ProcessStartInfo(docker, $"inspect {containerId} --format " +
                     "\"{{.HostConfig.NetworkMode}} {{.HostConfig.PidMode}} {{.HostConfig.Privileged}} {{.HostConfig.SecurityOpt}}\"")
                 {
                     RedirectStandardOutput = true,
@@ -146,10 +148,8 @@ namespace Sentinel.Core
                 using var proc = Process.Start(psi);
                 if (proc == null) return;
 
-                var output = (await proc.StandardOutput.ReadToEndAsync()).Trim();
-                await proc.WaitForExitAsync(ct);
-
-                if (proc.ExitCode != 0) return;
+                var output = (await BoundedProcess.ReadOutputAsync(proc, 15000, ct)).Trim();
+                if (!proc.HasExited || proc.ExitCode != 0) return;
 
                 var configParts = output.Split(' ');
                 var networkMode = configParts.Length > 0 ? configParts[0] : "";

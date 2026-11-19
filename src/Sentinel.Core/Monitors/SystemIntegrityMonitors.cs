@@ -817,7 +817,7 @@ namespace Sentinel.Core
             foreach (var part in parts)
             {
                 var trimmed = part.Trim();
-                if (trimmed.StartsWith("CN="))
+                if (trimmed.StartsWith("CN=", StringComparison.Ordinal))
                     return trimmed.Substring(3).Trim();
             }
             return string.Empty;
@@ -855,9 +855,9 @@ namespace Sentinel.Core
 
             var upper = cn.ToUpperInvariant();
             // Common Windows auto-generated hostname prefixes
-            if (upper.StartsWith("WIN-") || upper.StartsWith("DESKTOP-") ||
-                upper.StartsWith("LAPTOP-") || upper.StartsWith("WORKSTATION-") ||
-                upper.StartsWith("PC-") || upper.StartsWith("SERVER-"))
+            if (upper.StartsWith("WIN-", StringComparison.Ordinal) || upper.StartsWith("DESKTOP-", StringComparison.Ordinal) ||
+                upper.StartsWith("LAPTOP-", StringComparison.Ordinal) || upper.StartsWith("WORKSTATION-", StringComparison.Ordinal) ||
+                upper.StartsWith("PC-", StringComparison.Ordinal) || upper.StartsWith("SERVER-", StringComparison.Ordinal))
                 return true;
             // Matches local machine name - definitely a self-signed MitM cert
             try
@@ -945,7 +945,7 @@ namespace Sentinel.Core
         /// </summary>
         private static string? ExtractFieldFromEventMessage(string message, string fieldName)
         {
-            var idx = message.IndexOf(fieldName + ":");
+            var idx = message.IndexOf(fieldName + ":", StringComparison.Ordinal);
             if (idx < 0) return null;
 
             var start = idx + fieldName.Length + 1;
@@ -2263,7 +2263,7 @@ namespace Sentinel.Core
             foreach (var rawLine in lines)
             {
                 var line = rawLine.Trim();
-                if (string.IsNullOrEmpty(line) || line.StartsWith("#"))
+                if (string.IsNullOrEmpty(line) || line.StartsWith("#", StringComparison.Ordinal))
                     continue;
 
                 // Parse: <ip> <hostname> [<hostname2> ...]
@@ -2275,7 +2275,7 @@ namespace Sentinel.Core
                 for (int i = 1; i < parts.Length; i++)
                 {
                     var hostname = parts[i];
-                    if (hostname.StartsWith("#")) break; // inline comment
+                    if (hostname.StartsWith("#", StringComparison.Ordinal)) break; // inline comment
 
                     // Check 1: Is a protected domain being redirected?
                     if (IsProtectedDomain(hostname) && !IsLoopback(ip))
@@ -2685,7 +2685,7 @@ namespace Sentinel.Core
                 {
                     var trimmed = l.Trim();
                     if (hostsToRemove.Contains(trimmed)) return false;
-                    if (!trimmed.StartsWith("#"))
+                    if (!trimmed.StartsWith("#", StringComparison.Ordinal))
                     {
                         var parts = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                         if (parts.Length >= 2 && (parts[0] == "0.0.0.0" || parts[0] == "127.0.0.1"))
@@ -2777,7 +2777,7 @@ namespace Sentinel.Core
         {
             try
             {
-                using var scProc = Process.Start(new ProcessStartInfo("sc.exe", "control DnsCache paramchange")
+                using var scProc = Process.Start(new ProcessStartInfo(SystemTools.System32("sc.exe"), "control DnsCache paramchange")
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true
@@ -2813,7 +2813,7 @@ namespace Sentinel.Core
                 var ruleName = EnforcedIpBlockRulePrefix + safeLabel;
                 foreach (var dir in new[] { "OUT", "IN" })
                 {
-                    var psi = new ProcessStartInfo("netsh",
+                    var psi = new ProcessStartInfo(SystemTools.System32("netsh.exe"),
                         $"advfirewall firewall delete rule name=\"{ruleName}-{dir}\"")
                     {
                         UseShellExecute = false,
@@ -2856,7 +2856,7 @@ namespace Sentinel.Core
 
                 foreach (var dir in new[] { "out", "in" })
                 {
-                    var psi = new ProcessStartInfo("netsh",
+                    var psi = new ProcessStartInfo(SystemTools.System32("netsh.exe"),
                         $"advfirewall firewall add rule name=\"{ruleName}-{dir.ToUpperInvariant()}\" dir={dir} action=block remoteip={ip} enable=yes")
                     {
                         UseShellExecute = false,
@@ -3351,7 +3351,7 @@ namespace Sentinel.Core
                     foreach (var file in Directory.GetFiles(bootDir, "*.efi"))
                     {
                         var name = Path.GetFileName(file);
-                        if (!known.Contains(name) && !name.StartsWith("boot"))
+                        if (!known.Contains(name) && !name.StartsWith("boot", StringComparison.Ordinal))
                         {
                             await _detectionEngine.EmitAsync(new DetectionEvent
                             {
@@ -3408,12 +3408,11 @@ namespace Sentinel.Core
             var entries = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                var psi = new ProcessStartInfo("bcdedit.exe", "/enum all")
+                var psi = new ProcessStartInfo(SystemTools.System32("bcdedit.exe"), "/enum all")
                 { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true };
                 using var proc = Process.Start(psi);
                 if (proc == null) return entries;
-                var output = proc.StandardOutput.ReadToEnd();
-                proc.WaitForExit(10000);
+                var output = BoundedProcess.ReadOutput(proc, 10000);
 
                 foreach (var line in output.Split('\n'))
                 {
@@ -3504,7 +3503,7 @@ namespace Sentinel.Core
                 if (mountLetter == '\0') return (null, false); // No free letter
 
                 var mountPath = $@"{mountLetter}:\";
-                var psi = new ProcessStartInfo("mountvol.exe", $@"{mountPath} /S")
+                var psi = new ProcessStartInfo(SystemTools.System32("mountvol.exe"), $@"{mountPath} /S")
                 { CreateNoWindow = true, UseShellExecute = false };
                 using var proc = Process.Start(psi);
                 proc?.WaitForExit(5000);
@@ -3525,7 +3524,7 @@ namespace Sentinel.Core
             var target = mountPath ?? @"S:\";
             try
             {
-                var psi = new ProcessStartInfo("mountvol.exe", $@"{target} /D")
+                var psi = new ProcessStartInfo(SystemTools.System32("mountvol.exe"), $@"{target} /D")
                 { CreateNoWindow = true, UseShellExecute = false };
                 using var proc = Process.Start(psi);
                 proc?.WaitForExit(5000);
@@ -3768,7 +3767,7 @@ namespace Sentinel.Core
             if (string.IsNullOrEmpty(clsid)) return null;
 
             // Normalize CLSID format
-            if (!clsid.StartsWith("{")) clsid = "{" + clsid + "}";
+            if (!clsid.StartsWith("{", StringComparison.Ordinal)) clsid = "{" + clsid + "}";
 
             try
             {
@@ -4105,8 +4104,8 @@ namespace Sentinel.Core
             var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
             var pf86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
-            return normalized.StartsWith(pf) ||
-                   (!string.IsNullOrEmpty(pf86) && normalized.StartsWith(pf86));
+            return normalized.StartsWith(pf, StringComparison.Ordinal) ||
+                   (!string.IsNullOrEmpty(pf86) && normalized.StartsWith(pf86, StringComparison.Ordinal));
         }
 
         /// <summary>
@@ -4116,7 +4115,7 @@ namespace Sentinel.Core
         {
             foreach (var sensitive in SensitiveNamespaces)
             {
-                if (ns.StartsWith(sensitive))
+                if (ns.StartsWith(sensitive, StringComparison.Ordinal))
                     return true;
             }
             return false;

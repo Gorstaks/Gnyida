@@ -372,7 +372,7 @@ namespace Sentinel.Core
             var r = detection.RuleName ?? "";
             foreach (var f in DllUnloadRuleFragments)
             {
-                if (r.IndexOf(f) >= 0)
+                if (r.IndexOf(f, StringComparison.Ordinal) >= 0)
                     return true;
             }
 
@@ -767,7 +767,7 @@ namespace Sentinel.Core
             var r = detection.RuleName ?? "";
             foreach (var f in BenignNoiseRuleFragments)
             {
-                if (r.IndexOf(f) >= 0)
+                if (r.IndexOf(f, StringComparison.Ordinal) >= 0)
                     return true; // System32 integrity writes are never kill-grade alone
             }
 
@@ -779,7 +779,7 @@ namespace Sentinel.Core
             {
                 foreach (var f in InstallerContextWeakRuleFragments)
                 {
-                    if (r.IndexOf(f) >= 0)
+                    if (r.IndexOf(f, StringComparison.Ordinal) >= 0)
                         return true;
                 }
             }
@@ -802,21 +802,21 @@ namespace Sentinel.Core
                 };
                 foreach (var h in redistHints)
                 {
-                    if (path.IndexOf(h) >= 0)
+                    if (path.IndexOf(h, StringComparison.Ordinal) >= 0)
                         return true;
                 }
 
                 // Unattributed System32 PE write (PID <= 4) during redist races - never kill-grade.
                 if (detection.ProcessId <= 4 &&
-                    (r.IndexOf("System Directory") >= 0 ||
-                     r.IndexOf("Unauthorized Write") >= 0))
+                    (r.IndexOf("System Directory", StringComparison.Ordinal) >= 0 ||
+                     r.IndexOf("Unauthorized Write", StringComparison.Ordinal) >= 0))
                     return true;
             }
 
             // Low-confidence System32 write signals are observe fuel only - not composite legs.
             if (detection.Confidence > 0 && detection.Confidence < 0.70 &&
-                (r.IndexOf("Unauthorized Write") >= 0 ||
-                 r.IndexOf("System Directory") >= 0))
+                (r.IndexOf("Unauthorized Write", StringComparison.Ordinal) >= 0 ||
+                 r.IndexOf("System Directory", StringComparison.Ordinal) >= 0))
                 return true;
 
             return false;
@@ -955,11 +955,11 @@ namespace Sentinel.Core
             if (detection == null) return false;
             var r = detection.RuleName ?? "";
             var e = detection.Evidence ?? "";
-            if (e.IndexOf("[COMPOSITE]") >= 0)
+            if (e.IndexOf("[COMPOSITE]", StringComparison.Ordinal) >= 0)
                 return true;
             foreach (var f in NukeCompositeFragments)
             {
-                if (r.IndexOf(f) >= 0)
+                if (r.IndexOf(f, StringComparison.Ordinal) >= 0)
                     return true;
             }
             return false;

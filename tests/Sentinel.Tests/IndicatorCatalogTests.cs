@@ -131,7 +131,9 @@ namespace Sentinel.Tests
             Assert.Throws<ArgumentException>(() => ConstantPowerShell.CreateStartInfo("Get-Item C:\\"));
             // Two-string call (as IsolationResponseEngine makes): data must NOT bind as the command.
             var psi = ConstantPowerShell.CreateStartInfo("Stop-VM -Name $env:SENTINEL_ARG_0", "evil'; calc; '");
-            Assert.Equal("powershell.exe", psi.FileName);
+            // Full path, not a bare name that CreateProcess would search for.
+            Assert.True(Path.IsPathRooted(psi.FileName));
+            Assert.EndsWith(@"WindowsPowerShell\v1.0\powershell.exe", psi.FileName, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Stop-VM -Name $env:SENTINEL_ARG_0", psi.Arguments);
             Assert.DoesNotContain("EncodedCommand", psi.Arguments);
             Assert.DoesNotContain("calc", psi.Arguments);

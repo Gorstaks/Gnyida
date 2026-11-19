@@ -634,6 +634,8 @@ namespace Sentinel.Service
                             ("ConsultantSignalIngestor",     s => s.GetRequiredService<ConsultantSignalIngestor>()),
                             ("GhostProcessMonitor",          s => s.GetRequiredService<GhostProcessMonitor>()),
                             ("EphemeralProcessMonitor",      s => s.GetRequiredService<EphemeralProcessMonitor>()),
+                            ("LingeringProcessMonitor",      s => s.GetRequiredService<LingeringProcessMonitor>()),
+                            ("ImageIntegrityMonitor",        s => s.GetRequiredService<ImageIntegrityMonitor>()),
                             ("ModuleValidationMonitor",      s => s.GetRequiredService<ModuleValidationMonitor>()),
                             ("RuntimeModuleIntegrityMonitor",s => s.GetRequiredService<RuntimeModuleIntegrityMonitor>()),
                             ("DllEntropyAnalyzer",           s => s.GetRequiredService<DllEntropyAnalyzer>()),
@@ -691,6 +693,8 @@ namespace Sentinel.Service
                             sp.GetService<PhantomDeviceMonitor>(),
                             sp.GetService<ContextBus>()));
                     services.AddSingleton<EphemeralProcessMonitor>();
+                    services.AddSingleton<LingeringProcessMonitor>();
+                    services.AddSingleton<ImageIntegrityMonitor>();
                     services.AddSingleton<ModuleValidationMonitor>();
                     services.AddSingleton<RuntimeModuleIntegrityMonitor>();
                     services.AddSingleton<DllEntropyAnalyzer>();

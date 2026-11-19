@@ -53,7 +53,7 @@ namespace Sentinel.Core
         {
             script = MaskNonCode(script);
             // Require a socket constructor, stream methods and command invocation in code.
-            const System.Text.RegularExpressions.RegexOptions flags = System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+            const System.Text.RegularExpressions.RegexOptions flags = System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant |
                 System.Text.RegularExpressions.RegexOptions.CultureInvariant;
             return System.Text.RegularExpressions.Regex.IsMatch(script,
                     @"(?:\bNew-Object\s+(?:-TypeName\s+)?(?:System\.)?Net\.Sockets\.TCPClient\b|\[(?:System\.)?Net\.Sockets\.TCPClient\]\s*::\s*new\s*\()", flags) &&

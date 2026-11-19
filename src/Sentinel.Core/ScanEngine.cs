@@ -787,57 +787,41 @@ namespace Sentinel.Core
         {
             try
             {
-                // Use netstat-equivalent to find suspicious listeners
-                var psi = new ProcessStartInfo
+                // Native TCP table (IPv4 and IPv6), not netstat text: netstat localizes LISTENING and ESTABLISHED.
+                int scanned = 0;
+                var reported = new HashSet<(int Pid, bool Listening)>();
+                bool read = NativeConnectionTable.Enumerate(includeUdp: false, row =>
                 {
-                    FileName = "netstat.exe",
-                    Arguments = "-ano -p TCP",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    CreateNoWindow = true,
-                };
-
-                using var proc = Process.Start(psi);
-                if (proc == null) return;
-
-                var output = proc.StandardOutput.ReadToEnd();
-                proc.WaitForExit(5000);
-
-                foreach (var line in output.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (ct.IsCancellationRequested) return;
-                    if (!line.Contains("LISTENING") && !line.Contains("ESTABLISHED")) continue;
-
-                    var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length < 5) continue;
-
-                    if (int.TryParse(parts[parts.Length - 1], out int pid) && pid > 0)
+                    if (ct.IsCancellationRequested) return false;
+                    scanned++;
+                    if (!row.IsListening && !row.IsEstablished) return true;
+                    int pid = row.Pid;
+                    if (pid <= 0 || !reported.Add((pid, row.IsListening))) return true; // one finding per process and kind
+                    try
                     {
-                        try
+                        using var p = Process.GetProcessById(pid);
+                        string? imagePath = null;
+                        try { imagePath = p.MainModule?.FileName; } catch { }
+                        if (!string.IsNullOrEmpty(imagePath) && IsStagingPath(imagePath!))
                         {
-                            var p = Process.GetProcessById(pid);
-                            string? imagePath = null;
-                            try { imagePath = p.MainModule?.FileName; } catch { }
-
-                            if (!string.IsNullOrEmpty(imagePath) && IsStagingPath(imagePath!))
+                            bool isListening = row.IsListening;
+                            result.AddFinding(new ScanFinding
                             {
-                                bool isListening = line.Contains("LISTENING");
-                                result.AddFinding(new ScanFinding
-                                {
-                                    Category = ScanCategory.Network,
-                                    Severity = isListening ? ScanSeverity.High : ScanSeverity.Medium,
-                                    Title = isListening ? "Listening port from staging path" : "Network connection from staging path",
-                                    Description = $"PID {pid} ({p.ProcessName}) has network activity from: {imagePath}",
-                                    Path = imagePath,
-                                    ProcessId = pid,
-                                    ProcessName = p.ProcessName,
-                                });
-                            }
+                                Category = ScanCategory.Network,
+                                Severity = isListening ? ScanSeverity.High : ScanSeverity.Medium,
+                                Title = isListening ? "Listening port from staging path" : "Network connection from staging path",
+                                Description = $"PID {pid} ({p.ProcessName}) has network activity from: {imagePath}",
+                                Path = imagePath,
+                                ProcessId = pid,
+                                ProcessName = p.ProcessName,
+                            });
                         }
-                        catch { }
                     }
-                }
-                result.Stats.NetworkConnectionsScanned = output.Split('\n').Length;
+                    catch { }
+                    return true;
+                });
+                if (!read) _logger.LogDebug("[ScanEngine] Connection table unavailable");
+                result.Stats.NetworkConnectionsScanned = scanned;
             }
             catch (Exception ex)
             {
@@ -856,7 +840,7 @@ namespace Sentinel.Core
                    lower.Contains(@"\tmp\") ||
                    lower.Contains(@"\appdata\local\temp\") ||
                    lower.Contains(@"\downloads\") ||
-                   lower.Contains(@"\desktop\") && lower.EndsWith(".exe") ||
+                   lower.Contains(@"\desktop\") && lower.EndsWith(".exe", StringComparison.Ordinal) ||
                    lower.Contains(@"\public\") ||
                    lower.Contains(@"\users\public\");
         }
@@ -964,7 +948,7 @@ namespace Sentinel.Core
             if (string.IsNullOrWhiteSpace(commandLine)) return "";
 
             var trimmed = commandLine.Trim();
-            if (trimmed.StartsWith("\""))
+            if (trimmed.StartsWith("\"", StringComparison.Ordinal))
             {
                 var end = trimmed.IndexOf('"', 1);
                 return end > 0 ? trimmed.Substring(1, end - 1) : "";

@@ -59,7 +59,9 @@ namespace Sentinel.Core
         internal static Verdict? Evaluate(string domain)
         {
             if (string.IsNullOrWhiteSpace(domain)) return null;
-            var host = domain.Trim().TrimEnd('.').ToLowerInvariant();
+            // Same mapping the client applies (fullwidth letters, ideographic dots, invisible characters), but the labels stay
+            // Unicode: the confusable check below needs the original characters, not their punycode.
+            var host = HostNormalizer.NormalizeText(domain).Trim().TrimEnd('.');
             var labels = host.Split('.');
             if (labels.Length < 2) return null;
             var baseDomain = BaseDomain(labels);

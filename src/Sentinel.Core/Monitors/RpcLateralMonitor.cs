@@ -146,7 +146,7 @@ namespace Sentinel.Core
                         foreach (var (pattern, desc) in LateralCommandPatterns)
                         {
                             if (System.Text.RegularExpressions.Regex.IsMatch(
-                                cmdLine, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                                cmdLine, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant))
                             {
                                 matchedPattern = desc;
                                 break;
@@ -282,7 +282,7 @@ namespace Sentinel.Core
 
         private static bool IsLocalAddress(string ip)
         {
-            return ip == "127.0.0.1" || ip == "0.0.0.0" || ip.StartsWith("127.");
+            return ip == "127.0.0.1" || ip == "0.0.0.0" || ip.StartsWith("127.", StringComparison.Ordinal);
         }
 
         private static string GetPortDescription(int port) => port switch

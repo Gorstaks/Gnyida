@@ -111,7 +111,7 @@ namespace Sentinel.Tests.Monitors
         {
             if (string.IsNullOrEmpty(cmdLine)) return 0;
             const string flag = "--remote-debugging-port=";
-            var idx = cmdLine.IndexOf(flag);
+            var idx = cmdLine.IndexOf(flag, StringComparison.Ordinal);
             if (idx < 0) return 0;
             var start = idx + flag.Length;
             var end = start;

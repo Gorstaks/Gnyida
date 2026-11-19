@@ -216,7 +216,7 @@ namespace Sentinel.Core
                 {
                     var name = Path.GetFileNameWithoutExtension(file);
                     // Format: q_{sha256hash}_{originalname}
-                    if (name.StartsWith("q_") && name.Length > 66)
+                    if (name.StartsWith("q_", StringComparison.Ordinal) && name.Length > 66)
                     {
                         var hash = name.Substring(2, 64); // SHA256 = 64 hex chars
                         var originalName = name.Length > 67 ? name.Substring(67) : "unknown";

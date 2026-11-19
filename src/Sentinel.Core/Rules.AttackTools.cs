@@ -23,7 +23,7 @@ namespace Sentinel.Core
         private static bool HasWordBoundaryMatch(string text, string pattern)
         {
             int idx = -1;
-            while ((idx = text.IndexOf(pattern, idx + 1)) >= 0)
+            while ((idx = text.IndexOf(pattern, idx + 1, StringComparison.Ordinal)) >= 0)
             {
                 bool leftBound = idx == 0 || !char.IsLetterOrDigit(text[idx - 1]);
                 int endIdx = idx + pattern.Length;
@@ -71,7 +71,7 @@ namespace Sentinel.Core
                     {
                         // For short APT tool names, require word-boundary or filename-exact match
                         // to avoid false positives from substring matches
-                        if (category.StartsWith("APTTool:"))
+                        if (category.StartsWith("APTTool:", StringComparison.Ordinal))
                         {
                             var fileName = Path.GetFileNameWithoutExtension(pt.ImagePath).ToLowerInvariant();
                             bool isExactFilename = fileName.Equals(pattern);

@@ -62,11 +62,11 @@ namespace Sentinel.Core
         // Regex to find application path in WFP filter XML output
         private static readonly Regex AppIdRegex = new(
             @"<appId>(.*?)</appId>",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         private static readonly Regex FilterActionRegex = new(
             @"<action[^>]*>\s*<type>(FWP_ACTION_BLOCK|BLOCK)</type>",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         public WfpIntegrityMonitor(DetectionEngine detectionEngine, ILogger<WfpIntegrityMonitor> logger)
         {
@@ -107,7 +107,7 @@ namespace Sentinel.Core
                 // Run netsh wfp show filters to export all active WFP filters
                 var psi = new ProcessStartInfo
                 {
-                    FileName = "netsh",
+                    FileName = SystemTools.System32("netsh.exe"),
                     Arguments = $"wfp show filters file=\"{tempFile}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,

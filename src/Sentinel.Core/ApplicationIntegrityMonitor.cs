@@ -757,7 +757,7 @@ namespace Sentinel.Core
 #pragma warning restore SYSLIB0057
                 using var cert2 = new X509Certificate2(cert);
                 var subject = cert2.Subject;
-                var cnStart = subject.IndexOf("CN=");
+                var cnStart = subject.IndexOf("CN=", StringComparison.Ordinal);
                 if (cnStart >= 0)
                 {
                     cnStart += 3;
@@ -981,47 +981,17 @@ namespace Sentinel.Core
             var results = new List<(int pid, string protocol, string localAddr, int localPort, string remoteAddr, int remotePort, string state)>();
             try
             {
-                using var searcher = new System.Management.ManagementObjectSearcher(
-                    "SELECT * FROM MSFT_NetTCPConnection");
-
-                // Fallback to netstat parsing if WMI class not available
-                var psi = new ProcessStartInfo("netstat", "-ano")
+                // Native TCP and UDP tables. This used to build an unused WMI query and then fall back to parsing
+                // netstat text, whose state words are localized.
+                NativeConnectionTable.Enumerate(includeUdp: true, row =>
                 {
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                using var proc = Process.Start(psi);
-                if (proc == null) return results;
-
-                var output = proc.StandardOutput.ReadToEnd();
-                proc.WaitForExit(5000);
-
-                foreach (var line in output.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
-                {
-                    var parts = line.Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length < 5) continue;
-                    if (parts[0] != "TCP" && parts[0] != "UDP") continue;
-
-                    var protocol = parts[0];
-                    var localParts = parts[1].LastIndexOf(':');
-                    var remoteParts = parts[2].LastIndexOf(':');
-                    if (localParts < 0 || remoteParts < 0) continue;
-
-                    var localAddr = parts[1][..localParts];
-                    int.TryParse(parts[1][(localParts + 1)..], out int localPort);
-                    var remoteAddr = parts[2][..remoteParts];
-                    int.TryParse(parts[2][(remoteParts + 1)..], out int remotePort);
-                    var state = parts.Length > 3 && parts[0] == "TCP" ? parts[3] : "N/A";
-                    int.TryParse(parts[^1], out int pid);
-
-                    results.Add((pid, protocol, localAddr, localPort, remoteAddr, remotePort, state));
-                }
+                    results.Add((row.Pid, row.Protocol, row.LocalAddress, row.LocalPort, row.RemoteAddress, row.RemotePort, row.State));
+                    return true;
+                });
             }
             catch { }
             return results;
         }
-
         private static void SaveImpostorCertificate(string reportDir, string filePath)
         {
             try

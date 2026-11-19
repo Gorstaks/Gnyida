@@ -237,7 +237,7 @@ namespace Sentinel.Core
                     try
                     {
                         string? name = rule.Name as string;
-                        if (name != null && name.StartsWith(RuleNamePrefix))
+                        if (name != null && name.StartsWith(RuleNamePrefix, StringComparison.Ordinal))
                             toRemove.Add(name);
                     }
                     catch { /* skip malformed rule */ }
@@ -258,7 +258,7 @@ namespace Sentinel.Core
                 // Fallback: netsh (some hosts have broken firewall COM)
                 try
                 {
-                    var psi = new System.Diagnostics.ProcessStartInfo("netsh.exe",
+                    var psi = new System.Diagnostics.ProcessStartInfo(SystemTools.System32("netsh.exe"),
                         "advfirewall firewall show rule name=all")
                     {
                         CreateNoWindow = true,
@@ -267,8 +267,7 @@ namespace Sentinel.Core
                     };
                     using var proc = System.Diagnostics.Process.Start(psi);
                     if (proc == null) return removed;
-                    var output = proc.StandardOutput.ReadToEnd();
-                    proc.WaitForExit(15000);
+                    var output = BoundedProcess.ReadOutput(proc, 15000);
 
                     foreach (var line in output.Split('\n'))
                     {
@@ -278,10 +277,10 @@ namespace Sentinel.Core
                         var idx = line.IndexOf(':');
                         if (idx < 0) continue;
                         var name = line[(idx + 1)..].Trim();
-                        if (!name.StartsWith(RuleNamePrefix))
+                        if (!name.StartsWith(RuleNamePrefix, StringComparison.Ordinal))
                             continue;
 
-                        var del = new System.Diagnostics.ProcessStartInfo("netsh.exe",
+                        var del = new System.Diagnostics.ProcessStartInfo(SystemTools.System32("netsh.exe"),
                             $"advfirewall firewall delete rule name=\"{name}\"")
                         {
                             CreateNoWindow = true,
@@ -444,13 +443,13 @@ namespace Sentinel.Core
                     var remoteIp = conn.RemoteEndPoint.Address.ToString();
 
                     // Skip private/loopback
-                    if (remoteIp.StartsWith("127.") || remoteIp.StartsWith("10.") ||
-                        remoteIp.StartsWith("192.168.") || remoteIp.StartsWith("169.254.") ||
-                        remoteIp == "::1" || remoteIp.StartsWith("fe80") ||
-                        remoteIp.StartsWith("172.16.") || remoteIp.StartsWith("172.17.") ||
-                        remoteIp.StartsWith("172.18.") || remoteIp.StartsWith("172.19.") ||
-                        remoteIp.StartsWith("172.2") || remoteIp.StartsWith("172.30.") ||
-                        remoteIp.StartsWith("172.31."))
+                    if (remoteIp.StartsWith("127.", StringComparison.Ordinal) || remoteIp.StartsWith("10.", StringComparison.Ordinal) ||
+                        remoteIp.StartsWith("192.168.", StringComparison.Ordinal) || remoteIp.StartsWith("169.254.", StringComparison.Ordinal) ||
+                        remoteIp == "::1" || remoteIp.StartsWith("fe80", StringComparison.Ordinal) ||
+                        remoteIp.StartsWith("172.16.", StringComparison.Ordinal) || remoteIp.StartsWith("172.17.", StringComparison.Ordinal) ||
+                        remoteIp.StartsWith("172.18.", StringComparison.Ordinal) || remoteIp.StartsWith("172.19.", StringComparison.Ordinal) ||
+                        remoteIp.StartsWith("172.2", StringComparison.Ordinal) || remoteIp.StartsWith("172.30.", StringComparison.Ordinal) ||
+                        remoteIp.StartsWith("172.31.", StringComparison.Ordinal))
                         continue;
 
                     // PID unknown via this API

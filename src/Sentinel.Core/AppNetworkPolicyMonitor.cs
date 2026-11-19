@@ -381,8 +381,8 @@ namespace Sentinel.Core
                 if (isSystemEntry)
                 {
                     var winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows).ToLowerInvariant();
-                    var winDirTrailing = winDir.EndsWith("\\") ? winDir : winDir + '\\';
-                    verified = pathLower.StartsWith(winDirTrailing);
+                    var winDirTrailing = winDir.EndsWith("\\", StringComparison.Ordinal) ? winDir : winDir + '\\';
+                    verified = pathLower.StartsWith(winDirTrailing, StringComparison.OrdinalIgnoreCase);
                 }
                 else
                 {

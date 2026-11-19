@@ -108,17 +108,17 @@ namespace Sentinel.Core
         {
             if (!IsValidPathHint(imagePath) || !IsValidPathHint(processName)) return false;
             var n = (processName ?? "").ToLowerInvariant().Replace(".exe", "");
-            if (n.StartsWith("innosetup") || n.Contains("innosetup")) return true;
-            if (n.StartsWith("is-") && n.Length <= 16) return true;
+            if (n.StartsWith("innosetup", StringComparison.Ordinal) || n.Contains("innosetup")) return true;
+            if (n.StartsWith("is-", StringComparison.Ordinal) && n.Length <= 16) return true;
             if (n.Contains("nsis") || n.Contains("_setup.tmp")) return true;
-            if (n.EndsWith(".tmp") && n.Contains("setup")) return true;
+            if (n.EndsWith(".tmp", StringComparison.Ordinal) && n.Contains("setup")) return true;
             if (n is "iside" or "issetup" or "setup.tmp") return true;
 
             if (!string.IsNullOrEmpty(imagePath))
             {
                 var file = Path.GetFileName(imagePath).ToLowerInvariant();
-                if (file.StartsWith("innosetup") || file.StartsWith("is-")) return true;
-                if (file.Contains("innosetup") && file.EndsWith(".tmp")) return true;
+                if (file.StartsWith("innosetup", StringComparison.Ordinal) || file.StartsWith("is-", StringComparison.Ordinal)) return true;
+                if (file.Contains("innosetup") && file.EndsWith(".tmp", StringComparison.Ordinal)) return true;
 
                 var lower = imagePath!.ToLowerInvariant();
                 if (lower.Contains(@"\temp\is-") || lower.Contains(@"\temp\nst") ||
@@ -190,9 +190,9 @@ namespace Sentinel.Core
 
             // Prefetch often uppercases and truncates
             var u = n.ToUpperInvariant();
-            if (u.StartsWith("GIT-") || u.StartsWith("INNOSETUP") || u.StartsWith("DOTNET") ||
-                u.StartsWith("PYTHON-") || u.StartsWith("NODE-V") || u.Contains("SETUP") ||
-                u.Contains("INSTALL") || u.StartsWith("ISIDE") || u.StartsWith("FINALIZER") ||
+            if (u.StartsWith("GIT-", StringComparison.Ordinal) || u.StartsWith("INNOSETUP", StringComparison.Ordinal) || u.StartsWith("DOTNET", StringComparison.Ordinal) ||
+                u.StartsWith("PYTHON-", StringComparison.Ordinal) || u.StartsWith("NODE-V", StringComparison.Ordinal) || u.Contains("SETUP") ||
+                u.Contains("INSTALL") || u.StartsWith("ISIDE", StringComparison.Ordinal) || u.StartsWith("FINALIZER", StringComparison.Ordinal) ||
                 u.Contains("CHROME") || u.Contains("VSCODE") || u.Contains("VCREDIST") ||
                 u.Contains("DXSETUP") || u.Contains("DIRECTX") || u.Contains("XNAFX") ||
                 u.Contains("SENTINELSETUP") || u.Contains("GOOGLEUPDATE"))
@@ -251,7 +251,7 @@ namespace Sentinel.Core
             {
                 foreach (var h in redistDllHints)
                 {
-                    if (leaf.IndexOf(h) >= 0)
+                    if (leaf.IndexOf(h, StringComparison.Ordinal) >= 0)
                         return true;
                 }
             }
@@ -342,7 +342,7 @@ namespace Sentinel.Core
         {
             if (string.IsNullOrWhiteSpace(name)) return "";
             var n = name!.Trim();
-            if (n.EndsWith(".exe"))
+            if (n.EndsWith(".exe", StringComparison.Ordinal))
                 n = n[..^4];
             return n;
         }

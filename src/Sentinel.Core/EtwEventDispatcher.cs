@@ -150,10 +150,14 @@ namespace Sentinel.Core
 
         private void HandleImageLoad(EtwRawEvent evt)
         {
-            if (_dllUnloadEngine == null) return;
             int pid = evt.ProcessId;
             if (pid <= 4) return;
-
+            // A late module load is how a sacrificial DLL is brought in before its code is overwritten. The
+            // Threat-Intelligence provider would report the write, but it is denied on an install without a protected
+            // anti-malware process, so this provider (which is available) nominates the process for a module check.
+            // One dictionary write: nothing is inspected on the ETW callback thread.
+            if (pid != SelfPid) InjectionSuspectBoard.MarkWeak(pid, InjectionSuspectBoard.MarkKind.ImageLoad);
+            if (_dllUnloadEngine == null) return;
             if (evt.UserData == IntPtr.Zero || evt.UserDataLength < IntPtr.Size + 4) return;
             ulong imageBase = (ulong)Marshal.ReadIntPtr(evt.UserData, 0);
             uint imageSize = unchecked((uint)Marshal.ReadInt32(evt.UserData, IntPtr.Size));
@@ -220,7 +224,7 @@ namespace Sentinel.Core
             _detectionEngine.SubmitTelemetry(context);
 
             if (!string.IsNullOrEmpty(imagePath) &&
-                !imagePath.StartsWith(@"\\") &&
+                !imagePath.StartsWith(@"\\", StringComparison.Ordinal) &&
                 imagePath.Length > 3 &&
                 !File.Exists(imagePath))
             {

@@ -29,7 +29,7 @@ namespace Sentinel.Core.Ml
 
             // Normalize: allow bare hosts
             string forParse = raw;
-            if (!raw.Contains("://") && !raw.StartsWith("//"))
+            if (!raw.Contains("://") && !raw.StartsWith("//", StringComparison.Ordinal))
                 forParse = "http://" + raw;
 
             string host = "";
@@ -138,7 +138,7 @@ namespace Sentinel.Core.Ml
             if (string.IsNullOrEmpty(host)) return false;
             if (IPAddress.TryParse(host, out _)) return true;
             // Strip brackets for IPv6 URLs
-            if (host.StartsWith("[") && host.EndsWith("]"))
+            if (host.StartsWith("[", StringComparison.Ordinal) && host.EndsWith("]", StringComparison.Ordinal))
                 return IPAddress.TryParse(host.Substring(1, host.Length - 2), out _);
             return false;
         }

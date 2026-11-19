@@ -196,7 +196,7 @@ namespace Sentinel.Core
 
         private void OnLnkRenamed(object sender, RenamedEventArgs e)
         {
-            if (e.FullPath.EndsWith(".lnk"))
+            if (e.FullPath.EndsWith(".lnk", StringComparison.Ordinal))
             {
                 Thread.Sleep(200);
                 AnalyzeShortcut(e.FullPath);
@@ -347,17 +347,17 @@ namespace Sentinel.Core
             arguments ??= string.Empty;
             attackVector = string.Empty;
 
-            if (targetPath.StartsWith(@"\\") ||
-                targetPath.StartsWith("//"))
+            if (targetPath.StartsWith(@"\\", StringComparison.Ordinal) ||
+                targetPath.StartsWith("//", StringComparison.Ordinal))
             {
                 attackVector = "UNC_Path";
                 return true;
             }
 
-            if (targetPath.StartsWith("http://") ||
-                targetPath.StartsWith("https://") ||
-                targetPath.StartsWith("search-ms:") ||
-                targetPath.StartsWith("ms-msdt:"))
+            if (targetPath.StartsWith("http://", StringComparison.Ordinal) ||
+                targetPath.StartsWith("https://", StringComparison.Ordinal) ||
+                targetPath.StartsWith("search-ms:", StringComparison.Ordinal) ||
+                targetPath.StartsWith("ms-msdt:", StringComparison.Ordinal))
             {
                 attackVector = "ProtocolHandler";
                 return true;
@@ -424,7 +424,7 @@ namespace Sentinel.Core
                 if (bytes.Length > 100)
                 {
                     var content = System.Text.Encoding.Unicode.GetString(bytes);
-                    var uncIdx = content.IndexOf(@"\\");
+                    var uncIdx = content.IndexOf(@"\\", StringComparison.Ordinal);
                     if (uncIdx >= 0)
                     {
                         var end = content.IndexOfAny(new[] { '\0', ' ', '"' }, uncIdx + 2);

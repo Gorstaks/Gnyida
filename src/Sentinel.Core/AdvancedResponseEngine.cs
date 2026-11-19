@@ -539,7 +539,7 @@ namespace Sentinel.Core
                 if (ar)
                 {
                     shouldQuarantineAndKill = true;
-                    if (!reason.StartsWith("ChainConfirmed"))
+                    if (!reason.StartsWith("ChainConfirmed", StringComparison.Ordinal))
                         reason = $"QuarantineAndKill (AuthorizedResponse={effectiveResponse})";
                 }
                 else
@@ -622,7 +622,7 @@ namespace Sentinel.Core
                 if (ar)
                 {
                     shouldKill = true;
-                    if (!reason.StartsWith("MitmDefense") && !reason.StartsWith("ChainConfirmed"))
+                    if (!reason.StartsWith("MitmDefense", StringComparison.Ordinal) && !reason.StartsWith("ChainConfirmed", StringComparison.Ordinal))
                         reason = $"Kill requested (AuthorizedResponse={effectiveResponse})";
                 }
                 else

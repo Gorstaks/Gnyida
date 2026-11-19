@@ -336,7 +336,7 @@ namespace Sentinel.Core
                 var mismatches = new List<string>();
                 foreach (var line in lines)
                 {
-                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal))
                         continue;
                     var parts = line.Split(new[] { "  " }, 2, StringSplitOptions.None);
                     if (parts.Length != 2)
@@ -426,7 +426,7 @@ namespace Sentinel.Core
                 // v1.8.0: Token Theft packs use a longer cooldown (1h) even if config is 300s -
                 // prevents hundreds of near-identical packs from the same PID.
                 var seconds = Math.Max(30, _config.CooldownSeconds);
-                if (key.StartsWith("Token Theft"))
+                if (key.StartsWith("Token Theft", StringComparison.Ordinal))
                     seconds = Math.Max(seconds, 3600);
 
                 if (DateTimeOffset.UtcNow - last < TimeSpan.FromSeconds(seconds))
@@ -889,7 +889,7 @@ namespace Sentinel.Core
             var files = Directory.GetFiles(reportDir)
                 .Select(f => new FileInfo(f))
                 .Where(f => !IntegritySkipFileNames.Contains(f.Name))
-                .Where(f => !f.Name.EndsWith(".zip"))
+                .Where(f => !f.Name.EndsWith(".zip", StringComparison.Ordinal))
                 .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
@@ -1052,8 +1052,8 @@ namespace Sentinel.Core
 
                 if (k.Contains("url") || k.Contains("uri"))
                 {
-                    if (value.StartsWith("http://") ||
-                        value.StartsWith("https://"))
+                    if (value.StartsWith("http://", StringComparison.Ordinal) ||
+                        value.StartsWith("https://", StringComparison.Ordinal))
                         urls.Add(value.Trim());
                 }
 
@@ -1109,60 +1109,34 @@ namespace Sentinel.Core
             var lines = new List<string>();
             try
             {
-                var psi = new System.Diagnostics.ProcessStartInfo
+                var own = new List<string>();
+                var sample = new List<string>();
+                bool read = NativeConnectionTable.Enumerate(includeUdp: true, row =>
                 {
-                    FileName = "netstat.exe",
-                    Arguments = "-ano",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                using var p = System.Diagnostics.Process.Start(psi);
-                if (p == null)
+                    if (pid > 4 && row.Pid == pid && own.Count < 200) own.Add("  " + row.ToNetstatLine());
+                    if (row.IsEstablished && sample.Count < 20) sample.Add("  " + row.ToNetstatLine());
+                    return true;
+                });
+                if (!read)
                 {
-                    lines.Add("  (netstat unavailable)");
+                    lines.Add("  (connection table unavailable)");
                     return lines;
                 }
-
-                var output = p.StandardOutput.ReadToEnd();
-                p.WaitForExit(5000);
-
-                var pidToken = pid > 4 ? pid.ToString() : null;
-                var all = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                var matched = 0;
-                foreach (var line in all)
-                {
-                    if (pidToken != null && line.TrimEnd().EndsWith(pidToken))
-                    {
-                        lines.Add("  " + line.Trim());
-                        matched++;
-                    }
-                }
-
-                if (matched == 0)
+                lines.AddRange(own);
+                if (own.Count == 0)
                 {
                     lines.Add(pid > 4
-                        ? $"  No netstat rows for PID {pid} at report time (process may have exited)."
+                        ? $"  No connection rows for PID {pid} at report time (process may have exited)."
                         : "  No offender PID - full snapshot omitted (see process metadata).");
                 }
-
                 lines.Add("");
                 lines.Add("  Sample ESTABLISHED foreign endpoints (first 20):");
-                var sample = 0;
-                foreach (var line in all)
-                {
-                    if (line.Contains("ESTABLISHED"))
-                    {
-                        lines.Add("  " + line.Trim());
-                        if (++sample >= 20) break;
-                    }
-                }
+                lines.AddRange(sample);
             }
             catch (Exception ex)
             {
                 lines.Add($"  Network capture failed: {ex.Message}");
             }
-
             return lines;
         }
 

@@ -28,7 +28,7 @@ namespace Sentinel.Core
                 // Format: one SHA256 hash per line
                 foreach (var line in data!.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
                 {
-                    if (line.Length == 64 && !line.StartsWith("#")) // SHA256 hex length, skip comments
+                    if (line.Length == 64 && !line.StartsWith("#", StringComparison.Ordinal)) // SHA256 hex length, skip comments
                         _hashIoCs.Add(line);
                 }
             }

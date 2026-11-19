@@ -94,9 +94,9 @@ namespace Sentinel.Core
             // Absolute Windows paths
             if (imagePath.Contains(@"\Windows\")) return true;
             // \SystemRoot\ prefix (kernel notation for %SystemRoot%)
-            if (normalized.StartsWith("SystemRoot\\")) return true;
+            if (normalized.StartsWith("SystemRoot\\", StringComparison.Ordinal)) return true;
             // Relative system32 paths like "system32\drivers\pacer.sys" or "System32\DRIVERS\tdx.sys"
-            if (normalized.StartsWith("system32\\")) return true;
+            if (normalized.StartsWith("system32\\", StringComparison.Ordinal)) return true;
             // DriverStore path (inbox/WHQL drivers)
             if (imagePath.Contains(@"\DriverStore\")) return true;
             // Program Files (legitimate third-party drivers like GPU, antivirus)
@@ -507,7 +507,7 @@ namespace Sentinel.Core
             {
                 var trimmed = part.Trim();
                 if ((trimmed.Length > 3 && trimmed[1] == ':' && trimmed[2] == '\\') ||
-                    trimmed.StartsWith(@"\\"))
+                    trimmed.StartsWith(@"\\", StringComparison.Ordinal))
                 {
                     if (File.Exists(trimmed))
                         paths.Add(trimmed);

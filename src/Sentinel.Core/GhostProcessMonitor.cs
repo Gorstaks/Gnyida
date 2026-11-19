@@ -481,7 +481,7 @@ namespace Sentinel.Core
                     var remoteIp = new IPAddress(BitConverter.GetBytes(row.remoteAddr)).ToString();
 
                     // Skip loopback and link-local
-                    if (remoteIp.StartsWith("127.") || remoteIp.StartsWith("0.") || remoteIp == "0.0.0.0")
+                    if (remoteIp.StartsWith("127.", StringComparison.Ordinal) || remoteIp.StartsWith("0.", StringComparison.Ordinal) || remoteIp == "0.0.0.0")
                         continue;
 
                     var remotePort = (int)((row.remotePort >> 8) | ((row.remotePort & 0xFF) << 8));
@@ -546,9 +546,9 @@ namespace Sentinel.Core
 
         private static bool IsPrivateIp(string ip)
         {
-            if (ip.StartsWith("10.")) return true;
-            if (ip.StartsWith("192.168.")) return true;
-            if (ip.StartsWith("172."))
+            if (ip.StartsWith("10.", StringComparison.Ordinal)) return true;
+            if (ip.StartsWith("192.168.", StringComparison.Ordinal)) return true;
+            if (ip.StartsWith("172.", StringComparison.Ordinal))
             {
                 var parts = ip.Split('.');
                 if (parts.Length >= 2 && int.TryParse(parts[1], out int second))

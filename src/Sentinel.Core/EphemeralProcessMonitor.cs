@@ -181,8 +181,8 @@ namespace Sentinel.Core
                 if (exePath2 != null)
                 {
                     var winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows).ToLowerInvariant();
-                    var winDirTrailing = winDir.EndsWith("\\") ? winDir : winDir + '\\';
-                    if (exePath2.ToLowerInvariant().StartsWith(winDirTrailing))
+                    var winDirTrailing = winDir.EndsWith("\\", StringComparison.Ordinal) ? winDir : winDir + '\\';
+                    if (exePath2.StartsWith(winDirTrailing, StringComparison.OrdinalIgnoreCase))
                         return; // Legitimate system process
                 }
                 else
@@ -393,8 +393,8 @@ namespace Sentinel.Core
                 : name;
             n = n.ToLowerInvariant();
             if (n.Equals("fm")) return true;
-            if (n.StartsWith("fm20")) return true;
-            if (n.StartsWith("footballmanager")) return true;
+            if (n.StartsWith("fm20", StringComparison.Ordinal)) return true;
+            if (n.StartsWith("footballmanager", StringComparison.Ordinal)) return true;
             if (n.Equals("steam")) return true;
             if (n.Equals("gameoverlayui")) return true;
             // Broader check: any known game/anti-cheat process name (uses path-based
@@ -498,7 +498,7 @@ namespace Sentinel.Core
 
         private static string ExtractFieldFromEvent(string message, string fieldName)
         {
-            var idx = message.IndexOf(fieldName);
+            var idx = message.IndexOf(fieldName, StringComparison.Ordinal);
             if (idx < 0) return "";
             var start = idx + fieldName.Length;
             var end = message.IndexOf('\n', start);

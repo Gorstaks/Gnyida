@@ -177,7 +177,7 @@ namespace Sentinel.Core
                                 {
                                     var psi = new ProcessStartInfo
                                     {
-                                        FileName = "mountvol.exe",
+                                        FileName = SystemTools.System32("mountvol.exe"),
                                         Arguments = $"{letter}: /D",
                                         UseShellExecute = false,
                                         CreateNoWindow = true,
@@ -388,7 +388,7 @@ namespace Sentinel.Core
                     var target = new string(buffer, 0, (int)result).TrimEnd('\0');
 
                     // SUBST drives have targets like "\??\C:\path" (the \??\ prefix indicates substitution)
-                    if (target.StartsWith(@"\??\"))
+                    if (target.StartsWith(@"\??\", StringComparison.Ordinal))
                     {
                         // Remove the SUBST mapping (works if SUBST is in our session / global)
                         bool removed = DefineDosDevice(
@@ -542,7 +542,7 @@ namespace Sentinel.Core
                             // Remove the drive letter
                             var psi = new ProcessStartInfo
                             {
-                                FileName = "mountvol.exe",
+                                FileName = SystemTools.System32("mountvol.exe"),
                                 Arguments = $"{driveLetter}: /D",
                                 UseShellExecute = false,
                                 CreateNoWindow = true,
@@ -588,7 +588,7 @@ namespace Sentinel.Core
                 {
                     var psi = new ProcessStartInfo
                     {
-                        FileName = "mountvol.exe",
+                        FileName = SystemTools.System32("mountvol.exe"),
                         Arguments = $"{driveLetter}: /N",
                         UseShellExecute = false,
                         CreateNoWindow = true,
@@ -754,7 +754,7 @@ namespace Sentinel.Core
                         if (result > 0)
                         {
                             var target = new string(buffer, 0, (int)result).TrimEnd('\0');
-                            if (target.StartsWith(@"\??\"))
+                            if (target.StartsWith(@"\??\", StringComparison.Ordinal))
                             {
                                 isSubst = true;
                             }
@@ -873,12 +873,12 @@ namespace Sentinel.Core
                                 {
                                     // Parse drive letter from command like: subst S: C:\path
                                     var match = System.Text.RegularExpressions.Regex.Match(
-                                        value, @"subst\s+([A-Za-z]):?\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                        value, @"subst\s+([A-Za-z]):?\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
                                     if (match.Success)
                                     {
                                         var letter = match.Groups[1].Value.ToUpperInvariant() + ":";
                                         var targetMatch = System.Text.RegularExpressions.Regex.Match(
-                                            value, @"subst\s+[A-Za-z]:?\s+(.+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                            value, @"subst\s+[A-Za-z]:?\s+(.+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
                                         var target = targetMatch.Success ? targetMatch.Groups[1].Value.Trim().Trim('"') : "unknown";
                                         results.Add((letter, target));
                                     }
@@ -1138,7 +1138,7 @@ namespace Sentinel.Core
                 if (result > 0)
                 {
                     var target = new string(buffer, 0, (int)result).TrimEnd('\0');
-                    if (target.StartsWith(@"\??\"))
+                    if (target.StartsWith(@"\??\", StringComparison.Ordinal))
                         return "SUBST";
                 }
 
@@ -1279,7 +1279,7 @@ namespace Sentinel.Core
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = "mountvol.exe",
+                    FileName = SystemTools.System32("mountvol.exe"),
                     Arguments = $"{driveLetter}: /D",
                     UseShellExecute = false,
                     CreateNoWindow = true,

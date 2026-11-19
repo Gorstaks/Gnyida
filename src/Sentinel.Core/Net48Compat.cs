@@ -50,7 +50,7 @@ namespace System
         {
             if (string.IsNullOrEmpty(hex)) return Array.Empty<byte>();
             hex = hex.Trim();
-            if (hex.StartsWith("0x")) hex = hex.Substring(2);
+            if (hex.StartsWith("0x", StringComparison.Ordinal)) hex = hex.Substring(2);
             if (hex.Length % 2 != 0) throw new FormatException("Invalid hex length");
             var bytes = new byte[hex.Length / 2];
             for (int i = 0; i < bytes.Length; i++)
@@ -264,13 +264,23 @@ namespace System.Diagnostics
         public static Task WaitForExitAsync(this Process process, CancellationToken ct = default)
         {
             if (process.HasExited) return Task.CompletedTask;
-            var tcs = new TaskCompletionSource<object?>();
+            var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             void Handler(object? s, EventArgs e) => tcs.TrySetResult(null);
             process.EnableRaisingEvents = true;
             process.Exited += Handler;
-            if (process.HasExited) tcs.TrySetResult(null);
+            // A registration on a long-lived token (a service's stopping token, passed in a loop) stays in that
+            // token's callback list until it is disposed, and every call adds one. This used to ignore the returned
+            // registration, which is the leak class recorded in docs/MEMORY_LEAK_3.7.8.md. Dispose it, and the Exited
+            // handler, as soon as the wait is decided either way.
+            CancellationTokenRegistration registration = default;
             if (ct.CanBeCanceled)
-                ct.Register(() => tcs.TrySetCanceled(ct));
+                registration = ct.Register(() => tcs.TrySetCanceled(ct));
+            if (process.HasExited) tcs.TrySetResult(null);
+            tcs.Task.ContinueWith(_ =>
+            {
+                registration.Dispose();
+                try { process.Exited -= Handler; } catch (Exception) { /* disposed Process: nothing left to detach */ }
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             return tcs.Task;
         }
 
@@ -376,7 +386,7 @@ namespace System.IO
         {
             if (string.IsNullOrEmpty(path)) return false;
             if (path.Length >= 2 && path[1] == ':') return true; // C:\
-            if (path.StartsWith(@"\\")) return true; // UNC
+            if (path.StartsWith(@"\\", StringComparison.Ordinal)) return true; // UNC
             return Path.IsPathRooted(path) && path.Length > 1;
         }
     }

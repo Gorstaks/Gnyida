@@ -871,7 +871,7 @@ namespace Sentinel.Core
         {
             if (string.IsNullOrEmpty(distinguishedName)) return "";
             var cnPrefix = "CN=";
-            var idx = distinguishedName.IndexOf(cnPrefix);
+            var idx = distinguishedName.IndexOf(cnPrefix, StringComparison.Ordinal);
             if (idx < 0) return "";
             var start = idx + cnPrefix.Length;
             var end = distinguishedName.IndexOf(',', start);

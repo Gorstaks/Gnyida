@@ -535,13 +535,9 @@ namespace Sentinel.Core
         public static bool IsCovertMeshDomain(string? host)
         {
             if (string.IsNullOrWhiteSpace(host)) return false;
-            var h = host!.Trim().TrimEnd('.').ToLowerInvariant();
-            if (h.StartsWith("http://", StringComparison.Ordinal) ||
-                h.StartsWith("https://", StringComparison.Ordinal))
-            {
-                if (Uri.TryCreate(h, UriKind.Absolute, out var uri) && uri.Host.Length > 0)
-                    h = uri.Host;
-            }
+            // The host as the client reaches it: IDNA-mapped, no trailing dot, no invisible characters.
+            var h = HostNormalizer.Normalize(host);
+            if (h.Length == 0) return false;
 
             if (h == "tailcat.dev" || h.EndsWith(".tailcat.dev", StringComparison.Ordinal))
                 return true;
@@ -643,13 +639,7 @@ namespace Sentinel.Core
         public static string NormalizeHost(string? host)
         {
             if (string.IsNullOrWhiteSpace(host)) return "";
-            var h = host!.Trim().TrimEnd('.').ToLowerInvariant();
-            if (h.StartsWith("http://", StringComparison.Ordinal) ||
-                h.StartsWith("https://", StringComparison.Ordinal))
-            {
-                if (Uri.TryCreate(h, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.Host))
-                    h = uri.Host;
-            }
+            var h = HostNormalizer.Normalize(host);
             if (h.StartsWith("www.", StringComparison.Ordinal))
                 h = h.Substring(4);
             return h;
@@ -687,7 +677,8 @@ namespace Sentinel.Core
         public static bool ContainsWebhookUrl(string? text)
         {
             if (string.IsNullOrWhiteSpace(text)) return false;
-            var t = text!.ToLowerInvariant();
+            // Same mapping the client applies, so "webhook<U+3002>site" or "web<soft hyphen>hook.site" still matches.
+            var t = HostNormalizer.NormalizeText(text);
             foreach (var f in WebhookUrlFragments)
             {
                 if (t.IndexOf(f, StringComparison.Ordinal) >= 0)

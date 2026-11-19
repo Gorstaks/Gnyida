@@ -176,7 +176,7 @@ namespace Sentinel.Core
 
                     if (ParentPidSpoofDetector.IsStockWindowsConsoleHost(detection.ProcessName, detectionPath) ||
                         (!string.IsNullOrEmpty(detectionPath) && SecurityValidation.IsOsCriticalPath(detectionPath) &&
-                         detection.RuleName.StartsWith("PPID Spoofing")))
+                         detection.RuleName.StartsWith("PPID Spoofing", StringComparison.Ordinal)))
                     {
                         _logger.LogInformation(
                             "[ChainTracer] Skipping chain kill - detection is stock OS console/host PPID race (PID {Pid} {Name} path={Path})",
@@ -557,7 +557,7 @@ namespace Sentinel.Core
 
             bool isGenericSetup = stem.Equals("setup");
             bool nameMatches = BrowserHostNames.Contains(stem) ||
-                               stem.StartsWith("firefox setup") ||
+                               stem.StartsWith("firefox setup", StringComparison.Ordinal) ||
                                stem.Contains("chromesetup") ||
                                stem.Contains("chrome_installer") ||
                                stem.Contains("mini_installer");

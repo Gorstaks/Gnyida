@@ -158,7 +158,7 @@ namespace Sentinel.Core
                     try
                     {
                         string? name = rule.Name as string;
-                        if (name != null && name.StartsWith(CastBlockRulePrefix))
+                        if (name != null && name.StartsWith(CastBlockRulePrefix, StringComparison.Ordinal))
                             toRemove.Add(name);
                     }
                     catch { }
@@ -499,9 +499,9 @@ namespace Sentinel.Core
 
         private static bool IsPrivateIp(string ip)
         {
-            if (ip.StartsWith("10.")) return true;
-            if (ip.StartsWith("192.168.")) return true;
-            if (ip.StartsWith("172."))
+            if (ip.StartsWith("10.", StringComparison.Ordinal)) return true;
+            if (ip.StartsWith("192.168.", StringComparison.Ordinal)) return true;
+            if (ip.StartsWith("172.", StringComparison.Ordinal))
             {
                 var parts = ip.Split('.');
                 if (parts.Length >= 2 && int.TryParse(parts[1], out int second))

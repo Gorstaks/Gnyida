@@ -589,7 +589,7 @@ namespace Sentinel.Core
             if (n.Contains("memory compression")) return true;
             if (n.Equals("registry")) return true;
             if (n.Contains("secure system")) return true;
-            if (n.StartsWith("system ")) return true;
+            if (n.StartsWith("system ", StringComparison.Ordinal)) return true;
 
             return false;
         }
@@ -597,7 +597,7 @@ namespace Sentinel.Core
         private static string NormalizeProcessName(string name)
         {
             var n = name.Trim();
-            if (n.EndsWith(".exe"))
+            if (n.EndsWith(".exe", StringComparison.Ordinal))
                 n = n[..^4];
             return n;
         }

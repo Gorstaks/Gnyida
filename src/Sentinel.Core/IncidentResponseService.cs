@@ -160,11 +160,8 @@ namespace Sentinel.Core
             var result = new List<string>();
             try
             {
-                // Evidence collection only after a detection. Still refuse game/anti-cheat paths
-                // (PROCESS_VM_READ would kill the title during IR).
-                var imagePath = SecurityValidation.GetProcessImagePath(pid);
-                if (SecurityValidation.IsGameOrAntiCheatPath(imagePath))
-                    return result;
+                // Evidence collection only after a detection. Games are not exempt: a process that triggered a
+                // detection is exactly the one whose modules are wanted.
                 if (!NativeProcessMemory.CanInspect(pid))
                     return result;
 
@@ -183,22 +180,13 @@ namespace Sentinel.Core
             var result = new List<string>();
             try
             {
-                var psi = new ProcessStartInfo("netstat", "-anop tcp")
+                // Exact PID match on the native table. The netstat version matched any line that merely contained the
+                // PID's digits, so PID 443 collected every port-443 line.
+                NativeConnectionTable.Enumerate(includeUdp: false, row =>
                 {
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true
-                };
-                using var p = Process.Start(psi);
-                if (p == null) return result;
-                var output = p.StandardOutput.ReadToEnd();
-                p.WaitForExit(5000);
-
-                foreach (var line in output.Split('\n'))
-                {
-                    if (line.Contains(pid.ToString()))
-                        result.Add(line.Trim());
-                }
+                    if (row.Pid == pid) result.Add(row.ToNetstatLine());
+                    return result.Count < 500;
+                });
             }
             catch { }
             return result;

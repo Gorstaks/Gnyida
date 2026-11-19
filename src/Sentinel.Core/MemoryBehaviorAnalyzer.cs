@@ -55,8 +55,7 @@ namespace Sentinel.Core
                             if (proc.Id <= 4) continue;
                             var name = proc.ProcessName;
                             var path = SecurityValidation.GetProcessImagePath(proc.Id);
-                            if (SecurityValidation.IsGameOrAntiCheatProcess(proc.Id, path) ||
-                                !NativeProcessMemory.CanInspect(proc.Id, path))
+                            if (!NativeProcessMemory.CanInspect(proc.Id, path))
                                 continue;
                             _ = _dllUnloadEngine
                                 .CheckAndUnloadAsync(proc.Id, name)

@@ -30,6 +30,9 @@ DisableDirPage=yes
 CloseApplications=no
 RestartApplications=no
 
+[Languages]
+; Sentinel's own installer text lives in ..\localization\<language>\installer.isl, next to Inno Setup's standard messages.
+Name: "en"; MessagesFile: "compiler:Default.isl,..\localization\en\installer.isl"
 [Files]
 Source: "assets\Sentinel.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "assets\disclaimer.txt"; DestDir: "{app}"; DestName: "DISCLAIMER.txt"; Flags: ignoreversion
@@ -49,13 +52,13 @@ Type: files; Name: "{group}\GVPN.lnk"
 
 
 [Tasks]
-Name: "autorotate"; Description: "Enable SentinelAutoRotate for the account running this setup. Its password is set to blank at every boot and to a random value every 10 minutes while the account is signed in, so the password is unknown to everyone. Saved browser logins, Credential Manager entries and encrypted files can become unreadable, a locked session may only unlock after a restart, and services or tasks that use this account's password stop working. Leave unchecked unless you specifically want this."; Flags: unchecked
+Name: "autorotate"; Description: "{cm:AutoRotateTask}"; GroupDescription: "{cm:AutoRotateGroup}"; Flags: unchecked
 
 [Icons]
 Name: "{group}\Sentinel Agent"; Filename: "{app}\Sentinel.Agent.exe"; IconFilename: "{app}\Sentinel.ico"
 
 [Run]
-Filename: "{app}\Sentinel.Service.exe"; Parameters: "--install"; Flags: runhidden waituntilterminated; StatusMsg: "Starting Sentinel..."
+Filename: "{app}\Sentinel.Service.exe"; Parameters: "--install"; Flags: runhidden waituntilterminated; StatusMsg: "{cm:StatusStarting}"
 Filename: "{sys}\cmd.exe"; Parameters: "/c del /f /q ""{app}\*.old"" 2>nul & exit /b 0"; Flags: runhidden waituntilterminated
 
 [UninstallDelete]
@@ -63,6 +66,17 @@ Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{commonpf32}\Sentinel"
 
 [Code]
+// Sentinel's own message by name (localization\<language>\installer.isl). %n becomes a line break and %1 the argument.
+function Msg(const Name: String): String;
+begin
+  Result := CustomMessage(Name);
+  StringChangeEx(Result, '%n', #13#10, True);
+end;
+function Msg1(const Name, Arg: String): String;
+begin
+  Result := Msg(Name);
+  StringChangeEx(Result, '%1', Arg, True);
+end;
 const
   GvpnTaskName = 'GVPN';
 
@@ -202,15 +216,15 @@ begin
   begin
     ResultCode := -1;
     if not Exec(ExpandConstant('{app}\ExploitShield\Sentinel.ExploitShield.exe'), '--install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-      RaiseException('Could not start automatic exploit protection configuration.');
+      RaiseException(Msg('ExploitShieldStartFailed'));
     if ResultCode <> 0 then
-      RaiseException('Automatic exploit protection could not be scheduled. Check the ExploitShield audit log.');
+      RaiseException(Msg('ExploitShieldScheduleFailed'));
 
     if WizardIsTaskSelected('autorotate') then
     begin
       ResultCode := -1;
       if (not Exec(ExpandConstant('{app}\SentinelAutoRotate.exe'), '--install --force', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
-        MsgBox('SentinelAutoRotate was not enabled. See ProgramData\Sentinel\AutoRotate\events.log. Sentinel itself is installed.', mbError, MB_OK);
+        MsgBox(Msg1('AutoRotateNotEnabled', ExpandConstant('{commonappdata}\Sentinel\AutoRotate\events.log')), mbError, MB_OK);
     end;
   end;
 end;
@@ -237,16 +251,12 @@ var
   ErrCode: Integer;
 begin
   Result := False;
-  if MsgBox(
-    'Sentinel requires .NET Framework 4.8.' + #13#10#13#10 +
-    'Yes = open the Microsoft download page' + #13#10 +
-    'No  = cancel Setup',
-    mbConfirmation, MB_YESNO) = IDYES then
+  if MsgBox(Msg('DotNetRequired'), mbConfirmation, MB_YESNO) = IDYES then
   begin
     ShellExec('open',
       'https://dotnet.microsoft.com/download/dotnet-framework/net48',
       '', '', SW_SHOWNORMAL, ewNoWait, ErrCode);
-    MsgBox('After installing .NET Framework 4.8, run SentinelSetup again.', mbInformation, MB_OK);
+    MsgBox(Msg('DotNetRunAgain'), mbInformation, MB_OK);
   end;
 end;
 
@@ -376,7 +386,7 @@ begin
     end;
     Sleep(1000);
   end;
-  RaiseException('Sentinel could not be stopped for the upgrade. Restart the computer and run setup again. If it still fails, collect the setup log and report it.');
+  RaiseException(Msg('UpgradeStopFailed'));
 end;
 
 procedure StopExistingService();
@@ -388,9 +398,9 @@ begin
   begin
     ResultCode := -1;
     if not Exec(ExpandConstant('{app}\ExploitShield\Sentinel.ExploitShield.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-      RaiseException('Could not stop automatic exploit protection before upgrade.');
+      RaiseException(Msg('UpgradeExploitShieldStopFailed'));
     if ResultCode <> 0 then
-      RaiseException('Could not remove the old exploit protection schedule before upgrade.');
+      RaiseException(Msg('UpgradeExploitShieldScheduleFailed'));
   end;
   Svc := ExpandConstant('{app}\Sentinel.Service.exe');
   if FileExists(Svc) then
@@ -437,9 +447,7 @@ begin
 
   if not IsProtectedInstallDir(ExpandConstant('{app}')) then
   begin
-    Result := 'Sentinel runs as LocalSystem from its install folder, so it must be installed under Program Files. ' +
-      'The current install folder ('  + ExpandConstant('{app}') + ') is not a protected location. ' +
-      'Uninstall the existing copy and run setup again to install to Program Files.';
+    Result := Msg1('InstallDirNotProtected', ExpandConstant('{app}'));
     Exit;
   end;
 
@@ -605,9 +613,9 @@ begin
     begin
       ResultCode := -1;
       if not Exec(ExpandConstant('{app}\ExploitShield\Sentinel.ExploitShield.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-        RaiseException('Could not stop Sentinel ExploitShield; uninstall cancelled.');
+        RaiseException(Msg('UninstallExploitShieldStopFailed'));
       if ResultCode <> 0 then
-        RaiseException('Could not remove Sentinel ExploitShield schedule; uninstall cancelled.');
+        RaiseException(Msg('UninstallExploitShieldScheduleFailed'));
     end;
     // SentinelAutoRotate blanks the account password before its tasks are removed. Fail closed:
     // if the blank cannot be restored, cancel the uninstall so the account is not left on an
@@ -616,10 +624,10 @@ begin
     begin
       ResultCode := -1;
       if (not Exec(ExpandConstant('{app}\SentinelAutoRotate.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
-        RaiseException('SentinelAutoRotate could not restore a blank password, so uninstall was cancelled. See ProgramData\Sentinel\AutoRotate\events.log, fix the cause, then uninstall again.');
+        RaiseException(Msg1('AutoRotateUninstallBlankFailed', ExpandConstant('{commonappdata}\Sentinel\AutoRotate\events.log')));
     end
     else if AutoRotateTaskExists() then
-      RaiseException('SentinelAutoRotate is still scheduled but its program file is missing, so the account password cannot be restored. Uninstall was cancelled. Reinstall Sentinel or remove the SentinelAutoRotate tasks, then uninstall again.');
+      RaiseException(Msg('AutoRotateUninstallExeMissing'));
 
     // Stop and kill service + agent before files are removed.
     // Without this the processes stay running and file deletion fails silently,

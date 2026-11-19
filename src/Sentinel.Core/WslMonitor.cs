@@ -259,8 +259,8 @@ namespace Sentinel.Core
                         {
                             var mainModule = SecurityValidation.GetProcessImagePath(proc.Id);
                             if (mainModule != null &&
-                                (mainModule.StartsWith(@"\\wsl") ||
-                                 mainModule.StartsWith(@"\\wsl.localhost")))
+                                (mainModule.StartsWith(@"\\wsl", StringComparison.Ordinal) ||
+                                 mainModule.StartsWith(@"\\wsl.localhost", StringComparison.Ordinal)))
                             {
                                 await _detectionEngine.EmitAsync(new DetectionEvent
                                 {
@@ -528,7 +528,7 @@ namespace Sentinel.Core
                     var name = proc.ProcessName.ToLowerInvariant();
 
                     // Detect processes spawned by Docker that access host resources suspiciously
-                    if (name.StartsWith("com.docker") || name == "docker" || name == "dockerd")
+                    if (name.StartsWith("com.docker", StringComparison.Ordinal) || name == "docker" || name == "dockerd")
                     {
                         // Docker processes shouldn't be spawning cmd/powershell with suspicious args
                         continue; // Docker itself is legitimate - we monitor its children

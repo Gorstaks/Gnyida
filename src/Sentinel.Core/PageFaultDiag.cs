@@ -254,8 +254,7 @@ namespace Sentinel.Core
                         {
                             if (proc.Id <= 4) continue;
                             var path = SecurityValidation.GetProcessImagePath(proc.Id);
-                            if (SecurityValidation.IsGameOrAntiCheatProcess(proc.Id, path) ||
-                                !NativeProcessMemory.CanInspect(proc.Id, path))
+                            if (!NativeProcessMemory.CanInspect(proc.Id, path))
                                 continue;
                             procs++;
                             foreach (var mod in NativeProcessMemory.EnumModules(proc.Id))

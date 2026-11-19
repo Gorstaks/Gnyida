@@ -718,7 +718,7 @@ namespace Sentinel.Core
             {
                 var normalized = Path.GetFullPath(imagePath);
                 var winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-                var winDirTrailing = winDir.EndsWith("\\") ? winDir : winDir + '\\';
+                var winDirTrailing = winDir.EndsWith("\\", StringComparison.Ordinal) ? winDir : winDir + '\\';
                 if (normalized.StartsWith(winDirTrailing, StringComparison.OrdinalIgnoreCase))
                     return true;
 
@@ -1142,7 +1142,7 @@ namespace Sentinel.Core
         {
             try
             {
-                var psi = new ProcessStartInfo("bcdedit.exe", "/set nx AlwaysOn")
+                var psi = new ProcessStartInfo(SystemTools.System32("bcdedit.exe"), "/set nx AlwaysOn")
                 {
                     CreateNoWindow = true,
                     UseShellExecute = false,

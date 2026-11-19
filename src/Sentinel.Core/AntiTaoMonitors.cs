@@ -108,8 +108,7 @@ namespace Sentinel.Core
                     using var proc = Process.Start(psi);
                     if (proc != null)
                     {
-                        var output = await proc.StandardOutput.ReadToEndAsync();
-                        proc.WaitForExit(5000);
+                        var output = await BoundedProcess.ReadOutputAsync(proc, 5000, CancellationToken.None);
                         hypervisorAuto = output.Contains("hypervisorlaunchtype")
                             && output.Contains("Auto");
                     }
@@ -183,7 +182,7 @@ namespace Sentinel.Core
                 {
                     try
                     {
-                        var psi = new ProcessStartInfo("manage-bde.exe", "-status C:")
+                        var psi = new ProcessStartInfo(SystemTools.System32("manage-bde.exe"), "-status C:")
                         {
                             CreateNoWindow = true, UseShellExecute = false,
                             RedirectStandardOutput = true
@@ -191,8 +190,7 @@ namespace Sentinel.Core
                         using var proc = Process.Start(psi);
                         if (proc != null)
                         {
-                            var output = await proc.StandardOutput.ReadToEndAsync();
-                            proc.WaitForExit(5000);
+                            var output = await BoundedProcess.ReadOutputAsync(proc, 5000, CancellationToken.None);
                             // "Protection Status:    Protection On" or "Fully Encrypted"
                             bitlockerActive = output.Contains("Protection On")
                                 || output.Contains("Fully Encrypted");
@@ -393,8 +391,8 @@ namespace Sentinel.Core
         {
             // Device IDs look like: VID_046D&PID_C52B\7&12345678&0&0000
             var upper = deviceId.ToUpperInvariant();
-            var vidIdx = upper.IndexOf("VID_");
-            var pidIdx = upper.IndexOf("PID_");
+            var vidIdx = upper.IndexOf("VID_", StringComparison.Ordinal);
+            var pidIdx = upper.IndexOf("PID_", StringComparison.Ordinal);
             if (vidIdx < 0 || pidIdx < 0) return null;
 
             try
@@ -668,40 +666,24 @@ namespace Sentinel.Core
         {
             try
             {
-                var psi = new ProcessStartInfo("netstat.exe", "-n -p TCP")
+                // Native TCP table instead of "netstat -n -p TCP": the state word is localized in netstat output,
+                // so "ESTABLISHED" was never found on a non-English Windows. Collect first, emit after: the visitor
+                // cannot await.
+                var candidates = new List<(string Endpoint, string RemoteIp)>();
+                NativeConnectionTable.Enumerate(includeUdp: false, row =>
                 {
-                    CreateNoWindow = true, UseShellExecute = false,
-                    RedirectStandardOutput = true
-                };
-                using var proc = Process.Start(psi);
-                if (proc == null) return;
-
-                var output = await proc.StandardOutput.ReadToEndAsync();
-                proc.WaitForExit(5000);
-
-                foreach (var line in output.Split('\n'))
+                    if (!row.IsEstablished || row.IsIpv6) return true; // the allow-list is IPv4 subnets
+                    if (!IPAddress.TryParse(row.RemoteAddress, out var remoteIp)) return true;
+                    if (IsAllowed(remoteIp)) return true;
+                    if (_alertedIps.ContainsKey(row.RemoteAddress)) return true;
+                    candidates.Add((row.RemoteAddress + ":" + row.RemotePort, row.RemoteAddress));
+                    return candidates.Count < 256; // bounded per scan
+                });
+                foreach (var (remoteEndpoint, remoteIpStr) in candidates)
                 {
-                    var trimmed = line.Trim();
-                    if (!trimmed.StartsWith("TCP")) continue;
-                    if (!trimmed.Contains("ESTABLISHED")) continue;
-
-                    // Parse: TCP    192.168.1.100:12345    142.250.80.46:443    ESTABLISHED
-                    var parts = trimmed.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length < 4) continue;
-
-                    var remoteEndpoint = parts[2];
-                    var lastColon = remoteEndpoint.LastIndexOf(':');
-                    if (lastColon <= 0) continue;
-
-                    var remoteIpStr = remoteEndpoint[..lastColon];
-                    if (!IPAddress.TryParse(remoteIpStr, out var remoteIp)) continue;
-                    if (remoteIp.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) continue;
-
-                    if (IsAllowed(remoteIp)) continue;
+                    if (ct.IsCancellationRequested) return;
                     if (_alertedIps.ContainsKey(remoteIpStr)) continue;
-
                     _alertedIps[remoteIpStr] = DateTime.UtcNow;
-
                     await _detectionEngine.EmitAsync(new DetectionEvent
                     {
                         RuleName = "Outbound Whitelist: Connection to Non-Whitelisted IP",
@@ -745,7 +727,7 @@ namespace Sentinel.Core
                 // Windows Firewall processes rules in order: Allow rules take precedence over Block
 
                 // First: Allow rule for whitelisted subnets
-                var allowPsi = new ProcessStartInfo("netsh.exe",
+                var allowPsi = new ProcessStartInfo(SystemTools.System32("netsh.exe"),
                     $"advfirewall firewall add rule name=\"Sentinel-OutboundWhitelist-Allow\" " +
                     $"dir=out action=allow remoteip=\"{allowedAddresses}\"")
                 {
@@ -755,7 +737,7 @@ namespace Sentinel.Core
                     p?.WaitForExit(5000);
 
                 // Then: Block everything else
-                var blockPsi = new ProcessStartInfo("netsh.exe",
+                var blockPsi = new ProcessStartInfo(SystemTools.System32("netsh.exe"),
                     $"advfirewall firewall add rule name=\"{FirewallRuleName}\" " +
                     "dir=out action=block remoteip=any")
                 {

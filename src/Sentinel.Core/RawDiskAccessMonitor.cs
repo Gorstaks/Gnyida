@@ -422,8 +422,8 @@ namespace Sentinel.Core
             if (string.IsNullOrEmpty(imagePath)) return false;
             var winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
             if (string.IsNullOrEmpty(winDir)) return false;
-            var winDirTrailing = winDir.EndsWith("\\") ? winDir : winDir + '\\';
-            return imagePath.StartsWith(winDirTrailing);
+            var winDirTrailing = winDir.EndsWith("\\", StringComparison.Ordinal) ? winDir : winDir + '\\';
+            return imagePath.StartsWith(winDirTrailing, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsRawDiskPath(string path)
@@ -440,7 +440,7 @@ namespace Sentinel.Core
 
             // 2. If it is a file/folder inside a volume (has a subpath), ignore it.
             // A subpath is indicated by a backslash after the volume name.
-            if (path.StartsWith(@"\Device\HarddiskVolume"))
+            if (path.StartsWith(@"\Device\HarddiskVolume", StringComparison.Ordinal))
             {
                 var remaining = path[@"\Device\HarddiskVolume".Length..];
                 int firstBackslash = remaining.IndexOf('\\');
@@ -449,12 +449,12 @@ namespace Sentinel.Core
                     return false;
                 }
             }
-            else if (path.StartsWith(@"\Device\Harddisk"))
+            else if (path.StartsWith(@"\Device\Harddisk", StringComparison.Ordinal))
             {
                 var remaining = path[@"\Device\Harddisk".Length..];
                 if (remaining.Contains("Volume"))
                 {
-                    int volIdx = remaining.IndexOf("Volume");
+                    int volIdx = remaining.IndexOf("Volume", StringComparison.Ordinal);
                     var volRemaining = remaining[(volIdx + "Volume".Length)..];
                     int firstBackslash = volRemaining.IndexOf('\\');
                     if (firstBackslash >= 0 && firstBackslash < volRemaining.Length - 1)

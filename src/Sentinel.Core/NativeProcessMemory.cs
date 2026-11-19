@@ -56,19 +56,35 @@ namespace Sentinel.Core
         internal static bool TryGetCreationTime(IntPtr process, out long creation)
             => GetProcessTimes(process, out creation, out _, out _, out _) && creation > 0;
 
+        /// <summary>
+        /// Games and anti-cheat processes used to be exempt from every memory-reading monitor, by name or by a folder
+        /// substring. A standard user can create such a folder (for example C:\Riot Games\) or choose such a name, so the
+        /// exemption doubled as a way to hide, and games are now scanned like any other process.
+        ///
+        /// The cost is known: some Denuvo-protected titles exit when another process opens them with PROCESS_VM_READ.
+        /// Like the other detection switches this one is compiled in, not read from disk, so a planted file cannot
+        /// flip it. To restore the old exemption set it to true and rebuild.
+        /// </summary>
+        internal static readonly bool SkipGameProcesses = false;
+
+        /// <summary>
+        /// True for a game or anti-cheat workload by the old name-or-folder test. Callers that MUTATE a process (unload a
+        /// module, for example) keep refusing these; scanning does not use this.
+        /// </summary>
+        internal static bool IsGameWorkload(int pid, string? imagePath = null) =>
+            SecurityValidation.IsGameOrAntiCheatProcess(pid, imagePath);
+
         public static bool CanInspect(int pid, string? imagePath = null)
         {
             if (pid <= 4) return false;
-            // Name-first: Denuvo titles self-terminate on VM_READ even when path resolve races.
-            if (SecurityValidation.IsGameOrAntiCheatProcess(pid, imagePath))
+            if (SkipGameProcesses && SecurityValidation.IsGameOrAntiCheatProcess(pid, imagePath))
                 return false;
             imagePath ??= SecurityValidation.GetProcessImagePath(pid);
-            // Fail closed: unresolved path -> no VM_READ (PPL / anti-cheat / startup race).
-            // Prefer missing a scan over killing interactive games.
+            // Fail closed: an unresolved path (protected process, startup race) is not read.
             if (string.IsNullOrEmpty(imagePath))
                 return false;
             if (SelfPathGuard.IsInstalledNanoAvBinary(imagePath)) return false;
-            return !SecurityValidation.IsGameOrAntiCheatPath(imagePath);
+            return !(SkipGameProcesses && SecurityValidation.IsGameOrAntiCheatPath(imagePath));
         }
 
         public static IntPtr OpenRemoteHandle(uint access, int pid)

@@ -29,4 +29,8 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The settings window page. Logical name is fixed so a folder rename cannot silently break the lookup. -->
+    <EmbeddedResource Include="Dashboard\dashboard.html" LogicalName="Sentinel.Agent.Dashboard.dashboard.html" />
+  </ItemGroup>
 </Project>

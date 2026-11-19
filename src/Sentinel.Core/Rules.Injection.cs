@@ -11,9 +11,15 @@ namespace Sentinel.Core
         public string Name => "ThreatIntelInjectionRule";
 
         private readonly Action<int, bool> _queueCandidate;
+        private readonly BrowserSandboxPolicy.Classifier _classifyBrowser;
         public ThreatIntelInjectionRule() : this(InjectionSuspectBoard.Mark) { }
         internal ThreatIntelInjectionRule(Action<int, bool> queueCandidate)
-            => _queueCandidate = queueCandidate ?? throw new ArgumentNullException(nameof(queueCandidate));
+            : this(queueCandidate, BrowserSandboxPolicy.Classify) { }
+        internal ThreatIntelInjectionRule(Action<int, bool> queueCandidate, BrowserSandboxPolicy.Classifier classifyBrowser)
+        {
+            _queueCandidate = queueCandidate ?? throw new ArgumentNullException(nameof(queueCandidate));
+            _classifyBrowser = classifyBrowser ?? throw new ArgumentNullException(nameof(classifyBrowser));
+        }
 
         // Browsers legitimately use cross-process memory APIs for their sandbox model
         // (broker process allocates memory in renderer/tab processes). Skip to avoid FP kills.
@@ -36,14 +42,42 @@ namespace Sentinel.Core
             _queueCandidate(tit.ProcessId, true);
             if (tit.TargetProcessId > 4) _queueCandidate(tit.TargetProcessId, true);
 
-            // Browser sandbox: chrome->chrome is normal. chrome->lsass is not.
+            // Browser sandbox: chrome->chrome is normal. The exemption used to rest on the caller's NAME alone,
+            // so a binary called chrome.exe, or a real browser writing into an unrelated process, was exempt.
+            // BrowserSandboxPolicy now requires the real signed browser image AND a target in the same family.
             var callerName = tit.ProcessName ?? "";
             if (callerName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                 callerName = callerName.Substring(0, callerName.Length - 4);
-            if (KnownBrowserProcesses.Contains(callerName) &&
-                tit.TargetProcessId != 4 &&
-                !IsSensitiveTargetName(tit.TargetProcessId))
-                return null;
+            if (KnownBrowserProcesses.Contains(callerName))
+            {
+                var browser = _classifyBrowser(tit);
+                if (browser == BrowserSandboxPolicy.Verdict.SandboxModel) return null;
+                if ((browser == BrowserSandboxPolicy.Verdict.GenuineBrowserForeignTarget ||
+                     browser == BrowserSandboxPolicy.Verdict.UnverifiedSameFamily) &&
+                    tit.TargetProcessId > 4 && !IsSensitiveTargetName(tit.TargetProcessId))
+                {
+                    // A signed browser is not killed on this signal alone, but it must not be invisible either.
+                    _queueCandidate(tit.TargetProcessId, false);
+                    return new DetectionEvent
+                    {
+                        RuleName = browser == BrowserSandboxPolicy.Verdict.UnverifiedSameFamily
+                            ? "Injection: Unverified Browser-Named Process Calls Into Its Own Family"
+                            : "Injection: Browser Calls Into Unrelated Process",
+                        ProcessName = tit.ProcessName ?? "",
+                        ProcessId = tit.ProcessId,
+                        SignalType = SignalType.ProcessInjection,
+                        Confidence = 0.60,
+                        Tier = DetectionTier.Tier2Indicator,
+                        AuthorizedResponse = ResponseAction.LogOnly,
+                        Evidence = browser == BrowserSandboxPolicy.Verdict.UnverifiedSameFamily
+                            ? $"{tit.ProcessName} (PID {tit.ProcessId}) is not the signed browser it is named after, and used {ThreatIntelMap.Describe(tit.ApiName)} on PID {tit.TargetProcessId} of the same name. Normal for an unsigned Chromium build; also what a binary posing as the browser would do."
+                            : $"Genuine browser {tit.ProcessName} (PID {tit.ProcessId}) used {ThreatIntelMap.Describe(tit.ApiName)} on PID {tit.TargetProcessId}, which is not part of its own process family.",
+                        Reasoning = "Browsers use cross-process memory calls only between their own broker and renderer processes. This call targets an unrelated process, which is how a compromised browser would be used to inject. Logged without a kill because the caller is the signed browser.",
+                        Metadata = new Dictionary<string, string> { { "TargetProcessId", tit.TargetProcessId.ToString() }, { "WeakObserveSeed", "true" } }
+                    };
+                }
+                // Masquerade, or a browser aimed at System/lsass-class targets: the normal kill-grade path below.
+            }
 
             var imagePath = SecurityValidation.GetProcessImagePath(tit.ProcessId);
             if (AlwaysOnPolicies.IsProtectedGamePath(imagePath))

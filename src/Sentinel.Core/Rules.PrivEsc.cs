@@ -26,14 +26,14 @@ namespace Sentinel.Core
                     {
                         // Skip legitimate uses - these only trigger when spawned by non-explorer parents
                         // The real shell image is "Explorer.EXE"; compare the stem case-insensitively.
-                        if (pattern.EndsWith(".exe") && pt.ParentProcessName != null &&
+                        if (pattern.EndsWith(".exe", StringComparison.Ordinal) && pt.ParentProcessName != null &&
                             string.Equals(StringNet48.ReplaceIgnoreCase(pt.ParentProcessName, ".exe", ""), "explorer", StringComparison.OrdinalIgnoreCase))
                             continue;
 
                         // Skip COM auto-elevation: when auto-elevate binaries are launched with
                         // "-Embedding" by the COM runtime (svchost/DcomLaunch), it's legitimate.
                         // This prevents false positives on FodHelper.exe, eventvwr.exe, etc.
-                        if (pattern.EndsWith(".exe") && cmd.Contains("-embedding"))
+                        if (pattern.EndsWith(".exe", StringComparison.Ordinal) && cmd.Contains("-embedding"))
                             continue;
 
                         // Skip false positives on legitimate named pipes used for IPC by development/IDE tools or other applications

@@ -248,9 +248,9 @@ namespace Sentinel.Core
         {
             if (string.IsNullOrWhiteSpace(path)) return false;
             var p = path!.ToLowerInvariant();
-            return p.EndsWith("\\ntuser.dat")
+            return p.EndsWith("\\ntuser.dat", StringComparison.Ordinal)
                 || p.Contains("\\ntuser.dat.")
-                || p.EndsWith("\\usrclass.dat")
+                || p.EndsWith("\\usrclass.dat", StringComparison.Ordinal)
                 || p.Contains("\\usrclass.dat.");
         }
 

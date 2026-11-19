@@ -16,7 +16,7 @@ namespace Sentinel.Core
     {
         private static readonly TimeSpan Interval = TimeSpan.FromMinutes(2);
         private static readonly Regex ArpLine = new(@"^\s*(\d{1,3}(?:\.\d{1,3}){3})\s+([0-9a-fA-F]{2}(?:-[0-9a-fA-F]{2}){5})\s+(dynamic|static)\s*$",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         private readonly DetectionEngine _detectionEngine;
         private readonly ILogger<LanDeviceInventoryMonitor> _logger;
         private readonly HashSet<string> _known = new(StringComparer.OrdinalIgnoreCase);
@@ -72,7 +72,7 @@ namespace Sentinel.Core
                 var m = ArpLine.Match(line.TrimEnd('\r'));
                 if (!m.Success || !m.Groups[3].Value.Equals("dynamic", StringComparison.OrdinalIgnoreCase)) continue;
                 var mac = m.Groups[2].Value.ToLowerInvariant();
-                if (mac.StartsWith("ff-ff-ff") || mac.StartsWith("01-00-5e")) continue;
+                if (mac.StartsWith("ff-ff-ff", StringComparison.Ordinal) || mac.StartsWith("01-00-5e", StringComparison.Ordinal)) continue;
                 list.Add(new Device(m.Groups[1].Value, mac));
             }
             return list;

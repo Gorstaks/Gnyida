@@ -232,7 +232,7 @@ namespace Sentinel.Core
                     {
                         if (ips.Count < 3) continue; // Normal: 1 IP per MAC. 2 = maybe DHCP transition. 3+ = poisoning
                         if (mac == "FF-FF-FF-FF-FF-FF") continue;
-                        if (mac.StartsWith("01-00-5E")) continue; // Multicast
+                        if (mac.StartsWith("01-00-5E", StringComparison.Ordinal)) continue; // Multicast
 
                         // Is the gateway IP one of them? That's the worst case.
                         bool includesGateway = _gatewayIp != null && ips.Contains(_gatewayIp);
@@ -317,7 +317,7 @@ namespace Sentinel.Core
                         var row = Marshal.PtrToStructure<MIB_IPNETROW>(IntPtr.Add(buffer, 4 + i * entrySize));
                         if (row.dwType == 2) continue; // Invalid entry
                         var ip = new IPAddress(BitConverter.GetBytes(row.dwAddr)).ToString();
-                        if (ip.StartsWith("224.") || ip == "255.255.255.255") continue;
+                        if (ip.StartsWith("224.", StringComparison.Ordinal) || ip == "255.255.255.255") continue;
                         var mac = $"{row.mac0:X2}-{row.mac1:X2}-{row.mac2:X2}-{row.mac3:X2}-{row.mac4:X2}-{row.mac5:X2}";
                         if (mac == "00-00-00-00-00-00") continue;
                         results.Add((ip, mac));
@@ -878,8 +878,8 @@ namespace Sentinel.Core
                     foreach (var dev in current)
                     {
                         if (dev.Mac == "FF-FF-FF-FF-FF-FF") continue;
-                        if (dev.Mac.StartsWith("01-00-5E")) continue;
-                        if (dev.Mac.StartsWith("33-33-")) continue;
+                        if (dev.Mac.StartsWith("01-00-5E", StringComparison.Ordinal)) continue;
+                        if (dev.Mac.StartsWith("33-33-", StringComparison.Ordinal)) continue;
                         if (_trustedIps.Contains(dev.Ip)) continue;
 
                         if (!_knownDevices.ContainsKey(dev.Mac))
@@ -999,7 +999,7 @@ namespace Sentinel.Core
                 foreach (dynamic rule in policy.Rules)
                 {
                     string name = (string)rule.Name;
-                    if (name.StartsWith("Sentinel-Block-PhantomDevice-"))
+                    if (name.StartsWith("Sentinel-Block-PhantomDevice-", StringComparison.Ordinal))
                         toRemove.Add(name);
                 }
                 foreach (var name in toRemove)

@@ -525,7 +525,7 @@ namespace Sentinel.Core
                 (v.Contains(@"\windows\system32\userinit.exe") || string.IsNullOrWhiteSpace(v)))
                 return true;
             if (label.Contains("Shell") &&
-                (v == "explorer.exe" || v.EndsWith(@"\explorer.exe")))
+                (v == "explorer.exe" || v.EndsWith(@"\explorer.exe", StringComparison.Ordinal)))
                 return true;
             return false;
         }

@@ -478,7 +478,7 @@ namespace Sentinel.Core
             string? lastPathLike = null;
             foreach (var t in tokens)
             {
-                if (t.StartsWith("/") || t.StartsWith("-")) continue; // switch
+                if (t.StartsWith("/", StringComparison.Ordinal) || t.StartsWith("-", StringComparison.Ordinal)) continue; // switch
                 // A path-like token: has a directory separator or a drive letter.
                 if (t.Contains("\\") || (t.Length >= 2 && t[1] == ':'))
                     lastPathLike = t;

@@ -74,7 +74,7 @@ namespace Sentinel.Tests
             // Act & Assert: All should be recognized as UNC paths
             foreach (var path in uncPaths)
             {
-                Assert.True(path.StartsWith(@"\\") && !path.StartsWith(@"\\?\"),
+                Assert.True(path.StartsWith(@"\\", StringComparison.Ordinal) && !path.StartsWith(@"\\?\", StringComparison.Ordinal),
                     $"UNC path should start with \\\\ (not \\\\?\\): {path}");
             }
         }

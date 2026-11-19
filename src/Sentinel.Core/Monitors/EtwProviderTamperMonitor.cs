@@ -368,7 +368,7 @@ namespace Sentinel.Core
                     foreach (var (pattern, desc, confidence) in EtwManipulationPatterns)
                     {
                         if (System.Text.RegularExpressions.Regex.IsMatch(
-                            cmdLine, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                            cmdLine, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant))
                         {
                             await _detectionEngine.EmitAsync(new DetectionEvent
                             {
@@ -456,21 +456,20 @@ namespace Sentinel.Core
                 try
                 {
                     using var proc = new Process();
-                    proc.StartInfo = new ProcessStartInfo("logman", "query -ets")
+                    proc.StartInfo = new ProcessStartInfo(SystemTools.System32("logman.exe"), "query -ets")
                     {
                         RedirectStandardOutput = true,
                         UseShellExecute = false,
                         CreateNoWindow = true
                     };
                     proc.Start();
-                    string output = proc.StandardOutput.ReadToEnd();
-                    proc.WaitForExit(5000);
+                    string output = BoundedProcess.ReadOutput(proc, 5000);
 
                     foreach (var line in output.Split('\n'))
                     {
                         string trimmed = line.Trim();
-                        if (!string.IsNullOrEmpty(trimmed) && !trimmed.StartsWith("Data Collector") &&
-                            !trimmed.StartsWith("---") && !trimmed.StartsWith("The command"))
+                        if (!string.IsNullOrEmpty(trimmed) && !trimmed.StartsWith("Data Collector", StringComparison.Ordinal) &&
+                            !trimmed.StartsWith("---", StringComparison.Ordinal) && !trimmed.StartsWith("The command", StringComparison.Ordinal))
                         {
                             sessions.Add(trimmed);
                         }

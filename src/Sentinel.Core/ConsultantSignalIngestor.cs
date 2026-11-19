@@ -152,7 +152,7 @@ namespace Sentinel.Core
 
         private async Task ProcessFileAsync(string filePath, CancellationToken ct)
         {
-            if (string.IsNullOrEmpty(filePath) || !filePath.EndsWith(".jsonl"))
+            if (string.IsNullOrEmpty(filePath) || !filePath.EndsWith(".jsonl", StringComparison.Ordinal))
             {
                 return;
             }

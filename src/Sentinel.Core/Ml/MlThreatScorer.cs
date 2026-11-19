@@ -216,7 +216,7 @@ namespace Sentinel.Core.Ml
             };
             foreach (var s in suffixes)
             {
-                if (host == s || host.EndsWith("." + s))
+                if (host == s || host.EndsWith("." + s, StringComparison.Ordinal))
                     return true;
             }
             return false;

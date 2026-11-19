@@ -98,7 +98,7 @@ namespace Sentinel.Core
                 try { name = p.ProcessName; }
                 catch { continue; }
 
-                var bare = name.EndsWith(".exe")
+                var bare = name.EndsWith(".exe", StringComparison.Ordinal)
                     ? name[..^4]
                     : name;
 
@@ -134,7 +134,7 @@ namespace Sentinel.Core
 
                 _spawnCounts.AddOrUpdate(ppid, 1, (_, c) => c + 1);
 
-                var childBare = childName.EndsWith(".exe")
+                var childBare = childName.EndsWith(".exe", StringComparison.Ordinal)
                     ? childName[..^4]
                     : childName;
 

@@ -494,10 +494,10 @@ namespace Sentinel.Core
                 foreach (var file in Directory.EnumerateFiles(_quarantineDir))
                 {
                     var name = Path.GetFileName(file);
-                    if (name.EndsWith(".tmp") ||
-                        name.EndsWith(".meta"))
+                    if (name.EndsWith(".tmp", StringComparison.Ordinal) ||
+                        name.EndsWith(".meta", StringComparison.Ordinal))
                         continue;
-                    if (!name.StartsWith("q_"))
+                    if (!name.StartsWith("q_", StringComparison.Ordinal))
                         continue;
 
                     string? original = null;

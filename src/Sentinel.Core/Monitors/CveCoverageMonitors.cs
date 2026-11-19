@@ -832,7 +832,7 @@ namespace Sentinel.Core
             bool plainHttp = u.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
             bool ipLiteral = System.Text.RegularExpressions.Regex.IsMatch(
                 u, @"^https?://\d{1,3}(\.\d{1,3}){3}",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
             return plainHttp || ipLiteral || remote;
         }

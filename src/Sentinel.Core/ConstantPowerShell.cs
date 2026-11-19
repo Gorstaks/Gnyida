@@ -41,6 +41,13 @@ namespace Sentinel.Core
         }
 
         internal static ProcessStartInfo CreateStartInfo(string command, params string[] args)
-            => CreateStartInfoForPath("powershell.exe", command, args);
+            => CreateStartInfoForPath(SystemPowerShellPath, command, args);
+
+        /// <summary>
+        /// Windows PowerShell by full path. A bare "powershell.exe" is found through the application directory and PATH,
+        /// and this is the entry point for every PowerShell call the service makes as SYSTEM.
+        /// </summary>
+        internal static string SystemPowerShellPath { get; } =
+            System.IO.Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
     }
 }

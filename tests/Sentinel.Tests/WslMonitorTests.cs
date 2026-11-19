@@ -76,7 +76,7 @@ namespace Sentinel.Tests
         public void WslFilePaths_RecognizedAsWslAccess(string path)
         {
             // Paths beginning with \\wsl$ or \\wsl.localhost indicate WSL filesystem access
-            Assert.True(path.StartsWith(@"\\wsl") || path.StartsWith(@"\\wsl.localhost"));
+            Assert.True(path.StartsWith(@"\\wsl", StringComparison.Ordinal) || path.StartsWith(@"\\wsl.localhost", StringComparison.Ordinal));
         }
 
         [Theory]
@@ -84,7 +84,7 @@ namespace Sentinel.Tests
         [InlineData(@"D:\Projects\code.py")]
         public void NonWslPaths_NotRecognized(string path)
         {
-            Assert.False(path.StartsWith(@"\\wsl"));
+            Assert.False(path.StartsWith(@"\\wsl", StringComparison.Ordinal));
         }
 
         // 

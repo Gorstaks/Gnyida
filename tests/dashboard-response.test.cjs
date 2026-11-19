@@ -4,9 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-// Decode the dashboard's verbatim C# string to exercise the authored renderer.
-const htmlSource = fs.readFileSync(path.join(__dirname, '../src/Sentinel.Agent/DashboardHtml.cs'), 'utf8')
-  .replaceAll('""', '"').replaceAll('{{', '{').replaceAll('}}', '}');
+// The dashboard is a plain embedded page (src/Sentinel.Agent/Dashboard/dashboard.html); exercise the authored code.
+const htmlSource = fs.readFileSync(path.join(__dirname, '../src/Sentinel.Agent/Dashboard/dashboard.html'), 'utf8');
+function varSource(name) {
+  const match = htmlSource.match(new RegExp('var ' + name + ' = \\{[\\s\\S]*?\\n\\};'));
+  assert.ok(match, 'Missing dashboard table ' + name);
+  return match[0];
+}
 function sourceOf(name) {
   const match = htmlSource.match(new RegExp('function ' + name + '\\([^)]*\\) \\{[\\s\\S]*?\n\\}'));
   assert.ok(match, 'Missing dashboard function ' + name);
@@ -20,6 +24,13 @@ function dashboardDocument(elements) {
   };
 }
 function coverageCode() { return ['esc', 'sensorRows', 'renderCoverage', 'renderSensorInventory', 'toggleSensorDetails'].map(sourceOf).join('\n'); }
+// Everything loadStatus needs to reach a verdict: coverage, the icon and label tables, and the verdict helpers.
+function statusCode() {
+  return coverageCode() + '\n' + ['HERO_ICONS', 'ROW_ICONS', 'SIDE_LABELS'].map(varSource).join('\n') + '\n' +
+    ['svgIcon', 'setVerdict', 'technicalState', 'decideVerdict', 'checkRow', 'renderChecks', 'loadStatus'].map(sourceOf).join('\n');
+}
+// The single verdict shown in the hero and the sidebar: ok | limited | attention | busy | stopped.
+function verdictOf(elements) { return ((elements['hero'] && elements['hero'].className) || '').replace('card hero', '').trim(); }
 
 function render(type, data) {
   const container = { innerHTML: '' };
@@ -81,13 +92,14 @@ test('unverified firewall policy never gets an active dashboard badge', () => {
     apiCall(endpoint, options, callback) {
       callback(endpoint === '/api/status'
         ? { ok: true, version: '3.2.3', serviceRunning: true, firewallPolicyCompliant: false }
-        : { ok: false });
+        : { ok: true, monitorsRegistered: 2, monitorsRunning: 2, monitorsUnhealthy: 0, collectionHealthy: 2, collectionUnverified: 0, monitorDetails: [] });
     }
   });
-  vm.runInContext(coverageCode() + '\n' + sourceOf('loadStatus'), context);
+  vm.runInContext(statusCode(), context);
   context.loadStatus();
-  assert.equal(elements['status-text'].textContent, 'Firewall policy needs attention');
-  assert.equal(elements['ov-status'].textContent, 'Needs attention');
+  assert.equal(verdictOf(elements), 'attention');
+  assert.match(elements['hero-title'].textContent, /firewall/i);
+  assert.notEqual(elements['side-status-text'].textContent, 'Protected');
 });
 
 test('verified offline firewall policy cannot hide missing collection health', () => {
@@ -100,10 +112,10 @@ test('verified offline firewall policy cannot hide missing collection health', (
         : { ok: false });
     }
   });
-  vm.runInContext(coverageCode() + '\n' + sourceOf('loadStatus'), context);
+  vm.runInContext(statusCode(), context);
   context.loadStatus();
-  assert.equal(elements['status-text'].textContent, 'Service running; sensor health unavailable');
-  assert.equal(elements['ov-status'].className, 'card-value warning');
+  assert.equal(verdictOf(elements), 'limited');
+  assert.match(elements['hero-body'].textContent, /couldn't report/);
 });
 
 function dnsContext(eligible = true) {
@@ -271,7 +283,7 @@ function renderSensorHealth(health) {
           monitorsDisabled: 0, collectionHealthy: 4, collectionUnverified: 130, ...health });
     }
   });
-  vm.runInContext(coverageCode() + '\n' + sourceOf('loadStatus'), context);
+  vm.runInContext(statusCode(), context);
   context.loadStatus();
   return elements;
 }
@@ -282,18 +294,20 @@ test('a running worker with a failed collector keeps the main warning visible', 
     monitorDetails: [{ name: 'DnsQueryMonitor', state: 'Running', reason: null,
       collection: { State: 'Failed', Error: '<script>Channel denied</script>' } }]
   });
-  assert.equal(elements['ov-status'].textContent, 'Needs attention');
-  assert.equal(elements['status-text'].textContent, 'Sensor coverage needs attention');
-  assert.match(elements['ov-monitors'].textContent, /134\/136 tasks running/);
-  assert.match(elements['ov-coverage-summary'].textContent, /task details returned/);
+  assert.equal(verdictOf(elements), 'attention');
+  assert.match(elements['hero-title'].textContent, /needs attention/);
+  assert.match(elements['hero'].title, /134\/136 running/);
+  assert.match(elements['health-coverage-summary'].textContent, /task details returned/);
+  assert.match(elements['ov-checks'].innerHTML, /1 feature stopped working/);
   assert.match(elements['ov-monitor-details'].innerHTML, /Channel denied/);
   assert.doesNotMatch(elements['ov-monitor-details'].innerHTML, /<script>/);
 });
 
 test('unverified collection cannot display fully active protection', () => {
   const elements = renderSensorHealth({ monitorsUnhealthy: 0, monitorDetails: [] });
-  assert.equal(elements['ov-status'].textContent, 'Collection unverified');
-  assert.match(elements['status-text'].textContent, /partly unverified/);
+  assert.equal(verdictOf(elements), 'limited');
+  assert.notEqual(elements['side-status-text'].textContent, 'Protected');
+  assert.match(elements['ov-checks'].innerHTML, /130 can't confirm/);
 });
 
 test('late status replies cannot erase a newer collector failure', () => {
@@ -303,7 +317,7 @@ test('late status replies cannot erase a newer collector failure', () => {
     document: dashboardDocument(elements),
     apiCall(endpoint, options, callback) { pending.push({ endpoint, callback }); }
   });
-  vm.runInContext(coverageCode() + '\n' + sourceOf('loadStatus'), context);
+  vm.runInContext(statusCode(), context);
   context.loadStatus();
   context.loadStatus();
   assert.deepEqual(pending.map(x => x.endpoint), ['/api/status', '/api/status']);
@@ -312,7 +326,8 @@ test('late status replies cannot erase a newer collector failure', () => {
   pending[2].callback({ ok: true, monitorsRegistered: 136, monitorsRunning: 134,
     monitorsUnhealthy: 1, monitorDetails: [] });
   pending[0].callback(active);
-  assert.equal(elements['ov-status'].textContent, 'Needs attention');
+  assert.equal(pending.length, 3, 'the stale status reply must not start its own health request');
+  assert.equal(verdictOf(elements), 'attention');
 });
 
 
@@ -333,11 +348,14 @@ test('audit distinguishes contextual, configured-inactive and unsupported protec
 
 
 test('Overview cannot expand a native unsupported details element into the full roster', () => {
-  assert.doesNotMatch(htmlSource.slice(htmlSource.indexOf('<!DOCTYPE html>')), /<details|<summary/);
+  assert.doesNotMatch(htmlSource, /<details|<summary/);
   const overview = htmlSource.split('id="page-overview"')[1].split('<!-- EVENTS -->')[0];
   assert.doesNotMatch(overview, /ov-monitor-details/);
   assert.match(htmlSource, /id="sensor-details" style="display:none"/);
-  assert.doesNotMatch(htmlSource, /display:\s*grid/);
+  // CSS grid was banned only because of the IE11 WebBrowser fallback. That fallback is gone: without WebView2 the
+  // window explains what to install instead of rendering this page in IE11.
+  const form = fs.readFileSync(path.join(__dirname, '../src/Sentinel.Agent/AgentDashboardForm.cs'), 'utf8');
+  assert.doesNotMatch(form, /new WebBrowser\b/);
 });
 
 function coverageFixture() {
@@ -352,13 +370,14 @@ function coverageFixture() {
 }
 
 test('large roster produces a small Overview with failures first and unverified coverage disclosed', () => {
-  const { elements } = coverageFixture();
+  const { context, elements } = coverageFixture();
   const html = elements['ov-attention'].innerHTML;
   assert.match(html, /File scanning/);
   assert.match(html, /Windows event collection/);
   assert.doesNotMatch(html, /LegacySensor/);
   assert.match(html, /616072 native events/);
-  assert.match(elements['ov-coverage-summary'].textContent, /128 collection unverified/);
+  assert.match(elements['health-coverage-summary'].textContent, /128 collection unverified/);
+  assert.equal(context.renderCoverage.counts.unverified, 128);
   assert.doesNotMatch(html, /<script>/);
 });
 
@@ -394,18 +413,20 @@ test('explicit sensor disclosure works without browser details support', () => {
 test('a successful service reply cannot show active coverage before health arrives', () => {
   const elements = {}, pending = [];
   const context = vm.createContext({ document: dashboardDocument(elements), apiCall(url, options, callback) { pending.push(callback); } });
-  vm.runInContext(coverageCode() + '\n' + sourceOf('loadStatus'), context);
+  vm.runInContext(statusCode(), context);
   context.loadStatus();
   pending[0]({ ok: true, version: 'fixture', serviceRunning: true, firewallPolicyCompliant: true });
-  assert.equal(elements['ov-status'].textContent, 'Checking coverage');
-  assert.notEqual(elements['status-badge'].className, 'status-badge active');
+  assert.notEqual(verdictOf(elements), 'ok');
+  // Nothing is written until health arrives, so the sidebar keeps its initial 'Checking...' label.
+  assert.notEqual((elements['side-status-text'] || {}).textContent, 'Protected');
 });
 
 test('explicitly checked coverage can become active but unverified coverage stays amber', () => {
   const active = renderSensorHealth({ collectionHealthy: 1, collectionUnverified: 0, monitorsUnhealthy: 0, monitorDetails: [] });
-  assert.equal(active['status-badge'].className, 'status-badge active');
+  assert.equal(verdictOf(active), 'ok');
+  assert.equal(active['side-status-text'].textContent, 'Protected');
   const unknown = renderSensorHealth({ collectionUnverified: 128, monitorsUnhealthy: 0, monitorDetails: [] });
-  assert.equal(unknown['status-badge'].className, 'status-badge warning');
+  assert.equal(verdictOf(unknown), 'limited');
 });
 
 test('ETW lane losses remain distinct from filtering and coalescing in metrics', () => {
@@ -430,11 +451,11 @@ test('ETW lane losses remain distinct from filtering and coalescing in metrics',
 });
 
 test('IPC failure distinguishes running, starting, unknown and explicitly stopped services', () => {
-  for (const [state, label, overview] of [
-    ['NotResponding', 'Service running; IPC not responding', 'Unavailable'],
-    ['Starting', 'Service starting; IPC not ready', 'Starting'],
-    ['Unknown', 'Service status unknown; IPC unavailable', 'Unavailable'],
-    ['Stopped', 'Service stopped', 'Stopped']
+  for (const [state, verdict, title] of [
+    ['NotResponding', 'attention', /isn't responding/],
+    ['Starting', 'busy', /starting/],
+    ['Unknown', 'attention', /isn't responding/],
+    ['Stopped', 'stopped', /isn't running/]
   ]) {
     const elements = {};
     const context = vm.createContext({ document: dashboardDocument(elements),
@@ -442,11 +463,11 @@ test('IPC failure distinguishes running, starting, unknown and explicitly stoppe
         ? { ok: true, version: 'fixture', serviceRunning: false, ipcReachable: false, serviceState: state }
         : { ok: false }); }
     });
-    vm.runInContext(coverageCode() + '\n' + sourceOf('loadStatus'), context);
+    vm.runInContext(statusCode(), context);
     context.loadStatus();
-    assert.equal(elements['status-text'].textContent, label);
-    assert.equal(elements['ov-status'].textContent, overview);
-    assert.notEqual(elements['status-badge'].className, 'status-badge active');
+    assert.equal(verdictOf(elements), verdict, state);
+    assert.match(elements['hero-title'].textContent, title, state);
+    assert.notEqual(elements['side-status-text'].textContent, 'Protected', state);
   }
 });
 

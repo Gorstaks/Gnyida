@@ -50,9 +50,9 @@ namespace Sentinel.Tests
             var after = new Dictionary<string, string> { ["home"] = "https://evil", ["search"] = "https://s", ["new"] = "y" };
             var changes = BrowserRedirectGuard.Diff(before, after);
             Assert.Equal(3, changes.Count);
-            Assert.Contains(changes, c => c.StartsWith("home changed"));
-            Assert.Contains(changes, c => c.StartsWith("new added"));
-            Assert.Contains(changes, c => c.StartsWith("gone removed"));
+            Assert.Contains(changes, c => c.StartsWith("home changed", StringComparison.Ordinal));
+            Assert.Contains(changes, c => c.StartsWith("new added", StringComparison.Ordinal));
+            Assert.Contains(changes, c => c.StartsWith("gone removed", StringComparison.Ordinal));
         }
 
         [Fact]

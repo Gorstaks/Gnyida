@@ -204,7 +204,7 @@ namespace Sentinel.Core
                 }
                 catch { continue; }
 
-                var bare = name.EndsWith(".exe") ? name[..^4] : name;
+                var bare = name.EndsWith(".exe", StringComparison.Ordinal) ? name[..^4] : name;
                 if (PackageManagers.Contains(name) || PackageManagers.Contains(bare))
                     _pkgSessions[pid] = now;
             }

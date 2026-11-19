@@ -33,6 +33,11 @@ namespace Sentinel.Tests
             var html = RepoFile("src", "Sentinel.Agent", "DashboardHtml.cs");
             Assert.DoesNotContain("var EMBEDDED_TOKEN", html);
             Assert.Contains("public static string GetHtml()", html);
+            // The page itself moved to an embedded resource; the same guarantee has to hold there.
+            var page = RepoFile("src", "Sentinel.Agent", "Dashboard", "dashboard.html");
+            Assert.DoesNotContain("var EMBEDDED_TOKEN", page);
+            Assert.DoesNotContain("_bearerToken", page);
+            Assert.Contains("sessionStorage", page);
 
             var service = RepoFile("src", "Sentinel.Agent", "WebDashboardService.cs");
             Assert.DoesNotContain("GetHtml(_bearerToken)", service);

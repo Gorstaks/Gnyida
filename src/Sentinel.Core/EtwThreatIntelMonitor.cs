@@ -117,6 +117,8 @@ namespace Sentinel.Core
                         await ScanOneProcessThreadsAsync(proc, ct).ConfigureAwait(false);
                     }
                     await ScanOneProcessPayloadAsync(proc, ct).ConfigureAwait(false);
+                    // A periodic-sweep mark is spent once the process has been looked at.
+                    InjectionSuspectBoard.ClearWeak(pid, InjectionSuspectBoard.MarkKind.Sweep);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                 catch (Exception ex) { _logger.LogDebug(ex, "Injection candidate PID {Pid} could not be inspected", pid); }
@@ -298,6 +300,8 @@ namespace Sentinel.Core
                 if (_payloadAlertedPids.TryGetValue(key, out var last) &&
                     DateTimeOffset.UtcNow - last < PayloadEvidenceCooldown) return;
 
+                // A mark with no Threat-Intelligence evidence behind it (a periodic sweep) must not page anything in.
+                bool weak = InjectionSuspectBoard.IsWeakOnly(proc.Id);
                 var payloads = UnbackedPeScanner.Scan(address =>
                 {
                     var pointer = new IntPtr(unchecked((long)address));
@@ -305,6 +309,7 @@ namespace Sentinel.Core
                         ? (NativeProcessMemory.MEMORY_BASIC_INFORMATION?)null : region;
                 }, address =>
                 {
+                    if (weak && !ModuleStompTriage.IsResident(handle, unchecked((long)address))) return null;
                     var header = new byte[4096];
                     if (!NativeProcessMemory.CopyRemote(handle, new IntPtr(unchecked((long)address)), header, out int count)) return null;
                     if (count != header.Length) Array.Resize(ref header, count);

@@ -196,7 +196,7 @@ namespace Sentinel.Core
 
             // Windows always appends a parenthetical reason for unknown/failed USB devices.
             // Require the parenthesis so we never match an invented bare "Unknown USB Device".
-            if (name.StartsWith("Unknown USB Device ("))
+            if (name.StartsWith("Unknown USB Device (", StringComparison.Ordinal))
                 return true;
 
             return false;
@@ -589,7 +589,7 @@ namespace Sentinel.Core
                 // Available on Windows 10 1809+ and Windows Server 2019+
                 var psi = new ProcessStartInfo
                 {
-                    FileName = "pnputil.exe",
+                    FileName = SystemTools.System32("pnputil.exe"),
                     Arguments = $"/remove-device \"{deviceInstanceId}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
@@ -785,12 +785,12 @@ namespace Sentinel.Core
                     if (parts.Length >= 2)
                     {
                         var hardwareId = parts[1];
-                        var vidIdx = hardwareId.IndexOf("VID_");
+                        var vidIdx = hardwareId.IndexOf("VID_", StringComparison.Ordinal);
                         if (vidIdx != -1 && hardwareId.Length >= vidIdx + 8)
                         {
                             vid = hardwareId.Substring(vidIdx + 4, 4);
                         }
-                        var pidIdx = hardwareId.IndexOf("PID_");
+                        var pidIdx = hardwareId.IndexOf("PID_", StringComparison.Ordinal);
                         if (pidIdx != -1 && hardwareId.Length >= pidIdx + 8)
                         {
                             pid = hardwareId.Substring(pidIdx + 4, 4);

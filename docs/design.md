@@ -393,7 +393,7 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 | Component | Mechanism | Notes |
 |-----------|-----------|-------|
 | `TrayIconService` | System tray NotifyIcon; **Settings** / double-click opens native `AgentDashboardForm` with embedded browser. **No** `ShowBalloonTip` | WinForms STA |
-| `AgentDashboardForm` | Thin browser shell hosting `http://localhost:19845` (WebDashboardService). **v3.0.6:** prefers Edge/Chromium `WebView2` (profile under `%LocalAppData%\Sentinel\WebView2`; DevTools/context-menu/new-window locked down); falls back to the legacy `WebBrowser` (IE11 Edge emulation) if the WebView2 Runtime is absent. **v3.2.6:** probes the runtime first (`GetAvailableBrowserVersionString`) and skips WebView2 entirely when absent — no faulting `CreateAsync` task, no `UnobservedTaskException` spam — logging one report to `agent_runtime.log` and marking the window title `(legacy browser)`. **v2.2.9+:** replaces the old WinForms sidebar panels | WinForms STA |
+| `AgentDashboardForm` | Thin browser shell hosting `http://localhost:19845` (WebDashboardService). **v3.0.6:** prefers Edge/Chromium `WebView2` (profile under `%LocalAppData%\Sentinel\WebView2`; DevTools/context-menu/new-window locked down); falls back to the legacy `WebBrowser` (IE11 Edge emulation) if the WebView2 Runtime is absent. **v3.9.0:** the IE11 fallback is removed; without WebView2 the form shows a native panel that installs the Evergreen Runtime per user (Microsoft bootstrapper, Authenticode-verified, random temp folder; `WebView2Installer`). **v3.2.6:** probes the runtime first (`GetAvailableBrowserVersionString`) and skips WebView2 entirely when absent — no faulting `CreateAsync` task, no `UnobservedTaskException` spam — logging one report to `agent_runtime.log` and marking the window title `(legacy browser)`. **v2.2.9+:** replaces the old WinForms sidebar panels | WinForms STA |
 | `WebDashboardService` | Loopback HTTP dashboard + REST API + WebSocket on localhost:19845. Bearer token auth. Serves `DashboardHtml` at GET / | BackgroundService |
 | `DashboardHtml` | Self-contained HTML/CSS/JS served by WebDashboardService - the full dashboard UI | Static class |
 | `ScreenCaptureMonitor` | Detects DXGI desktop duplication + transparent overlay phishing windows | 15-25s |
@@ -832,8 +832,9 @@ The table below records the former implementation, not current runtime behavior.
 | Item | Value |
 |------|--------|
 | Entry | Tray **Settings** (bold) / double-click |
-| Form | `AgentDashboardForm` - thin WebBrowser shell hosting embedded web dashboard on localhost:19845 |
-| Pages | Overview - Events - System Scan - Quarantine - Report to Police - Safety - Ops Metrics - Tools - About |
+| Form | `AgentDashboardForm` - WebView2 shell hosting the embedded dashboard on localhost:19845 (no IE11 fallback since 3.9.0) |
+| Page | `src/Sentinel.Agent/Dashboard/dashboard.html`, an embedded resource served by `DashboardHtml.GetHtml()`; light and dark theme follow Windows unless chosen in the sidebar |
+| Pages | Protection: Overview, Activity, Scan, Quarantine - Tools: Program inspector, Personal safety, Report to police - System: Protection health, Diagnostics, About |
 | Filing | Edit affidavit in web UI -> Save Affidavit API call -> Send Report opens national portal link; pack folder path shown |
 | Prefs | `%LocalAppData%\Sentinel\user_report_prefs.json` |
 | Not exposed | ActiveResponse toggle (service-only); balloon tips |
@@ -1170,7 +1171,7 @@ payload pointers are copied into bounded owned storage before callback return, w
 queue loss/busy handlers disclosed. File walks avoid unconditional settling delays for
 stable files, skip reparse directories and retain incomplete-coverage evidence. The
 summary-first dashboard keeps full sensor details searchable behind explicit controls
-supported by the legacy browser. See [scope and tests](RELEASE_3.4.2.md).
+that need no native `<details>` element. See [scope and tests](RELEASE_3.4.2.md).
 
 
 ## Detection and ETW reliability (3.4.3)

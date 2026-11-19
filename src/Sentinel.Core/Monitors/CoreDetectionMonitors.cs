@@ -814,7 +814,7 @@ namespace Sentinel.Core
             }
 
             // Check for UNC path (\\server\share)
-            if (filePath.StartsWith(@"\\") && !filePath.StartsWith(@"\\?\"))
+            if (filePath.StartsWith(@"\\", StringComparison.Ordinal) && !filePath.StartsWith(@"\\?\", StringComparison.Ordinal))
             {
                 return ("SMB", true);
             }

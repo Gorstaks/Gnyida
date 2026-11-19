@@ -311,12 +311,12 @@ namespace Sentinel.Core
         internal static bool IsNonPublicRemote(string ip)
         {
             if (string.IsNullOrEmpty(ip)) return true;
-            if (ip.StartsWith("127.") || ip.StartsWith("0.") || ip == "0.0.0.0") return true;
-            if (ip.StartsWith("10.")) return true;
-            if (ip.StartsWith("192.168.")) return true;
-            if (ip.StartsWith("169.254.")) return true;
+            if (ip.StartsWith("127.", StringComparison.Ordinal) || ip.StartsWith("0.", StringComparison.Ordinal) || ip == "0.0.0.0") return true;
+            if (ip.StartsWith("10.", StringComparison.Ordinal)) return true;
+            if (ip.StartsWith("192.168.", StringComparison.Ordinal)) return true;
+            if (ip.StartsWith("169.254.", StringComparison.Ordinal)) return true;
             // 172.16.0.0 - 172.31.255.255
-            if (ip.StartsWith("172."))
+            if (ip.StartsWith("172.", StringComparison.Ordinal))
             {
                 var parts = ip.Split('.');
                 if (parts.Length >= 2 && int.TryParse(parts[1], out var second) && second >= 16 && second <= 31)

@@ -206,9 +206,9 @@ namespace Sentinel.Core
                     bool isFullDrive = !string.IsNullOrEmpty(share.Path) &&
                         share.Path!.Length <= 3 && share.Path.IndexOf(':') >= 0;
                     bool isSystemPath = !string.IsNullOrEmpty(share.Path) &&
-                        (share.Path!.StartsWith(@"C:\Windows") ||
-                         share.Path.StartsWith(@"C:\Users") ||
-                         share.Path.StartsWith(@"C:\Program"));
+                        (share.Path!.StartsWith(@"C:\Windows", StringComparison.Ordinal) ||
+                         share.Path.StartsWith(@"C:\Users", StringComparison.Ordinal) ||
+                         share.Path.StartsWith(@"C:\Program", StringComparison.Ordinal));
 
                     var confidence = isFullDrive ? 0.95 : isSystemPath ? 0.88 : 0.75;
 
@@ -242,7 +242,7 @@ namespace Sentinel.Core
                     // Auto-delete the unauthorized share
                     try
                     {
-                        var psi = new ProcessStartInfo("net.exe", $"share \"{share.Name}\" /delete /yes")
+                        var psi = new ProcessStartInfo(SystemTools.System32("net.exe"), $"share \"{share.Name}\" /delete /yes")
                         {
                             CreateNoWindow = true,
                             UseShellExecute = false,

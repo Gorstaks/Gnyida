@@ -66,7 +66,7 @@ namespace Sentinel.Core
 
                     // Only apply production ACLs if this is the default production path in CommonApplicationData
                     var prodDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Sentinel");
-                    if (directory.StartsWith(prodDir))
+                    if (directory.StartsWith(prodDir, StringComparison.OrdinalIgnoreCase))
                     {
                         // v2.0.8: SYSTEM + Admins full; Interactive Users read (tray Agent UI).
                         // Not Builtin\Users - service accounts / non-interactive malware must not

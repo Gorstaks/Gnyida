@@ -689,7 +689,7 @@ namespace Sentinel.Core
                     { confidence += 0.55; reasoning += " DLL path in a user-writable directory."; }
                     if (lowerPath.Contains(@"\downloads\") || lowerPath.Contains(@"\desktop\"))
                     { confidence += 0.45; reasoning += " DLL path in Downloads or Desktop."; }
-                    if (!lowerPath.StartsWith(@"c:\windows\") && !lowerPath.StartsWith(@"c:\program files"))
+                    if (!lowerPath.StartsWith(@"c:\windows\", StringComparison.Ordinal) && !lowerPath.StartsWith(@"c:\program files", StringComparison.Ordinal))
                     { confidence += 0.20; reasoning += " DLL is not in a standard system or program directory."; }
 
                     if (confidence >= 0.50)

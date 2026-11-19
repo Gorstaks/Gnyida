@@ -828,7 +828,7 @@ namespace Sentinel.Core
 
         private static bool IsLoopback(string ip)
         {
-            return ip == "127.0.0.1" || ip == "0.0.0.0" || ip.StartsWith("127.");
+            return ip == "127.0.0.1" || ip == "0.0.0.0" || ip.StartsWith("127.", StringComparison.Ordinal);
         }
 
         // 
