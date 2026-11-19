@@ -1,7 +1,7 @@
 # Sentinel
 
 Userland endpoint detection and response (EDR) for Windows. Sentinel runs entirely in
-user mode — no kernel driver, no rootkit — yet fuses real-time telemetry from ten ETW
+user mode — no kernel driver, no rootkit — yet fuses real-time telemetry from eleven ETW
 providers (process, image load, file, registry, DNS, network, PowerShell script-block,
 firewall, task scheduler, WMI activity, and the Microsoft Threat-Intelligence provider)
 with behavioral rules, weighted multi-signal correlation, and offline ML scoring for PE,
@@ -20,7 +20,7 @@ Sentinel is online-capable. The Service performs bounded HTTPS hash reputation c
 [NanoAV coverage is integrated into Sentinel](docs/NANOAV.md): scanning, reputation and socket-shell behavior use Sentinel's policy/audit pipeline. The old independent executable is retired during upgrade; original source and recovery data are preserved. Single decisive Tier1 behavior responds immediately; weak hints never become kill authority merely by accumulating a score.
 
 **Platform:** Windows 10/11 x64 - .NET Framework 4.8
-**Version:** 3.8.0 (single source of truth: `version.txt`)
+**Version:** 3.8.3 (single source of truth: `version.txt`)
 
 3.4.5 integrates NanoAV coverage, fixes heuristic certificate removal, separates privacy observations from terminal behavior, and corrects inbound-only firewall policy. Approved DNS policy can reconcile automatically; IPsec/DNS/route configuration changes are monitored. See the [release scope](docs/RELEASE_3.4.5.md) and [red/blue review](docs/AUDIT_3.4.5.md).
 
@@ -28,8 +28,6 @@ Sentinel targets standalone userland endpoint protection; another antivirus is o
 Current standalone antivirus gaps, implemented mechanisms and validation limits are listed
 in the [capability matrix](docs/CAPABILITY_MATRIX.md). This release does not establish full
 Defender or commercial-product parity.
-
-For collection status, known telemetry limits, and the Windows verification probe, see [monitor health](docs/monitor-health.md).
 
 Public PoC metadata and actively exploited vulnerability triage:
 [offline exploit intelligence](tools/exploit-intelligence/README.md). This separate
@@ -51,8 +49,7 @@ On-demand investigation reports and hardening status:
 Credential-read and script telemetry coverage, including explicit limitations:
 [2026 attack coverage](docs/ATTACK_COVERAGE_2026.md).
 
-Engineering assessment, provisional subsystem ratings and remaining validation:
-[quality review](docs/QUALITY_REVIEW.md). Offline replay, evidence verification,
+Offline replay, evidence verification,
 restore inspection and private exports: [diagnostics](tools/Sentinel.Diagnostics/README.md).
 
 ## Legal Disclaimer

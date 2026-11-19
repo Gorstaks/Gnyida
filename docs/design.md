@@ -15,7 +15,7 @@ DNS collection subscribes to query-start events 3006 from the shared real-time D
 
 Task liveness and successful collection are independent. Worker-owned progress snapshots carry scope, successful cycles, observations and errors. Supervisor ticks cannot clear collection errors. Watchdog scheduling grace is bounded and does not alter historical heartbeat evidence. File watching remains supervised after its initial walk; watcher errors fault the worker for group recovery and reconciliation. Explicit one-time loaders/cleanup operations finish as Completed; unsupported workers remain Unavailable; the process fallback is Standby while kernel-process ETW works. The dashboard retains the registered roster and keeps unverified or failed collection visible.
 
-The local injection scanner is registered in the monitor collection and does not consume the legacy feed URL. Successful scan cycles do not prove that the protected Threat-Intelligence provider supplied events. Provider access denial, native ETW loss and target-image limitations remain separately visible. See [monitor health](monitor-health.md) for evidence and Windows verification.
+The local injection scanner is registered in the monitor collection and does not consume the legacy feed URL. Successful scan cycles do not prove that the protected Threat-Intelligence provider supplied events. Provider access denial, native ETW loss and target-image limitations remain separately visible.
 
 ## Kill-authority and IPC boundary hardening (3.3.5)
 
@@ -1072,8 +1072,7 @@ incident-summary checkpoints can be anchored by the Worker in KV. `DetectionRepl
 reuses weighted correlation with an injected historical clock and no response engine.
 `RestoreTransaction` journals explicit restores and retains the vault. The diagnostic
 CLI verifies chains/manifests, inspects interrupted restores and exports allowlisted,
-redacted investigation copies. See `tools/Sentinel.Diagnostics/README.md` for contracts
-and `docs/QUALITY_REVIEW.md` for limits, ratings and remaining validation.
+redacted investigation copies. See `tools/Sentinel.Diagnostics/README.md` for contracts.
 
 
 ## Log-derived reliability corrections
