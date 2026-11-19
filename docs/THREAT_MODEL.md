@@ -238,6 +238,7 @@ cannot patch these kernel primitives; apply OS updates.
 |------------|------|----------------------|
 | TokenIntegrityMonitor (integrity jump) | User-session process from a user-writable image now holding a **SYSTEM-integrity token** - the footprint of a completed LPE. Kill-grade `TokenTheft` (Tier1). | The kernel/driver LPE patch itself |
 | ClfsExploitationMonitor | CLFS Base Log File (`.blf`) dropped in a staging path outside the legit CLFS/TxR trees (CVE-2025-29824-class). **Observe-only** (Tier2/WeakObserveSeed) - a drop is not proof. | The `clfs.sys` patch |
+| ClfsExploitationMonitor (SignDrop, 3.8.2) | CLFS authentication companion file (`.cnpf`) outside the legit CLFS trees, scanned in staging folders and the `Common Files\microsoft shared\ink` folder, plus a posture event when the CLFS authentication Mode is 2 or 3. **Observe-only** (Tier2/WeakObserveSeed); kill-grade only through the same integrity-jump composite. Does not see the object-manager symlink or the Defender RPC call, and misses a `.cnpf` redirected to any other folder. | The Microsoft fix (none at 3.8.2) |
 
 Composite: `CLFS Privilege Escalation Chain` / `CVE Exploit + Privilege Gain Chain` - a CLFS `.blf`
 leg (or a confirmed integrity jump) correlated with a same-actor privilege gain / CVE-exploit leg

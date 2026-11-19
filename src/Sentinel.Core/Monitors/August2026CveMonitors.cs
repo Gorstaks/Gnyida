@@ -713,6 +713,8 @@ namespace Sentinel.Core
                 try
                 {
                     await ScanStagingForBlfAsync(ct).ConfigureAwait(false);
+                    await ScanForCnpfAsync(ct).ConfigureAwait(false);
+                    await CheckAuthenticationModeAsync(ct).ConfigureAwait(false);
                     await Task.Delay(ScanInterval, ct).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
@@ -745,7 +747,146 @@ namespace Sentinel.Core
                    path.IndexOf(@"\PerfLogs\", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private async Task ScanStagingForBlfAsync(CancellationToken ct)
+        /// <summary>
+        /// True when a path is a CLFS authentication companion file (.cnpf) outside the legitimate
+        /// CLFS trees. SignDrop (Nov 2026) makes a privileged process (Defender's update engine)
+        /// open an attacker-prepared log, so CLFS creates the .cnpf file as SYSTEM at a path the
+        /// attacker redirected with an object-manager symlink. The file lands wherever the attacker
+        /// points it, which can be a trusted-looking folder, so this check is "not in a legitimate
+        /// CLFS tree" and not "in a staging folder". The scan roots (see ScanForCnpfAsync) are the
+        /// location anchor; the attacker-controlled file name alone authorizes nothing.
+        /// </summary>
+        internal static bool IsSuspiciousCnpfPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            if (!path.EndsWith(".cnpf", StringComparison.OrdinalIgnoreCase)) return false;
+            return !IsLegitimateClfsTree(path);
+        }
+        private static bool IsLegitimateClfsTree(string path) =>
+            path.IndexOf(@"\System32\config", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            path.IndexOf(@"\System32\SMI", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            path.IndexOf(@"\$Txf", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            path.IndexOf(@"\TxR", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            path.IndexOf(@"\Microsoft\Search", StringComparison.OrdinalIgnoreCase) >= 0;
+        /// <summary>
+        /// CLFS authentication Mode 2 (admin disabled) or 3 (system disabled) turns the mitigation
+        /// off, which lets CLFS parse unauthenticated logs again (the memory-corruption class the
+        /// mitigation exists to stop). Modes 0 (enforce) and 1 (learning) are the shipped states.
+        /// </summary>
+        internal static bool IsAuthenticationMitigationDisabled(int? mode) => mode == 2 || mode == 3;
+        internal static int? ReadAuthenticationMode()
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\CLFS\Authentication");
+            return key?.GetValue("Mode") is int mode ? mode : (int?)null;
+        }
+        private Task CheckAuthenticationModeAsync(CancellationToken ct)
+        {
+            if (ct.IsCancellationRequested) return Task.CompletedTask;
+            int? mode;
+            try { mode = ReadAuthenticationMode(); }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "[ClfsExploitationMonitor] CLFS authentication mode unreadable");
+                return Task.CompletedTask;
+            }
+            if (!IsAuthenticationMitigationDisabled(mode)) return Task.CompletedTask;
+            if (!ShouldAlert("clfs-auth-mode:" + mode)) return Task.CompletedTask;
+            // Posture only: the rule name deliberately avoids the "CLFS" token and carries no CVE
+            // metadata, so the correlation engine does not treat it as an exploit-attempt leg.
+            return _detectionEngine.EmitAsync(new DetectionEvent
+            {
+                RuleName = "Posture: Common Log File System Authentication Mitigation Disabled",
+                Evidence = $"HKLM\\SYSTEM\\CurrentControlSet\\Services\\CLFS\\Authentication Mode = {mode}",
+                Reasoning =
+                    "The Common Log File System authentication mitigation is off (Mode 2 = administrator " +
+                    "disabled, 3 = system disabled). CLFS then parses unauthenticated log files again, which " +
+                    "re-opens the kernel memory-corruption class (CVE-2025-29824 and similar) the mitigation was " +
+                    "added to stop. Setting it off does not protect against SignDrop either. Restore Mode 0 or 1. " +
+                    "Observe-only; changing it needs an administrator.",
+                Confidence = 0.6,
+                Tier = DetectionTier.Tier2Indicator,
+                AuthorizedResponse = ResponseAction.LogOnly,
+                ProcessName = "SYSTEM",
+                ProcessId = 0,
+                SignalType = SignalType.SecurityEvasion,
+                Metadata = new Dictionary<string, string>
+                {
+                    ["Mode"] = mode!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["Technique"] = "T1562 (Impair Defenses)",
+                }
+            });
+        }
+        private async Task ScanForCnpfAsync(CancellationToken ct)
+        {
+            var roots = new List<string>();
+            try
+            {
+                var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                roots.Add(Path.Combine(windows, "..", "Users", "Public"));
+                roots.Add(Path.Combine(windows, "..", "PerfLogs"));
+                // The public write-up redirects the SYSTEM-created file into the "ink" folder to
+                // sideload a DLL during UAC prompt creation; a .cnpf has no business there.
+                roots.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles), "microsoft shared", "ink"));
+                var users = Path.GetFullPath(Path.Combine(windows, "..", "Users"));
+                if (Directory.Exists(users))
+                {
+                    foreach (var profile in Directory.GetDirectories(users))
+                    {
+                        var leaf = Path.GetFileName(profile);
+                        if (leaf.Equals("Default", StringComparison.OrdinalIgnoreCase) ||
+                            leaf.Equals("Default User", StringComparison.OrdinalIgnoreCase) ||
+                            leaf.StartsWith("All Users", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        roots.Add(Path.Combine(profile, "Downloads"));
+                        roots.Add(Path.Combine(profile, "AppData", "Local", "Temp"));
+                    }
+                }
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ClfsExploitationMonitor] .cnpf scan roots unavailable"); }
+            foreach (var dir in roots)
+            {
+                if (ct.IsCancellationRequested) break;
+                string fullDir;
+                try { fullDir = Path.GetFullPath(dir); } catch { continue; }
+                if (!Directory.Exists(fullDir)) continue;
+                string[] files;
+                try { files = Directory.GetFiles(fullDir, "*.cnpf", SearchOption.TopDirectoryOnly); }
+                catch (Exception ex) { _logger.LogDebug(ex, "[ClfsExploitationMonitor] .cnpf listing failed for {Dir}", fullDir); continue; }
+                foreach (var file in files)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    if (!IsSuspiciousCnpfPath(file)) continue;
+                    if (!ShouldAlert("cnpf:" + file.ToLowerInvariant())) continue;
+                    await _detectionEngine.EmitAsync(new DetectionEvent
+                    {
+                        RuleName = "CVE Class: CLFS Authentication File (.cnpf) Outside CLFS Trees",
+                        Evidence = $"CLFS authentication companion file (.cnpf) at '{file}'",
+                        Reasoning =
+                            "A CLFS authentication companion file (.cnpf) exists outside the legitimate CLFS/TxR " +
+                            "locations. SignDrop-style exploits coerce a privileged process (Defender's update " +
+                            "engine) to open an attacker-prepared log, so CLFS creates this file as SYSTEM at a path " +
+                            "the attacker redirected with an object-manager symlink, then the user writes to it to " +
+                            "reach SYSTEM. Observe-only on its own. It becomes kill-grade only when the same " +
+                            "process/ancestry then jumps to SYSTEM integrity (the 'CLFS Privilege Escalation " +
+                            "Chain' composite). No Microsoft fix exists at time of writing; keep the CLFS " +
+                            "authentication mitigation enabled.",
+                        Confidence = 0.72,
+                        Tier = DetectionTier.Tier2Indicator,
+                        AuthorizedResponse = ResponseAction.LogOnly,
+                        ProcessName = "SYSTEM",
+                        ProcessId = 0,
+                        SignalType = SignalType.SecurityEvasion,
+                        Metadata = new Dictionary<string, string>
+                        {
+                            ["CVE"] = August2026CveHeuristics.CveClfs,
+                            ["Path"] = file,
+                            ["Technique"] = "T1068 (Exploitation for Privilege Escalation)",
+                            ["WeakObserveSeed"] = "true",
+                        }
+                    }).ConfigureAwait(false);
+                }
+            }
+        }        private async Task ScanStagingForBlfAsync(CancellationToken ct)
         {
             var roots = new List<string>();
             try
