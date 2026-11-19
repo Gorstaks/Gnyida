@@ -861,6 +861,7 @@ namespace Sentinel.Service
                             ("LegacyHiveMonitor",               s => s.GetRequiredService<LegacyHiveMonitor>()),
                             ("CloudFilesHydrationMonitor",      s => s.GetRequiredService<CloudFilesHydrationMonitor>()),
                             ("ClfsExploitationMonitor",         s => s.GetRequiredService<ClfsExploitationMonitor>()),
+                            ("ExploitShieldPostureMonitor",     s => s.GetRequiredService<ExploitShieldPostureMonitor>()),
                             ("StateReconciliationMonitor",      s => s.GetRequiredService<StateReconciliationMonitor>()),
                             ("HostIntegrityInventoryMonitor",    s => s.GetRequiredService<HostIntegrityInventoryMonitor>()),
                             ("TrustedHostModuleIntegrityMonitor", s => s.GetRequiredService<TrustedHostModuleIntegrityMonitor>()),
@@ -928,6 +929,7 @@ namespace Sentinel.Service
                     services.AddSingleton<LegacyHiveMonitor>();
                     services.AddSingleton<CloudFilesHydrationMonitor>();
                     services.AddSingleton<ClfsExploitationMonitor>();
+                    services.AddSingleton<ExploitShieldPostureMonitor>();
 
                     //  Group 6: Peripheral & Environmental 
                     // Starts late (30s). Monitors hardware peripherals and external media.

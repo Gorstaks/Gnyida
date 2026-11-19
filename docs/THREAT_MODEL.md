@@ -31,6 +31,15 @@ audit and update revalidation limit that boundary. The task respects configured
 update policy and does not request a reboot. Feed failure, manual requirements,
 reboot-pending and failed/unverified installs remain explicit. No guarantee is
 made for unknown/no-fix exploits or applications outside the update catalog.
+
+Posture feed (3.8.3): the companion's `posture.json` reaches the Service as Tier2
+LogOnly patch-posture events only. An attacker who could write it could hide or
+invent missing fixes, so the Service ignores it unless the file and folder are
+owned by Administrators/SYSTEM, grant no other writer and are not reparse points
+(failing closed with an "untrusted" event). Its CVE lists come from internet
+metadata, so posture events carry no `CVE` key and cannot become an exploit leg
+in correlation or authorize any response. A no-CVE zero-day (for example SignDrop)
+never appears in it.
 See [operation and native validation gaps](../tools/Sentinel.ExploitShield/README.md).
 
 ## Current runtime boundary (3.4.5)

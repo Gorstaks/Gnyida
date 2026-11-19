@@ -6,7 +6,10 @@ Windows Update/WSUS supplies applicability and security packages. Injection of
 feed, update and audit interfaces keeps planning testable without network/admin
 access. Update metadata is revalidated and outcomes read back before remediation
 is recorded. Core detection tiers, removed reporting transports and response dispatch remain
-separate. See [automatic maintenance details and limits](../tools/Sentinel.ExploitShield/README.md).
+separate. Since 3.8.3 the companion writes a per-cycle `posture.json` (state plus a diff
+against the previous cycle) into its protected folder, and the Service's
+`ExploitShieldPostureMonitor` turns it into Tier2 LogOnly patch-posture events after an
+owner/DACL/reparse check. See [automatic maintenance details and limits](../tools/Sentinel.ExploitShield/README.md).
 
 DNS collection subscribes to query-start events 3006 from the shared real-time DNS provider. The dispatcher also handles completion events 3008; server-configuration IDs 1001/1002 are not query telemetry. A bounded queue connects the dispatcher to `DnsQueryMonitor`; overflow is counted and reported without discarding the available batch. Structured `QueryName` event-log reads provide fallback when the real-time provider/consumer is unavailable. Source transitions can create a coverage gap and are logged; missing/denied channels do not become an imaginary cache fallback.
 
