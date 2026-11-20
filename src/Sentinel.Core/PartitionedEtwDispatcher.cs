@@ -12,11 +12,17 @@ namespace Sentinel.Core
     {
         private readonly BoundedEtwDispatcher[] _lanes;
         private readonly long[] _drops = new long[4];
-        internal PartitionedEtwDispatcher(Action<Exception> failure, int laneCapacity = 2048, long laneByteLimit = 4 * 1024 * 1024)
+        // The file lane absorbs bursty Kernel-File traffic (installers, builds, scans). A scale
+        // above 1 enlarges only that lane; capacity and bytes stay bounded, so memory is capped.
+        internal PartitionedEtwDispatcher(Action<Exception> failure, int laneCapacity = 2048, long laneByteLimit = 4 * 1024 * 1024, int fileLaneScale = 1)
         {
+            if (fileLaneScale < 1) throw new ArgumentOutOfRangeException(nameof(fileLaneScale));
             _lanes = new BoundedEtwDispatcher[4];
             for (int i = 0; i < _lanes.Length; i++)
-                _lanes[i] = new BoundedEtwDispatcher(failure, laneCapacity, laneByteLimit);
+            {
+                int scale = i == 1 ? fileLaneScale : 1;
+                _lanes[i] = new BoundedEtwDispatcher(failure, laneCapacity * scale, laneByteLimit * scale);
+            }
         }
         internal static int Lane(Guid provider) => provider == UnifiedEtwSession.Providers.KernelProcess ? 0 :
             provider == UnifiedEtwSession.Providers.KernelFile ? 1 :

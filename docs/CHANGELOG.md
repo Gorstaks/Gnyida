@@ -1,5 +1,11 @@
 # Changelog
-## [3.9.0] - 2026-11-19
+## [3.8.5] - 2026-11-20
+### Fixed - ETW events dropped inside Sentinel during file bursts
+- On one machine 706 events were dropped inside Sentinel (Windows itself lost 0) out of 148 million processed, all in the file lane of `PartitionedEtwDispatcher`: a burst of Kernel-File events filled its 2048-event / 4 MB queue. Only that lane is now 8 times larger (16384 events / 32 MB; `fileLaneScale`), so memory stays bounded and the other lanes are unchanged. A burst larger than the new limit is still dropped and counted. Test: `ScaledFileLaneAbsorbsBurstThatOverflowsUnscaledLane`.
+### Changed - version numbering
+- The 3.8.4 changes below have no release of their own; they ship in 3.8.5, so the one-patch-per-release rule holds.
+
+## [3.8.4] - 2026-11-19
 ### Changed - settings window redesigned
 - New look for every page: light and dark themes that follow the Windows setting (or a choice in the sidebar), a grouped menu (Protection, Tools, System) and plain-language page names: Activity, Scan, Quarantine, Program inspector, Personal safety, Report to police, Protection health, Diagnostics, About.
 - **Overview** opens with one status in plain words, with one button for the obvious next step: *You're protected*, *Sentinel is running, with some limits*, *needs attention*, *is starting* or *isn't running*. "Protected" is shown only when the service runs, its firewall rules are in place and every feature confirmed it is collecting data. On a PC where Windows denies Sentinel the Threat-Intelligence provider, the honest state is "running, with some limits". The technical detail (task counts, collection checks) is in the status card's tooltip and on Protection health.
@@ -28,7 +34,7 @@
 ### Fixed - test suite
 - `tests/Sentinel.Tests/AuditRegressionTests.cs` had been overwritten in this release cycle, which removed six committed regression tests. It is restored, and the new tests are in `LocaleAndLaunchAuditTests.cs`.
 - `tests/dashboard-response.test.cjs` reads the new page and checks the new status card against the same rules as before: an unverified firewall, missing health data, unverified collection or a failed collector never shows "Protected", a late reply cannot erase a newer failure, and the status reply alone cannot show "Protected" before health arrives. The CSS grid ban existed only for IE11; it is replaced by a check that the IE11 fallback is gone. The test caught one real defect during the redesign: with an empty sensor list and 130 unverified collections in the totals, "Things to check" said "All running and confirmed".
-### Testing (3.9.0)
+### Testing (3.8.4)
 - Solution build in Release with `-warnaserror`: 0 warnings, 0 errors. Full suite: 3,987 passed, 9 skipped, 2 failed out of 3,998. One failure, `ProcessLaunchHygieneTests.WaitForExitAsync_LeavesNothingRegisteredOnALongLivedToken`, counted registrations before the thread-pool continuation that releases them had run; the test now waits for it and passed 5 of 5 runs. The other is the intermittent `EndpointProtectionWindowsTests.CorrelatedVictimResponseVerifiesRealExitAndPreservesUnrelatedProcess` noted since 3.8.1.
 - Dashboard JavaScript tests (`tests/dashboard-response.test.cjs`): 36 of 36 passed. The redesigned page was rendered in headless Chrome against a mock API in the protected, limited, attention and stopped states, in light and dark, with no console errors.
 - The installer script compiles with Inno Setup 7 against stub payloads.
@@ -8273,7 +8279,7 @@ Addresses the 2026-05-25 attack where an attacker silently removed Sentinel over
 
 #### Sparse File Bomb Cleanup
 - Sparse file bombs (500GB deception files) are now deleted immediately after the 2-second pre-kill deception window completes. The bombs serve their purpose during the window (wasting attacker exfil bandwidth) and no longer persist on disk.
-- On service startup, any leftover sparse bombs from previous runs or older versions are automatically cleaned up. This handles upgrades from pre-3.9.0 versions that never cleaned them up.
+- On service startup, any leftover sparse bombs from previous runs or older versions are automatically cleaned up. This handles upgrades from pre-0.3.9 versions that never cleaned them up.
 - Added static `FileTrapTactic.CleanupSparseFileBombs()` method for both post-deception and startup cleanup.
 
 #### Threat Intelligence Reporting Enabled by Default
@@ -8284,8 +8290,8 @@ Addresses the 2026-05-25 attack where an attacker silently removed Sentinel over
 - No hardcoded API keys shipped - users provide their own if they want IP/URL reporting.
 
 ### Changed
-- Version bumped to 3.9.0 across all projects (Core, Service, Agent, Installer, version.txt)
-- All UserAgent strings updated to 3.9.0
+- Version bumped to 0.3.9 across all projects (Core, Service, Agent, Installer, version.txt)
+- All UserAgent strings updated to 0.3.9
 - All documentation updated (README, CHANGELOG, THREAT_MODEL)
 
 ---

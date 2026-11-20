@@ -317,7 +317,7 @@ namespace Sentinel.Core
                 {
                     Interlocked.Increment(ref _eventsDropped);
                     _logger.LogDebug(ex, "[UnifiedEtwSession] Analysis handler failed");
-                });
+                }, fileLaneScale: 8);
                 // Start the processing thread
                 _stopping = false;
                 _processingThread = new Thread(ProcessTraceThread)

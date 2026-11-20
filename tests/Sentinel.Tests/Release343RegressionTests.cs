@@ -112,6 +112,24 @@ namespace Sentinel.Tests
         }
 
         [Fact]
+        public void ScaledFileLaneAbsorbsBurstThatOverflowsUnscaledLane()
+        {
+            using var entered = new ManualResetEventSlim(); using var release = new ManualResetEventSlim();
+            using var dispatcher = new PartitionedEtwDispatcher(_ => { }, laneCapacity: 2, laneByteLimit: 1024, fileLaneScale: 4);
+            try
+            {
+                var file = new EtwRawEvent { ProviderId = UnifiedEtwSession.Providers.KernelFile };
+                Assert.True(dispatcher.TryDispatch(file, _ => { entered.Set(); release.Wait(TimeSpan.FromSeconds(10)); }));
+                Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+                // Capacity 2 * 4 = 8 slots: the in-flight event holds one, seven more fit, the next is dropped.
+                for (int i = 0; i < 7; i++) Assert.True(dispatcher.TryDispatch(file, _ => { }));
+                Assert.False(dispatcher.TryDispatch(file, _ => { }));
+                Assert.Equal(1, dispatcher.DropSnapshot()["File"]);
+            }
+            finally { release.Set(); }
+        }
+
+        [Fact]
         public void FileLaneRetainsNameReadOrder()
         {
             using var entered = new ManualResetEventSlim(); using var release = new ManualResetEventSlim();
