@@ -730,9 +730,7 @@ namespace Sentinel.Core
                 { continue; } // Identity unavailable: no new containment authority.
                 if (live != created) continue;
                 if (signals.Any(remote => remote.ProcessId == read.ProcessId &&
-                    (remote.SignalType == SignalType.NetworkC2 || remote.SignalType == SignalType.ReverseShell) &&
-                    remote.Tier == DetectionTier.Tier1Behavioral &&
-                    remote.Confidence >= ResponsePolicy.DefaultMinTier1Confidence &&
+                    (IsKillGradeRemoteControl(remote) || IsUnverifiedCommsUpload(remote)) &&
                     remote.Timestamp <= now && now - remote.Timestamp <= CorrelationWindow &&
                     remote.Timestamp.ToFileTimeUtc() >= created &&
                     !ResponsePolicy.IsWeakObserveSeed(remote) && !ResponsePolicy.IsNonCorrelatingObserveNoise(remote) &&
@@ -741,6 +739,19 @@ namespace Sentinel.Core
             }
             return false;
         }
+
+        private static bool IsKillGradeRemoteControl(DetectionEvent remote) =>
+            (remote.SignalType == SignalType.NetworkC2 || remote.SignalType == SignalType.ReverseShell) &&
+            remote.Tier == DetectionTier.Tier1Behavioral &&
+            remote.Confidence >= ResponsePolicy.DefaultMinTier1Confidence;
+
+        // Observe-only comms-platform upload from a process that is not a verified Discord/Telegram/Slack
+        // identity (any folder, any name). Only the Sentinel monitor sets the marker; it is never a solo kill.
+        private static bool IsUnverifiedCommsUpload(DetectionEvent remote) =>
+            remote.Tier == DetectionTier.Tier2Indicator &&
+            remote.Metadata != null &&
+            remote.Metadata.TryGetValue(UserlandProtocolHeuristics.CommsUnstagedMarker, out var marker) &&
+            marker == "true";
 
         internal static bool HasInjectedCredentialRead(IReadOnlyList<DetectionEvent> signals, Func<int, long>? liveCreation = null)
             => TryGetInjectedCredentialRead(signals, liveCreation, out _);

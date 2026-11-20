@@ -2,6 +2,10 @@
 ## [3.8.5] - 2026-11-20
 ### Fixed - ETW events dropped inside Sentinel during file bursts
 - On one machine 706 events were dropped inside Sentinel (Windows itself lost 0) out of 148 million processed, all in the file lane of `PartitionedEtwDispatcher`: a burst of Kernel-File events filled its 2048-event / 4 MB queue. Only that lane is now 8 times larger (16384 events / 32 MB; `fileLaneScale`), so memory stays bounded and the other lanes are unchanged. A burst larger than the new limit is still dropped and counted. Test: `ScaledFileLaneAbsorbsBurstThatOverflowsUnscaledLane`.
+### Fixed - Discord/Telegram stealers run from outside Temp and Downloads
+- A stealer that posts to a Discord or Telegram webhook was only recognised as C2 when its process was a script host or ran from `Temp` / `Downloads` (`ClassifyWebhook`). The "MrBeast" Ren'Py loader runs as `<GameName>.exe` from wherever it was unpacked (Desktop, Documents, `AppData\Roaming`), so the C2 leg of the credential-harvest chain never appeared and the credential-store read stayed Tier2.
+- New observe-only signal `Comms Platform Upload from Unverified Process` (Tier2, 0.60, LogOnly): comms-platform DNS plus HTTPS from the same PID, when the process is not a verified Discord/Telegram/Slack identity (name, install path and Authenticode, unchanged). It never kills on its own and is not a `Covert Webhook:` rule. `BehavioralCorrelationEngine` accepts it as the remote leg of the credential-harvest chain only together with a Kernel-File credential-store read from the same process lifetime (creation-time pinned, 60 s window). Process name and folder still carry no trust. Known cost: an unsigned app that reads a browser credential store and talks to Discord is now contained.
+- Tests in `InfostealerChainTests`: Tier2/LogOnly contract and no solo kill, chain fires with a read, no fire without a read, marker, same PID or live lifetime, and the heuristic for Desktop versus Downloads.
 ### Changed - version numbering
 - The 3.8.4 changes below have no release of their own; they ship in 3.8.5, so the one-patch-per-release rule holds.
 

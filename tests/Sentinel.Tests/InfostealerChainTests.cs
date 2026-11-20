@@ -117,6 +117,97 @@ namespace Sentinel.Tests
             Assert.True(ResponsePolicy.IsNukeComposite(composite));
         }
 
+        private static DetectionEvent UnverifiedCommsUpload(int pid = 4242) => new()
+        {
+            RuleName = UserlandProtocolHeuristics.CommsUnstagedRuleName,
+            Confidence = UserlandProtocolHeuristics.ConfidenceFor(UserlandProtocolHeuristics.WebhookKind.CommsPlatformUnstaged),
+            Tier = DetectionTier.Tier2Indicator,
+            AuthorizedResponse = ResponseAction.LogOnly,
+            SignalType = SignalType.Generic,
+            ProcessId = pid,
+            ProcessName = "evil.exe",
+            Timestamp = DateTime.UtcNow,
+            Metadata = new Dictionary<string, string> { [UserlandProtocolHeuristics.CommsUnstagedMarker] = "true" },
+        };
+
+        [Fact]
+        public void UnverifiedCommsUpload_IsTier2_LogOnly_AndNeverSoloKills()
+        {
+            var d = UnverifiedCommsUpload();
+            d.AuthorizedResponse = ResponseAction.KillProcessTree; // tier law must still force LogOnly
+            ResponsePolicy.ApplyTierLaw(d);
+            Assert.Equal(DetectionTier.Tier2Indicator, d.Tier);
+            Assert.Equal(ResponseAction.LogOnly, d.AuthorizedResponse);
+            Assert.False(ResponsePolicy.IsCovertChannelTerminal(d));
+            Assert.False(ResponsePolicy.IsKillGradeTerminal(d));
+            Assert.False(ResponsePolicy.IsAttackClassTerminal(d));
+            Assert.False(ResponsePolicy.IsWeakObserveSeed(d));
+        }
+
+        [Fact]
+        public async Task CredentialRead_PlusUnverifiedCommsUpload_FiresCredentialHarvestTier1()
+        {
+            var engine = new BehavioralCorrelationEngine(_ => null, _ => Birth);
+            DetectionEvent? composite = null;
+            engine.Initialize(ev => { composite = ev; return Task.CompletedTask; });
+
+            await engine.RegisterSignalAsync(SensitiveRead());
+            await engine.RegisterSignalAsync(UnverifiedCommsUpload());
+
+            Assert.NotNull(composite);
+            Assert.Equal(BehavioralCorrelationEngine.CredentialHarvestRuleName, composite!.RuleName);
+            Assert.Equal(DetectionTier.Tier1Behavioral, composite.Tier);
+            Assert.True(composite.KillAuthorized);
+        }
+
+        [Theory]
+        [InlineData("no-credential-read")]
+        [InlineData("no-marker")]
+        [InlineData("different-pid")]
+        [InlineData("reused-pid")]
+        public async Task UnverifiedCommsUpload_WithoutSamePidLiveCredentialRead_DoesNotFire(string scenario)
+        {
+            long live = Birth;
+            var upload = UnverifiedCommsUpload();
+            var read = SensitiveRead();
+            switch (scenario)
+            {
+                case "no-marker": upload.Metadata!.Clear(); break;
+                case "different-pid": upload.ProcessId = 9999; break;
+                case "reused-pid": live = Birth + 1; break;
+            }
+            var engine = new BehavioralCorrelationEngine(_ => null, _ => live);
+            DetectionEvent? composite = null;
+            engine.Initialize(ev => { composite = ev; return Task.CompletedTask; });
+
+            if (scenario != "no-credential-read") await engine.RegisterSignalAsync(read);
+            await engine.RegisterSignalAsync(upload);
+
+            Assert.Null(composite);
+        }
+
+        [Theory]
+        [InlineData("MrBeast_Sponsor", @"C:\Users\x\Desktop\MrBeast_Sponsor\MrBeast_Sponsor.exe", true)]
+        [InlineData("payload", @"C:\Users\x\Downloads\payload.exe", false)]
+        public void Heuristics_UnpackedStealerOutsideTempOrDownloads_IsUnstaged(string name, string path, bool unstaged)
+        {
+            var kind = UserlandProtocolHeuristics.ClassifyWebhook(name, path,
+                hasHttps: true, dedicatedDnsRecently: false, commsDnsRecently: true, urlInContent: false);
+            Assert.Equal(unstaged
+                ? UserlandProtocolHeuristics.WebhookKind.CommsPlatformUnstaged
+                : UserlandProtocolHeuristics.WebhookKind.CommsPlatformAbuse, kind);
+        }
+
+        [Fact]
+        public void Heuristics_UnstagedNeedsCommsDnsAndHttps()
+        {
+            const string path = @"C:\Users\x\Desktop\game\game.exe";
+            Assert.Equal(UserlandProtocolHeuristics.WebhookKind.None, UserlandProtocolHeuristics.ClassifyWebhook(
+                "game", path, hasHttps: true, dedicatedDnsRecently: false, commsDnsRecently: false, urlInContent: false));
+            Assert.Equal(UserlandProtocolHeuristics.WebhookKind.None, UserlandProtocolHeuristics.ClassifyWebhook(
+                "game", path, hasHttps: false, dedicatedDnsRecently: false, commsDnsRecently: true, urlInContent: false));
+        }
+
         [Theory]
         [InlineData("watcher")]
         [InlineData("ordinary-relay")]

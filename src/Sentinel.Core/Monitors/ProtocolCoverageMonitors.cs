@@ -692,11 +692,16 @@ namespace Sentinel.Core
             return false;
         }
 
+        internal const string CommsUnstagedRuleName = "Comms Platform Upload from Unverified Process";
+        internal const string CommsUnstagedMarker = "CommsPlatformUnstaged";
+
         public enum WebhookKind
         {
             None,
             DedicatedSink,
             CommsPlatformAbuse,
+            /// <summary>Tier2 observe-only: comms-platform DNS + HTTPS from an unverified process outside a script host / Temp / Downloads.</summary>
+            CommsPlatformUnstaged,
             UrlInContent,
         }
 
@@ -743,6 +748,11 @@ namespace Sentinel.Core
             if (commsDnsRecently && staging && hasHttps)
                 return WebhookKind.CommsPlatformAbuse;
 
+            // Ren'Py-style stealers run as <GameName>.exe from any folder the victim unpacked them to.
+            // Not kill-grade alone (unsigned apps do talk to Discord); it only seeds the credential-harvest chain.
+            if (commsDnsRecently && hasHttps)
+                return WebhookKind.CommsPlatformUnstaged;
+
             return WebhookKind.None;
         }
 
@@ -751,6 +761,7 @@ namespace Sentinel.Core
             WebhookKind.UrlInContent => 0.90,
             WebhookKind.DedicatedSink => 0.88,
             WebhookKind.CommsPlatformAbuse => 0.86,
+            WebhookKind.CommsPlatformUnstaged => 0.60,
             _ => 0,
         };
     }
@@ -1864,11 +1875,38 @@ namespace Sentinel.Core
                     "Covert Webhook: Comms Platform from Unexpected Process",
                 UserlandProtocolHeuristics.WebhookKind.UrlInContent =>
                     "Covert Webhook: URL in Command Line",
+                UserlandProtocolHeuristics.WebhookKind.CommsPlatformUnstaged =>
+                    UserlandProtocolHeuristics.CommsUnstagedRuleName,
                 _ => "Covert Webhook: Exfil",
             };
 
             string key = $"{rule}:{pid}";
             if (!ShouldAlert(key)) return;
+
+            if (kind == UserlandProtocolHeuristics.WebhookKind.CommsPlatformUnstaged)
+            {
+                // Observe-only seed. Never kill-grade alone: BehavioralCorrelationEngine promotes it only
+                // together with a credential-store read from the same process lifetime.
+                var meta = ProtocolEmitMeta.Create(path, "comms-platform", 443, weak: false, "HTTPS");
+                meta[UserlandProtocolHeuristics.CommsUnstagedMarker] = "true";
+                await _detectionEngine.EmitAsync(new DetectionEvent
+                {
+                    RuleName = rule,
+                    Evidence = $"'{name}' (PID {pid}) https={https} commsDns={commsDns}" +
+                               (string.IsNullOrEmpty(path) ? "" : $", path={path}"),
+                    Reasoning = "A process that is not a verified Discord/Telegram/Slack identity resolved a comms-platform " +
+                        "bot-API host and holds HTTPS. Unsigned apps do this legitimately, so this alone is observe-only; " +
+                        "with a credential-store read from the same process it completes the credential-harvest chain.",
+                    Confidence = UserlandProtocolHeuristics.ConfidenceFor(kind),
+                    Tier = DetectionTier.Tier2Indicator,
+                    AuthorizedResponse = ResponseAction.LogOnly,
+                    ProcessName = name,
+                    ProcessId = pid,
+                    SignalType = SignalType.Generic,
+                    Metadata = meta,
+                }).ConfigureAwait(false);
+                return;
+            }
 
             await _detectionEngine.EmitAsync(new DetectionEvent
             {
