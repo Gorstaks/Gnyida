@@ -75,7 +75,7 @@ namespace Sentinel.Core
                         if (string.IsNullOrEmpty(name)) continue;
 
                         string? path = null;
-                        try { path = SecurityValidation.GetProcessImagePath(pid); } catch { }
+                        try { path = SecurityValidation.GetProcessImagePath(pid); } catch (Exception ex) { _logger.LogDebug(ex, "[CveClassCoverageMonitor] ScanAsync failed"); }
 
                         int parentPid = 0;
                         string parentName = "";
@@ -227,10 +227,10 @@ namespace Sentinel.Core
                                 SignalType.SecurityEvasion).ConfigureAwait(false);
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogWarning(ex, "[CveClassCoverageMonitor] ScanAsync failed"); }
                     finally
                     {
-                        try { proc.Dispose(); } catch { }
+                        try { proc.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[CveClassCoverageMonitor] ScanAsync failed"); }
                     }
                 }
             }
@@ -238,7 +238,7 @@ namespace Sentinel.Core
             {
                 foreach (var p in procs)
                 {
-                    try { p.Dispose(); } catch { }
+                    try { p.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[CveClassCoverageMonitor] ScanAsync failed"); }
                 }
             }
         }
@@ -303,7 +303,7 @@ namespace Sentinel.Core
                 foreach (System.Management.ManagementObject obj in searcher.Get())
                     return obj["CommandLine"]?.ToString();
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "CveClassCoverageMonitor.TryGetCommandLine()"); }
             return null;
         }
 
@@ -537,7 +537,7 @@ namespace Sentinel.Core
                     roots.Add(Path.Combine(dir, "AppData", "Local", "Temp"));
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "MotwBypassMonitor.GetUserDeliveryRoots()"); }
             return roots;
         }
     }
@@ -593,7 +593,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ContainerIsolationTamperMonitor] ScanDriversAsync failed"); }
 
             foreach (var root in roots)
             {
@@ -848,7 +848,7 @@ namespace Sentinel.Core
                     return (blob[8] & 0x08) != 0;
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WpadProxyMonitor.IsAutoDetectEnabled()"); }
             return false;
         }
 

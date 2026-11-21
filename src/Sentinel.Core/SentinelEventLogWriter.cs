@@ -286,7 +286,7 @@ namespace Sentinel.Core
             _disabledPermanently = true;
             _available = false;
             _disableReason = reason;
-            try { _eventLog?.Dispose(); } catch { /* ignore */ }
+            try { _eventLog?.Dispose(); } catch (Exception ex) { /* ignore */ BestEffort.Debug(ex, "SentinelEventLogWriter.DisablePermanently()"); }
             _eventLog = null;
 
             if (Interlocked.Exchange(ref _disableLogged, 1) == 0)
@@ -321,7 +321,7 @@ namespace Sentinel.Core
 
         public void Dispose()
         {
-            try { _eventLog?.Dispose(); } catch { /* ignore */ }
+            try { _eventLog?.Dispose(); } catch (Exception ex) { /* ignore */ BestEffort.Debug(ex, "SentinelEventLogWriter.Dispose()"); }
             _eventLog = null;
             _available = false;
         }
@@ -366,9 +366,9 @@ namespace Sentinel.Core
                     if (_writer.IsAvailable)
                         _writer.WriteHeartbeat(_version, _etw?.IsActive == true);
                 }
-                catch
-                {
+                catch (Exception ex) {
                     // Absolute fail-soft - never kill the host loop
+                    BestEffort.Debug(ex, "SentinelEventLogHeartbeatService.ExecuteAsync()");
                 }
 
                 try { await Task.Delay(TimeSpan.FromMinutes(minutes), stoppingToken).ConfigureAwait(false); }

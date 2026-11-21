@@ -43,7 +43,7 @@ namespace Sentinel.Agent
                         string? version = key?.GetValue("pv") as string;
                         if (!string.IsNullOrEmpty(version) && version != "0.0.0.0") return true;
                     }
-                    catch (Exception) { /* key absent or unreadable in this view */ }
+                    catch (Exception ex) { /* key absent or unreadable in this view */ BestEffort.Debug(ex, "WebView2Installer.IsRuntimeInstalled()"); }
                 }
             }
             return false;
@@ -103,7 +103,7 @@ namespace Sentinel.Agent
             catch (Exception) { return Outcome.InstallerFailed; }
             finally
             {
-                try { Directory.Delete(folder, recursive: true); } catch (Exception) { /* left for the user's temp clean-up */ }
+                try { Directory.Delete(folder, recursive: true); } catch (Exception ex) { /* left for the user's temp clean-up */ BestEffort.Debug(ex, "WebView2Installer.DownloadAndInstall()"); }
             }
         }
     }

@@ -83,7 +83,7 @@ namespace Sentinel.Core
                     }
                     _canaryPaths.Add(canary);
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[CanaryFileMonitor] PlantCanaryFiles failed"); }
             }
         }
     }
@@ -242,7 +242,7 @@ namespace Sentinel.Core
 
                                     // Check if process is from temp/suspicious path
                                     string? imagePath = null;
-                                    try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch { }
+                                    try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch (Exception ex) { _logger.LogDebug(ex, "[MicrosoftAccountGuardMonitor] ExecuteAsync failed"); }
                                     if (!string.IsNullOrEmpty(imagePath) &&
                                         (imagePath!.Contains(@"\Temp\") ||
                                          imagePath.Contains(@"\Downloads\")))
@@ -260,7 +260,7 @@ namespace Sentinel.Core
                                         break;
                                     }
                                 }
-                                catch { }
+                                catch (Exception ex) { _logger.LogDebug(ex, "[MicrosoftAccountGuardMonitor] ExecuteAsync failed"); }
                                 finally { proc.Dispose(); }
                             }
                         }
@@ -364,7 +364,7 @@ namespace Sentinel.Core
                             policy.Rules.Remove(FcmFirewallRuleName);
                             removed = true;
                         }
-                        catch { /* rule may not exist */ }
+                        catch (Exception ex) { /* rule may not exist */ _logger.LogDebug(ex, "[NullSessionGuard] RemoveFcmPushBlockIfPresent failed"); }
 
                         if (removed)
                             _logger.LogWarning(
@@ -964,7 +964,7 @@ namespace Sentinel.Core
         private void DenyRemoteLogon(List<string> sids)
         {
             var tmpDir = Path.Combine(Path.GetTempPath(), "sentinel-rlhg");
-            try { Directory.CreateDirectory(tmpDir); } catch { /* best effort */ }
+            try { Directory.CreateDirectory(tmpDir); } catch (Exception ex) { /* best effort */ _logger.LogDebug(ex, "[RemoteLogonHardeningGuard] DenyRemoteLogon failed"); }
 
             var infPath = Path.Combine(tmpDir, "deny-remote.inf");
             var dbPath = Path.Combine(tmpDir, "deny-remote.sdb");
@@ -1026,9 +1026,9 @@ namespace Sentinel.Core
             }
             finally
             {
-                try { if (File.Exists(infPath)) File.Delete(infPath); } catch { }
-                try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
-                try { if (File.Exists(logPath)) File.Delete(logPath); } catch { }
+                try { if (File.Exists(infPath)) File.Delete(infPath); } catch (Exception ex2) { _logger.LogDebug(ex2, "[RemoteLogonHardeningGuard] DenyRemoteLogon failed"); }
+                try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch (Exception ex2) { _logger.LogDebug(ex2, "[RemoteLogonHardeningGuard] DenyRemoteLogon failed"); }
+                try { if (File.Exists(logPath)) File.Delete(logPath); } catch (Exception ex2) { _logger.LogDebug(ex2, "[RemoteLogonHardeningGuard] DenyRemoteLogon failed"); }
             }
         }
 
@@ -1064,7 +1064,7 @@ namespace Sentinel.Core
                         if (isBuiltinAdmin || (!disabled && IsLocalAdmin(child.Name)))
                             sids.Add(sid);
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[RemoteLogonHardeningGuard] GetLocalAdminAccountSids failed"); }
                     finally { child.Dispose(); }
                 }
             }
@@ -1096,7 +1096,7 @@ namespace Sentinel.Core
                         return true;
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[RemoteLogonHardeningGuard] IsLocalAdmin failed"); }
             return false;
         }
 

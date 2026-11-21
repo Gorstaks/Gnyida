@@ -143,7 +143,7 @@ namespace Sentinel.Core
 
                         var procName = proc.ProcessName;
                         string imagePath = "";
-                        try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id) ?? ""; } catch { }
+                        try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id) ?? ""; } catch (Exception ex) { _logger.LogDebug(ex, "[RawDiskAccessMonitor] ScanForRawDiskHandles failed"); }
 
                         // Critical Windows hosts under %SystemRoot%: never scan/kill.
                         // Catalog-sign verify can fail mid-boot; explorer/taskhostw always hold volume handles.
@@ -238,11 +238,11 @@ namespace Sentinel.Core
 
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[RawDiskAccessMonitor] ScanForRawDiskHandles failed"); }
                     finally { proc.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[RawDiskAccessMonitor] ScanForRawDiskHandles failed"); }
 
             // Cleanup stale alerts
             var stale = _alertedAccess
@@ -330,7 +330,7 @@ namespace Sentinel.Core
                                 if (results.Count >= 5) break; // Don't enumerate everything
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[RawDiskAccessMonitor] GetProcessDeviceHandles failed"); }
                         finally
                         {
                             if (dupHandle != IntPtr.Zero) NativeProcessMemory.CloseHandle(dupHandle);
@@ -342,7 +342,7 @@ namespace Sentinel.Core
                     Marshal.FreeHGlobal(buffer);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[RawDiskAccessMonitor] GetProcessDeviceHandles failed"); }
             finally
             {
                 if (processHandle != IntPtr.Zero) NativeProcessMemory.CloseHandle(processHandle);
@@ -387,7 +387,7 @@ namespace Sentinel.Core
                 if (SecurityValidation.VerifyAuthenticodeSignature(imagePath))
                     return true;
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[RawDiskAccessMonitor] IsCatalogOrAuthenticodeSigned failed"); }
             try { return _signerTrust.IsSignedFile(imagePath); }
             catch { return false; }
         }

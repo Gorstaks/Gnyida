@@ -179,10 +179,10 @@ namespace Sentinel.Core
                 foreach (var file in Directory.GetFiles(dir, "audit-*.jsonl"))
                 {
                     if (File.GetLastWriteTimeUtc(file) < cutoff)
-                        try { File.Delete(file); } catch { /* best-effort */ }
+                        try { File.Delete(file); } catch (Exception ex) { /* best-effort */ BestEffort.Debug(ex, "JsonlEventLogger.PruneOldAuditFiles()"); }
                 }
             }
-            catch { /* best-effort */ }
+            catch (Exception ex) { /* best-effort */ BestEffort.Debug(ex, "JsonlEventLogger.PruneOldAuditFiles()"); }
         }
 
         /// <summary>
@@ -338,9 +338,9 @@ namespace Sentinel.Core
                 }
                 finally { _auditSemaphore.Release(); }
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Best-effort - we're dying. Never throw out of the exit path (NFR-2).
+                BestEffort.Debug(ex, "JsonlEventLogger.LogServiceStopSuspected()");
             }
         }
 
@@ -376,9 +376,9 @@ namespace Sentinel.Core
                 }
                 finally { _auditSemaphore.Release(); }
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Best-effort.
+                BestEffort.Debug(ex, "JsonlEventLogger.LogServiceStopExpected()");
             }
         }
 
@@ -462,9 +462,9 @@ namespace Sentinel.Core
                         RotateLogsInternal();
                     }
                 }
-                catch
-                {
+                catch (Exception ex) {
                     // Ignore rotation failure, continue writing
+                    BestEffort.Debug(ex, "JsonlEventLogger.LogEventAsync()");
                 }
 
                 // v2.0.3: Disk space guard - degrade gracefully if volume is critically low.
@@ -532,7 +532,7 @@ namespace Sentinel.Core
             }
             finally
             {
-                try { _semaphore.Release(); } catch (ObjectDisposedException) { }
+                try { _semaphore.Release(); } catch (ObjectDisposedException ex) { BestEffort.Debug(ex, "JsonlEventLogger.LogEventAsync()"); }
             }
         }
 
@@ -611,7 +611,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { /* best effort */ }
+            catch (Exception ex) { /* best effort */ BestEffort.Debug(ex, "JsonlEventLogger.PruneOldestRotatedLogs()"); }
         }
 
         private void RotateLogsInternal()
@@ -681,7 +681,7 @@ namespace Sentinel.Core
                     await _auditSemaphore.WaitAsync();
                     auditHeld = true;
                 }
-                catch (ObjectDisposedException) { }
+                catch (ObjectDisposedException ex) { BestEffort.Debug(ex, "JsonlEventLogger.DisposeAsync()"); }
 
                 _disposed = true;
                 if (_writer != null)
@@ -710,15 +710,15 @@ namespace Sentinel.Core
                 if (auditHeld)
                 {
                     try { _auditSemaphore.Release(); }
-                    catch (ObjectDisposedException) { }
-                    catch (SemaphoreFullException) { }
+                    catch (ObjectDisposedException ex) { BestEffort.Debug(ex, "JsonlEventLogger.DisposeAsync()"); }
+                    catch (SemaphoreFullException ex) { BestEffort.Debug(ex, "JsonlEventLogger.DisposeAsync()"); }
                 }
-                try { _auditSemaphore.Dispose(); } catch (ObjectDisposedException) { }
+                try { _auditSemaphore.Dispose(); } catch (ObjectDisposedException ex) { BestEffort.Debug(ex, "JsonlEventLogger.DisposeAsync()"); }
 
                 try { _semaphore.Release(); }
-                catch (ObjectDisposedException) { }
-                catch (SemaphoreFullException) { }
-                try { _semaphore.Dispose(); } catch (ObjectDisposedException) { }
+                catch (ObjectDisposedException ex) { BestEffort.Debug(ex, "JsonlEventLogger.DisposeAsync()"); }
+                catch (SemaphoreFullException ex) { BestEffort.Debug(ex, "JsonlEventLogger.DisposeAsync()"); }
+                try { _semaphore.Dispose(); } catch (ObjectDisposedException ex) { BestEffort.Debug(ex, "JsonlEventLogger.DisposeAsync()"); }
             }
             GC.SuppressFinalize(this);
         }

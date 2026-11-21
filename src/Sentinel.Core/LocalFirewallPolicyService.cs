@@ -101,6 +101,7 @@ namespace Sentinel.Core
                 catch (Exception ex) when (ex is System.Security.SecurityException || ex is UnauthorizedAccessException || ex is ArgumentException)
                 {
                     // An unreadable key cannot be proven to exist; fall through to its parent.
+                    BestEffort.Debug(ex, "LocalFirewallPolicyService.NearestExistingKey()");
                 }
                 int cut = current.LastIndexOf('\\');
                 if (cut <= 0) break;
@@ -117,7 +118,7 @@ namespace Sentinel.Core
                 string watched = NearestExistingKey(path);
                 watcher = new ManagementEventWatcher(new ManagementScope(@"\\.\root\default"), new WqlEventQuery(
                     "SELECT * FROM RegistryTreeChangeEvent WHERE Hive='HKEY_LOCAL_MACHINE' AND RootPath='" + watched.Replace("\\", "\\\\") + "'"));
-                watcher.EventArrived += (_, __) => { try { _changed.Release(); } catch (SemaphoreFullException) { } };
+                watcher.EventArrived += (_, __) => { try { _changed.Release(); } catch (SemaphoreFullException ex) { _logger.LogDebug(ex, "[LocalFirewallPolicyService] Watch failed"); } };
                 watcher.Start();
                 return watcher;
             }

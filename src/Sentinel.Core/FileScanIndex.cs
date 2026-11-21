@@ -76,9 +76,9 @@ namespace Sentinel.Core
                 if (!Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
             }
-            catch
-            {
+            catch (Exception ex) {
                 // If we cannot create the directory the index just stays empty (fail-open).
+                BestEffort.Debug(ex, "FileScanIndex.FileScanIndex()");
             }
 
             Load();
@@ -148,9 +148,9 @@ namespace Sentinel.Core
                 if (Interlocked.Increment(ref _dirtyCount) >= FlushThreshold)
                     TryFlush(force: false);
             }
-            catch
-            {
+            catch (Exception ex) {
                 // best-effort - skipping the mark just means we re-hash next time
+                BestEffort.Debug(ex, "FileScanIndex.MarkScanned()");
             }
         }
 
@@ -174,9 +174,9 @@ namespace Sentinel.Core
                         removed++;
                 }
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Best-effort; if eviction fails the cap will be hit again on the next mark.
+                BestEffort.Debug(ex, "FileScanIndex.EvictBatch()");
             }
         }
 
@@ -266,14 +266,14 @@ namespace Sentinel.Core
                     catch
                     {
                         File.Copy(tmp, _indexPath, overwrite: true);
-                        try { File.Delete(tmp); } catch { }
+                        try { File.Delete(tmp); } catch (Exception ex) { BestEffort.Debug(ex, "FileScanIndex.TryFlush()"); }
                     }
 
                     Interlocked.Exchange(ref _dirtyCount, 0);
                 }
-                catch
-                {
+                catch (Exception ex) {
                     // best-effort persistence - in-memory state still valid for this run
+                    BestEffort.Debug(ex, "FileScanIndex.TryFlush()");
                 }
             }
         }
@@ -283,7 +283,7 @@ namespace Sentinel.Core
             if (_disposed)
                 return;
             _disposed = true;
-            try { _flushTimer?.Dispose(); } catch { }
+            try { _flushTimer?.Dispose(); } catch (Exception ex) { BestEffort.Debug(ex, "FileScanIndex.Dispose()"); }
             TryFlush(force: true);
         }
     }

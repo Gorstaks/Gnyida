@@ -581,8 +581,29 @@ namespace Sentinel.Core
             }
         }
 
+        /// <summary>
+        /// Device instance IDs are built partly from strings the device reports (serial numbers), so they
+        /// are attacker-influenced. Windows forbids characters at or below 0x20, above 0x7F, and commas in
+        /// an instance ID; a double quote would also break out of the quoted pnputil argument. Anything
+        /// outside the valid set is rejected before it reaches a command line.
+        /// </summary>
+        internal static bool IsSafeDeviceInstanceId(string? deviceInstanceId)
+        {
+            if (string.IsNullOrEmpty(deviceInstanceId) || deviceInstanceId!.Length > 512) return false;
+            foreach (char c in deviceInstanceId)
+            {
+                if (c <= 0x20 || c >= 0x7F || c == '"' || c == ',') return false;
+            }
+            return true;
+        }
+
         private bool TryEjectViaPnputil(string deviceInstanceId)
         {
+            if (!IsSafeDeviceInstanceId(deviceInstanceId))
+            {
+                _logger?.LogWarning("[UsbDeviceFingerprinter] Refusing pnputil eject: device instance ID contains invalid characters");
+                return false;
+            }
             try
             {
                 // pnputil /remove-device requires the instance ID in quotes
@@ -836,9 +857,9 @@ namespace Sentinel.Core
                     });
                 }
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Degrade gracefully
+                _logger?.LogDebug(ex, "[UsbDeviceFingerprinter] GetConnectedUsbDevices failed");
             }
             finally
             {

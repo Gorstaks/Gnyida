@@ -289,7 +289,7 @@ namespace Sentinel.Core
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[CriticalServiceGuard] MonitorBsodCriticalProcessesAsync failed"); }
             }
         }
 
@@ -302,7 +302,7 @@ namespace Sentinel.Core
                 if (record.Properties.Count > 0)
                     return record.Properties[0].Value?.ToString();
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "CriticalServiceGuard.ExtractServiceName()"); }
             return null;
         }
 

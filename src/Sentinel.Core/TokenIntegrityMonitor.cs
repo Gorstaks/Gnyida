@@ -108,7 +108,7 @@ namespace Sentinel.Core
                                     {
                                         // Elevated process - check if it's from a user-writable path
                                          string? imagePath = null;
-                                         try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch { }
+                                         try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch (Exception ex) { _logger.LogDebug(ex, "[TokenIntegrityMonitor] ScanTokens failed"); }
 
                                          if (imagePath != null)
                                          {
@@ -155,9 +155,9 @@ namespace Sentinel.Core
                         }
                         finally { CloseHandle(tokenHandle); }
                     }
-                    catch (InvalidOperationException) { }
-                    catch (System.ComponentModel.Win32Exception) { }
-                    catch { }
+                    catch (InvalidOperationException ex) { _logger.LogDebug(ex, "[TokenIntegrityMonitor] ScanTokens failed"); }
+                    catch (System.ComponentModel.Win32Exception ex) { _logger.LogDebug(ex, "[TokenIntegrityMonitor] ScanTokens failed"); }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[TokenIntegrityMonitor] ScanTokens failed"); }
                     finally
                     {
                         proc.Dispose();
@@ -202,7 +202,7 @@ namespace Sentinel.Core
                 if (session == 0) return;
 
                 string? imagePath = null;
-                try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch { }
+                try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch (Exception ex) { _logger.LogDebug(ex, "[TokenIntegrityMonitor] TryDetectIntegrityJump failed"); }
                 if (string.IsNullOrEmpty(imagePath)) return;
 
                 // v3.5.2: A genuine Windows OS-image servicing actor (TrustedInstaller/TiWorker,
@@ -265,7 +265,7 @@ namespace Sentinel.Core
                 });
                 _alertedPids.Add(proc.Id);
             }
-            catch { /* process exited / access denied - degrade silently */ }
+            catch (Exception ex) { /* process exited / access denied - degrade silently */ _logger.LogDebug(ex, "[TokenIntegrityMonitor] TryDetectIntegrityJump failed"); }
         }
 
         /// <summary>

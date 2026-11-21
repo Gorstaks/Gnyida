@@ -198,7 +198,7 @@ namespace Sentinel.Core
                         procName = p.ProcessName;
                         imagePath = SecurityValidation.GetProcessImagePath((int)pid);
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ClickjackingGuard] CheckOverlayWindowsAsync failed"); }
 
                     // v2.5.3: skip real civilians only. FakeOverlay.exe and
                     // discord.exe in Temp are the attack - name is not identity.
@@ -328,7 +328,7 @@ namespace Sentinel.Core
                     procName = p.ProcessName;
                     imagePath = SecurityValidation.GetProcessImagePath((int)pid);
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[ClickjackingGuard] CheckFakeUacAsync failed"); }
 
                 // Skip processes signed by a trusted publisher (Google, Microsoft, Mozilla, etc.)
                 // This cannot be bypassed by renaming a malicious binary to "chrome.exe" -

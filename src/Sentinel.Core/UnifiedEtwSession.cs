@@ -601,7 +601,7 @@ namespace Sentinel.Core
                     return result.Count > 0 ? result.ToArray() : Array.Empty<ulong>();
                 }
             }
-            catch { /* never throw from the ETW callback */ }
+            catch (Exception ex) { /* never throw from the ETW callback */ BestEffort.Debug(ex, "UnifiedEtwSession.ExtractStackTrace()"); }
             return Array.Empty<ulong>();
         }
 
@@ -747,7 +747,7 @@ namespace Sentinel.Core
                     Marshal.FreeHGlobal(buf);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[UnifiedEtwSession] StopOrphanedSession failed"); }
         }
 
         private void FreePropertiesBuffer()

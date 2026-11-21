@@ -107,7 +107,7 @@ namespace Sentinel.Agent
                     appIcon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "TrayIconService.RunUiThread()"); }
 
             _notifyIcon = new NotifyIcon
             {
@@ -167,7 +167,7 @@ namespace Sentinel.Agent
                         _notifyIcon.Visible = false;
                         _notifyIcon.Visible = true;
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "HiddenForm.WndProc()"); }
                 }
                 base.WndProc(ref m);
             }
@@ -197,7 +197,7 @@ namespace Sentinel.Agent
                 BringWindowToTop(_settingsForm.Handle);
                 SetForegroundWindow(_settingsForm.Handle);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "TrayIconService.ShowDashboard()"); }
             _settingsForm.Activate();
             _settingsForm.BringToFront();
         }
@@ -261,7 +261,7 @@ namespace Sentinel.Agent
 
         public void Dispose()
         {
-            try { _settingsForm?.Dispose(); } catch { }
+            try { _settingsForm?.Dispose(); } catch (Exception ex) { BestEffort.Debug(ex, "TrayIconService.Dispose()"); }
             _settingsForm = null;
             _notifyIcon?.Dispose();
             _contextMenu?.Dispose();
@@ -334,7 +334,7 @@ namespace Sentinel.Agent
                                             if (tierVal == 0)
                                                 _pendingDetection = (ruleName, processName, confidence, evidence, data.GetProperty("ProcessId").GetInt32());
                                         }
-                                        catch { }
+                                        catch (Exception ex) { BestEffort.Debug(ex, "TrayIconService.WatchLogFileSync()"); }
                                     }
                                     else if (line.Contains("\"type\":\"response\"", StringComparison.OrdinalIgnoreCase))
                                     {
@@ -375,7 +375,7 @@ namespace Sentinel.Agent
                                                         _notifyIcon.Text = tip;
                                                     }
                                                 }
-                                                catch { }
+                                                catch (Exception ex) { BestEffort.Debug(ex, "TrayIconService.WatchLogFileSync()"); }
                                             }
                                             _pendingDetection = null;
                                         }
@@ -387,7 +387,7 @@ namespace Sentinel.Agent
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { BestEffort.Debug(ex, "TrayIconService.WatchLogFileSync()"); }
 
                 if (cancellationToken.WaitHandle.WaitOne(1000)) break;
             }

@@ -229,9 +229,10 @@ namespace Sentinel.Core
                     await EmitAutomatedInputHeuristicAsync().ConfigureAwait(false);
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException ex)
             {
                 // normal shutdown
+                _logger.LogDebug(ex, "[InputIntegrityGuard] ExecuteAsync failed");
             }
             catch (Exception ex)
             {
@@ -385,7 +386,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { /* never let a hook callback throw - it would be silently unhooked */ }
+            catch (Exception ex) { /* never let a hook callback throw - it would be silently unhooked */ _logger.LogDebug(ex, "[InputIntegrityGuard] KeyboardHookCallback failed"); }
             // Observe only - NEVER swallow the event. We pass every keystroke through.
             return CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
         }
@@ -404,7 +405,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { /* never let a hook callback throw */ }
+            catch (Exception ex) { /* never let a hook callback throw */ _logger.LogDebug(ex, "[InputIntegrityGuard] MouseHookCallback failed"); }
             return CallNextHookEx(_mouseHook, nCode, wParam, lParam);
         }
 

@@ -97,7 +97,7 @@ namespace Sentinel.Core
         private static async Task WaitForeverAsync(CancellationToken ct)
         {
             try { await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException ex) { BestEffort.Debug(ex, "RulePackLoader.WaitForeverAsync()"); }
         }
 
         private void SafeReload()
@@ -115,7 +115,7 @@ namespace Sentinel.Core
                 if (Directory.Exists(installPacks))
                     dirs.Add(installPacks);
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[RulePackLoader] LoadAllPacks failed"); }
 
             int added = 0;
             foreach (var dir in dirs.Distinct(StringComparer.OrdinalIgnoreCase))

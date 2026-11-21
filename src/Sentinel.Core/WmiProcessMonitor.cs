@@ -66,7 +66,7 @@ namespace Sentinel.Core
                 _watcher?.Dispose();
                 _watcher = null;
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WmiProcessMonitor.Disable()"); }
         }
 
         public void Start()
@@ -123,7 +123,7 @@ namespace Sentinel.Core
                     _lastKnownPids = pids;
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WmiProcessMonitor.InitializeFastPoll()"); }
         }
 
         /// <summary>
@@ -190,7 +190,7 @@ namespace Sentinel.Core
                             _detectionEngine.SubmitTelemetry(context);
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "WmiProcessMonitor.FastPollProcesses()"); }
                     finally
                     {
                         proc.Dispose();
@@ -251,7 +251,7 @@ namespace Sentinel.Core
                 _watcher?.Stop();
                 _watcher?.Dispose();
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WmiProcessMonitor.Dispose()"); }
         }
     }
 }

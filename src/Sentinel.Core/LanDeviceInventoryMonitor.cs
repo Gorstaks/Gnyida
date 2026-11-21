@@ -91,7 +91,7 @@ namespace Sentinel.Core
             var done = await Task.WhenAny(read, Task.Delay(TimeSpan.FromSeconds(10), ct));
             if (done != read)
             {
-                try { p.Kill(); } catch (InvalidOperationException) { }
+                try { p.Kill(); } catch (InvalidOperationException ex) { BestEffort.Debug(ex, "LanDeviceInventoryMonitor.RunArpAsync"); }
                 ct.ThrowIfCancellationRequested();
                 return string.Empty;
             }

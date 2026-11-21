@@ -140,9 +140,9 @@ namespace Sentinel.Core
             {
                 await Task.Delay(Timeout.Infinite, stoppingToken);
             }
-            catch (OperationCanceledException)
-            {
+            catch (OperationCanceledException ex) {
                 // Normal shutdown
+                _logger.LogDebug(ex, "[ConsultantSignalIngestor] ExecuteAsync failed");
             }
             finally
             {
@@ -178,7 +178,7 @@ namespace Sentinel.Core
                     if (!isOwnerAdminOrSystem)
                     {
                         _logger.LogWarning("[ConsultantSignalIngestor] Rejecting file {FilePath} because owner is not Administrator or SYSTEM.", filePath);
-                        try { File.Delete(filePath); } catch { }
+                        try { File.Delete(filePath); } catch (Exception ex) { _logger.LogDebug(ex, "[ConsultantSignalIngestor] ProcessFileAsync failed"); }
                         return;
                     }
                 }
@@ -250,13 +250,13 @@ namespace Sentinel.Core
 
                 }
             }
-            catch (IOException)
-            {
+            catch (IOException ex) {
                 // Exceeded retries, we expect another Changed event to trigger soon
+                _logger.LogDebug(ex, "[ConsultantSignalIngestor] ProcessFileAsync failed");
             }
-            catch (OperationCanceledException)
-            {
+            catch (OperationCanceledException ex) {
                 // Normal cancellation
+                _logger.LogDebug(ex, "[ConsultantSignalIngestor] ProcessFileAsync failed");
             }
             catch (Exception ex)
             {

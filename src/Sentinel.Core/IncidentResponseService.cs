@@ -42,7 +42,7 @@ namespace Sentinel.Core
 
             if (!Directory.Exists(EvidenceDir))
             {
-                try { Directory.CreateDirectory(EvidenceDir); } catch { }
+                try { Directory.CreateDirectory(EvidenceDir); } catch (Exception ex) { BestEffort.Debug(ex, "IncidentResponseService.IncidentResponseService()"); }
             }
         }
 
@@ -145,7 +145,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { } // Process may already be dead
+            catch (Exception ex2) { _logger.LogWarning(ex2, "[IncidentResponseService] CollectEvidenceAsync failed"); } // Process may already be dead
 
             // 5. Log incident summary
             evidence["EvidenceDirectory"] = incidentDir;
@@ -171,7 +171,7 @@ namespace Sentinel.Core
                     result.Add($"{mod.ModuleName}\t{mod.FileName}\t{mod.ModuleMemorySize}");
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "IncidentResponseService.CollectModuleInventory()"); }
             return result;
         }
 
@@ -188,7 +188,7 @@ namespace Sentinel.Core
                     return result.Count < 500;
                 });
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "IncidentResponseService.CollectNetworkSnapshot()"); }
             return result;
         }
 
@@ -200,7 +200,7 @@ namespace Sentinel.Core
                 using var proc = Process.GetProcessById(pid);
                 result.Add($"PID={proc.Id} Name={proc.ProcessName} StartTime={proc.StartTime:O}");
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "IncidentResponseService.CollectProcessTree()"); }
             return result;
         }
     }

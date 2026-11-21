@@ -147,7 +147,7 @@ namespace Sentinel.Core
                     await Task.Delay(ScanInterval, ct).ConfigureAwait(false);
                 }
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException ex2) { _logger.LogDebug(ex2, "[SystemFileAclDriftMonitor] ExecuteAsync failed"); }
         }
 
         /// <summary>The single event raised for a batch of new findings. Tier2 and LogOnly by contract.</summary>

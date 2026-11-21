@@ -101,7 +101,7 @@ namespace Sentinel.Core
                     {
                         _alertedPids.Add(proc.Id);
                         string? imagePath = null;
-                        try { imagePath = proc.MainModule?.FileName; } catch { }
+                        try { imagePath = proc.MainModule?.FileName; } catch (Exception ex) { _logger.LogDebug(ex, "[EdrKillerDetectionMonitor] ScanForEdrKillers #1 failed"); }
 
                         await _detectionEngine.EmitAsync(new DetectionEvent
                         {
@@ -128,7 +128,7 @@ namespace Sentinel.Core
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[EdrKillerDetectionMonitor] ScanForEdrKillers #2 failed"); }
                 finally
                 {
                     proc.Dispose();
@@ -182,7 +182,7 @@ namespace Sentinel.Core
         {
             var installDir = AppContext.BaseDirectory;
             var honeypotDir = Path.Combine(installDir, HoneypotSubdir);
-            try { Directory.CreateDirectory(honeypotDir); } catch { }
+            try { Directory.CreateDirectory(honeypotDir); } catch (Exception ex) { _logger.LogDebug(ex, "[HoneypotDllMonitor] ExecuteAsync #1 failed"); }
 
             // Plant the honeypot DLLs in the dedicated folder (never the exe directory)
             foreach (var dllName in HoneypotDllNames)
@@ -231,7 +231,7 @@ namespace Sentinel.Core
                     }
                 }
                 catch (OperationCanceledException) { break; }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[HoneypotDllMonitor] ExecuteAsync #2 failed"); }
             }
 
             _watcher?.Dispose();
@@ -245,7 +245,7 @@ namespace Sentinel.Core
                 File.WriteAllBytes(path, Array.Empty<byte>());
                 File.SetAttributes(path, FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReadOnly);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "HoneypotDllMonitor.PlantHoneypot"); }
         }
 
         private async void OnHoneypotAccessed(object sender, FileSystemEventArgs e)
@@ -277,7 +277,11 @@ namespace Sentinel.Core
                     }
                 });
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // async void handler: an escaped exception would crash the host, so log and stop here.
+                _logger.LogWarning(ex, "[HoneypotDllMonitor] Honeypot access detection was not emitted");
+            }
         }
 
         private async void OnHoneypotDeleted(object sender, FileSystemEventArgs e)
@@ -307,7 +311,11 @@ namespace Sentinel.Core
                     }
                 });
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // async void handler: an escaped exception would crash the host, so log and stop here.
+                _logger.LogWarning(ex, "[HoneypotDllMonitor] Honeypot deletion detection was not emitted");
+            }
         }
 
         private static bool IsHoneypot(string? name)
@@ -397,7 +405,10 @@ namespace Sentinel.Core
                             }
                         });
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "[KernelModuleAuditMonitor] Pre-existing vulnerable driver detection was not emitted");
+                    }
                 }
             }
 
@@ -444,7 +455,7 @@ namespace Sentinel.Core
                     if (File.Exists(expandedPath))
                         isSigned = SecurityValidation.VerifyAuthenticodeSignature(expandedPath);
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[KernelModuleAuditMonitor] CheckForNewModules failed"); }
 
                 var confidence = isSystemDriver && isSigned ? 0.40 : (isSigned ? 0.65 : 0.88);
                 var tier = confidence >= 0.70 ? DetectionTier.Tier1Behavioral : DetectionTier.Tier2Indicator;
@@ -614,7 +625,7 @@ namespace Sentinel.Core
                             {
                                 // SeImpersonate is normal for services - only flag if from user-writable path
                                 string? imagePath = null;
-                                try { imagePath = proc.MainModule?.FileName; } catch { }
+                                try { imagePath = proc.MainModule?.FileName; } catch (Exception ex) { _logger.LogDebug(ex, "[TokenPrivilegeAuditMonitor] ScanTokenPrivileges #1 failed"); }
                                 if (imagePath != null && IsUserWritablePath(imagePath))
                                     dangerous.Add("SeImpersonatePrivilege");
                             }
@@ -623,7 +634,7 @@ namespace Sentinel.Core
                             {
                                 _alertedPids.Add(proc.Id);
                                 string? imagePath = null;
-                                try { imagePath = proc.MainModule?.FileName; } catch { }
+                                try { imagePath = proc.MainModule?.FileName; } catch (Exception ex) { _logger.LogDebug(ex, "[TokenPrivilegeAuditMonitor] ScanTokenPrivileges #2 failed"); }
 
                                 await _detectionEngine.EmitAsync(new DetectionEvent
                                 {
@@ -660,7 +671,7 @@ namespace Sentinel.Core
                         CloseHandle(hProcess);
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[TokenPrivilegeAuditMonitor] ScanTokenPrivileges #3 failed"); }
                 finally
                 {
                     proc.Dispose();

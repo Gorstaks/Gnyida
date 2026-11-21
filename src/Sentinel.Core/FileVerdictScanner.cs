@@ -271,7 +271,7 @@ namespace Sentinel.Core
                 lifetime.Cancel();
                 ReleaseWatchers();
                 try { await walk.ConfigureAwait(false); }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { /* normal worker cancellation */ }
+                catch (OperationCanceledException ex) when (stoppingToken.IsCancellationRequested) { /* normal worker cancellation */ _logger.LogDebug(ex, "[FileVerdictScanner] RunVolumeCoverageAsync failed"); }
                 // All realtime tasks share the cancelled worker lifetime. Drain before restart/disposal.
                 for (int i = 0; i < 4; i++) await _scanTaskThrottle.WaitAsync().ConfigureAwait(false);
                 _scanTaskThrottle.Release(4);
@@ -430,7 +430,7 @@ namespace Sentinel.Core
                         if (pass == 2) RealtimeGap();
                     }
                 }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* worker stopped */ }
+                catch (OperationCanceledException ex) when (ct.IsCancellationRequested) { /* worker stopped */ _logger.LogDebug(ex, "[FileVerdictScanner] QueueRealtimeScan failed"); }
                 catch (Exception ex) { RealtimeGap(); _logger.LogWarning(ex, "Realtime file evaluation failed"); }
                 finally
                 {

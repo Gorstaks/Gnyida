@@ -25,6 +25,14 @@ namespace Sentinel.Core
         private readonly ILogger<LnkShortcutMonitor> _logger;
 
         private readonly List<FileSystemWatcher> _watchers = new();
+        // Host stopping token, captured in ExecuteAsync and published through an immutable box (Volatile)
+        // so watcher callbacks on thread-pool threads always see a fully written token.
+        private sealed class StoppingTokenBox
+        {
+            public StoppingTokenBox(CancellationToken token) { Token = token; }
+            public CancellationToken Token { get; }
+        }
+        private StoppingTokenBox _stoppingBox = new(CancellationToken.None);
         private readonly ConcurrentDictionary<string, DateTime> _recentAlerts = new(StringComparer.OrdinalIgnoreCase);
 
         private static readonly TimeSpan AlertCooldown = TimeSpan.FromMinutes(5);
@@ -87,6 +95,7 @@ namespace Sentinel.Core
                 return;
             }
             _logger.LogInformation("[LnkShortcutMonitor] Starting - watching for malicious .lnk files");
+            Volatile.Write(ref _stoppingBox, new StoppingTokenBox(ct)); // before any watcher can raise an event
 
             // Start watchers on all target directories
             var watchPaths = GetWatchPaths();
@@ -113,7 +122,7 @@ namespace Sentinel.Core
             foreach (var watcher in _watchers)
             {
                 try { watcher.EnableRaisingEvents = false; watcher.Dispose(); }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[LnkShortcutMonitor] ExecuteAsync failed"); }
             }
         }
 
@@ -146,7 +155,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { /* best effort */ }
+            catch (Exception ex) { /* best effort */ _logger.LogDebug(ex, "[LnkShortcutMonitor] GetWatchPaths failed"); }
 
             // Common / current-session fallbacks
             Add(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
@@ -189,8 +198,8 @@ namespace Sentinel.Core
 
         private void OnLnkEvent(object sender, FileSystemEventArgs e)
         {
-            // Small delay to let the file finish writing
-            Thread.Sleep(200);
+            // Small delay to let the file finish writing; a stop request ends it and skips the analysis.
+            if (WaitOrStopping(200)) return;
             AnalyzeShortcut(e.FullPath);
         }
 
@@ -198,9 +207,19 @@ namespace Sentinel.Core
         {
             if (e.FullPath.EndsWith(".lnk", StringComparison.Ordinal))
             {
-                Thread.Sleep(200);
+                if (WaitOrStopping(200)) return;
                 AnalyzeShortcut(e.FullPath);
             }
+        }
+
+        /// <summary>
+        /// Cancellable settle wait for watcher callbacks. True when the host is stopping. A late callback
+        /// after BackgroundService disposed its token source must not throw on a thread-pool thread.
+        /// </summary>
+        private bool WaitOrStopping(int milliseconds)
+        {
+            try { return Volatile.Read(ref _stoppingBox).Token.WaitHandle.WaitOne(milliseconds); }
+            catch (ObjectDisposedException) { return true; }
         }
 
         private void AnalyzeShortcut(string lnkPath)
@@ -315,10 +334,10 @@ namespace Sentinel.Core
                                 AnalyzeShortcut(lnk);
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[LnkShortcutMonitor] ScanExistingShortcuts failed"); }
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[LnkShortcutMonitor] ScanExistingShortcuts failed"); }
             }
 
             if (detected > 0)
@@ -415,7 +434,7 @@ namespace Sentinel.Core
                 if (!string.IsNullOrWhiteSpace(targetPath) || !string.IsNullOrWhiteSpace(arguments))
                     return true;
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "LnkShortcutMonitor.TryGetShortcut()"); }
 
             // Method 2: Simple binary scan for UNC paths in the .lnk file
             try
@@ -436,7 +455,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "LnkShortcutMonitor.TryGetShortcut()"); }
 
             return false;
         }

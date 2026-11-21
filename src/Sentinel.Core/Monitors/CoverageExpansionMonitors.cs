@@ -74,7 +74,7 @@ namespace Sentinel.Core
                         if (pid <= 4) continue;
 
                         string? path = null;
-                        try { path = SecurityValidation.GetProcessImagePath(pid); } catch { }
+                        try { path = SecurityValidation.GetProcessImagePath(pid); } catch (Exception ex) { _logger.LogDebug(ex, "[LpeScaffoldMonitor] ScanAsync #1 failed"); }
 
                         bool toolHit = false;
                         string? matched = null;
@@ -163,10 +163,10 @@ namespace Sentinel.Core
                             }).ConfigureAwait(false);
                         }
                     }
-                    catch { /* process exited */ }
+                    catch (Exception ex) { /* process exited */ _logger.LogDebug(ex, "[LpeScaffoldMonitor] ScanAsync #2 failed"); }
                     finally
                     {
-                        try { proc.Dispose(); } catch { }
+                        try { proc.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[LpeScaffoldMonitor] ScanAsync #3 failed"); }
                     }
                 }
             }
@@ -174,7 +174,7 @@ namespace Sentinel.Core
             {
                 foreach (var p in procs)
                 {
-                    try { p.Dispose(); } catch { }
+                    try { p.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[LpeScaffoldMonitor] ScanAsync #4 failed"); }
                 }
             }
         }
@@ -325,7 +325,7 @@ namespace Sentinel.Core
                         _baseline[label] = v;
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[PersistenceSurfaceMonitor] SnapshotBaseline failed"); }
             }
 
             // Baseline a set of high-risk COM InprocServer32 paths for ms-settings / eventvwr
@@ -354,7 +354,7 @@ namespace Sentinel.Core
                         _baseline[id + ":default"] = def;
                         _baseline[id + ":delegate"] = delegateEx;
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[PersistenceSurfaceMonitor] BaselineComKeys failed"); }
                 }
             }
         }
@@ -398,7 +398,7 @@ namespace Sentinel.Core
                         }).ConfigureAwait(false);
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[PersistenceSurfaceMonitor] ScanAsync #1 failed"); }
             }
 
             // IFEO subkey growth (new image names)
@@ -430,7 +430,7 @@ namespace Sentinel.Core
                     _baseline["IFEO:count"] = count.ToString();
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[PersistenceSurfaceMonitor] ScanAsync #2 failed"); }
 
             // COM / protocol handler hijacks (HKCU preferred by attackers - no admin)
             string[] comPaths =
@@ -473,7 +473,7 @@ namespace Sentinel.Core
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[PersistenceSurfaceMonitor] ScanAsync #3 failed"); }
                 }
             }
         }
@@ -640,7 +640,7 @@ namespace Sentinel.Core
                         bool fromOffice = OfficeParents.Contains(parentStem);
 
                         string? path = null;
-                        try { path = SecurityValidation.GetProcessImagePath(pid); } catch { }
+                        try { path = SecurityValidation.GetProcessImagePath(pid); } catch (Exception ex) { _logger.LogDebug(ex, "[InitialAccessMonitor] ScanAsync #1 failed"); }
 
                         bool stagingChild = path != null && (
                             path.IndexOf(@"\Downloads\", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -715,10 +715,10 @@ namespace Sentinel.Core
                             }
                         }).ConfigureAwait(false);
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[InitialAccessMonitor] ScanAsync #2 failed"); }
                     finally
                     {
-                        try { proc.Dispose(); } catch { }
+                        try { proc.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[InitialAccessMonitor] ScanAsync #3 failed"); }
                     }
                 }
             }
@@ -726,7 +726,7 @@ namespace Sentinel.Core
             {
                 foreach (var p in procs)
                 {
-                    try { p.Dispose(); } catch { }
+                    try { p.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[InitialAccessMonitor] ScanAsync #4 failed"); }
                 }
             }
         }

@@ -237,7 +237,7 @@ namespace Sentinel.Core
             }
 
             bool exists = false;
-            try { exists = System.IO.File.Exists(imagePath); } catch { }
+            try { exists = System.IO.File.Exists(imagePath); } catch (Exception ex) { BestEffort.Debug(ex, "UserlandProtocolHeuristics.IsVerifiedInstallIdentity"); }
 
             if (!pathOk)
             {
@@ -1858,7 +1858,7 @@ namespace Sentinel.Core
                     await EmitAsync(kind, name, path, p.Id, https: false, dedicatedDns, commsDns: false, urlInContent: false)
                         .ConfigureAwait(false);
                 }
-                catch { /* process exited */ }
+                catch (Exception ex) { /* process exited */ _logger.LogDebug(ex, "[CovertWebhookMonitor] ScanAsync failed"); }
                 finally { p.Dispose(); }
             }
         }
@@ -1966,7 +1966,7 @@ namespace Sentinel.Core
                     if (!string.IsNullOrEmpty(info.imagePath))
                         path = info.imagePath;
                 }
-                catch { /* ancestry miss is non-fatal */ }
+                catch (Exception ex) { /* ancestry miss is non-fatal */ BestEffort.Debug(ex, "ProtocolProcessLookup.Resolve #1"); }
             }
 
             if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(path))
@@ -1976,9 +1976,9 @@ namespace Sentinel.Core
                     using var p = Process.GetProcessById(pid);
                     if (string.IsNullOrEmpty(name)) name = p.ProcessName;
                 }
-                catch { /* process exited */ }
+                catch (Exception ex) { /* process exited */ BestEffort.Debug(ex, "ProtocolProcessLookup.Resolve #2"); }
                 try { path ??= SecurityValidation.GetProcessImagePath(pid); }
-                catch { /* path unavailable */ }
+                catch (Exception ex) { /* path unavailable */ BestEffort.Debug(ex, "ProtocolProcessLookup.Resolve #3"); }
             }
 
             if (string.IsNullOrEmpty(name)) name = "unknown";
@@ -2310,7 +2310,7 @@ namespace Sentinel.Core
                 var value = new FWP_VALUE0 { type = 3, uint32 = 1 }; // FWP_UINT32 = 1
                 FwpmEngineSetOption0(engine, 0, ref value); // FWPM_ENGINE_COLLECT_NET_EVENTS
             }
-            catch { /* optional; subscribe may still receive drops */ }
+            catch (Exception ex) { /* optional; subscribe may still receive drops */ BestEffort.Debug(ex, "FwpmNative.TryEnableNetEventCollection"); }
         }
 
         /// <summary>

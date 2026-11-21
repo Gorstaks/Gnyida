@@ -91,13 +91,13 @@ namespace Sentinel.Core
                             return true;
                         }
                     }
-                    catch
-                    {
+                    catch (Exception ex) {
                         // Access denied / exited mid-enum
+                        BestEffort.Debug(ex, "BulkTransferNoise.IsAnyBulkTransferProcessRunning()");
                     }
                     finally
                     {
-                        try { p.Dispose(); } catch { }
+                        try { p.Dispose(); } catch (Exception ex) { BestEffort.Debug(ex, "BulkTransferNoise.IsAnyBulkTransferProcessRunning()"); }
                     }
                 }
             }

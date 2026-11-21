@@ -53,9 +53,9 @@ namespace Sentinel.Core
                 if (!string.IsNullOrEmpty(winTemp))
                     roots.Add(winTemp);
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Best-effort
+                BestEffort.Debug(ex, "SecurityValidation.EnumerateInteractiveUserWritableRoots()");
             }
             return roots;
         }
@@ -735,7 +735,7 @@ namespace Sentinel.Core
                 if (QueryFullProcessImageName(hProcess, 0, builder, ref size))
                     return builder.ToString();
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "SecurityValidation.GetProcessImagePath()"); }
             finally
             {
                 NativeProcessMemory.CloseHandle(hProcess);
@@ -958,7 +958,7 @@ namespace Sentinel.Core
                         return true;
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "SecurityValidation.IsGameOrAntiCheatProcess()"); }
 
             return IsGameOrAntiCheatPath(imagePath);
         }

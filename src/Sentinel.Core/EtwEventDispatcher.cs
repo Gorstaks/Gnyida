@@ -178,7 +178,7 @@ namespace Sentinel.Core
                 path = path.Substring(4);
 
             string name = "";
-            try { name = _ancestryCache.GetProcessInfo(pid).name; } catch { /* ImageLoad is enough */ }
+            try { name = _ancestryCache.GetProcessInfo(pid).name; } catch (Exception ex) { /* ImageLoad is enough */ _logger.LogDebug(ex, "[EtwEventDispatcher] HandleImageLoad failed"); }
 
             _ = _dllUnloadEngine.NotifyMappedModuleAsync(pid, name, path);
         }
@@ -203,7 +203,7 @@ namespace Sentinel.Core
 
             // Resolve parent
             string parentName = "";
-            try { parentName = _ancestryCache.GetProcessInfo(parentPid).name; } catch { }
+            try { parentName = _ancestryCache.GetProcessInfo(parentPid).name; } catch (Exception ex) { _logger.LogDebug(ex, "[EtwEventDispatcher] HandleProcessStart failed"); }
 
             // Update baseline
             _baseline?.RecordProcess(processName, imagePath, pid, parentName);
@@ -297,7 +297,7 @@ namespace Sentinel.Core
             }
             catch
             {
-                try { processName = ReadProcessName(pid); } catch { }
+                try { processName = ReadProcessName(pid); } catch (Exception ex) { _logger.LogDebug(ex, "[EtwEventDispatcher] OnKernelFileEvent failed"); }
             }
 
             if (string.IsNullOrEmpty(processName)) return;
@@ -339,7 +339,7 @@ namespace Sentinel.Core
             // These events have no key path; record only a weak WMI host hint.
             int pid = evt.ProcessId;
             string processName = "";
-            try { processName = _ancestryCache.GetProcessInfo(pid).name; } catch { }
+            try { processName = _ancestryCache.GetProcessInfo(pid).name; } catch (Exception ex) { _logger.LogDebug(ex, "[EtwEventDispatcher] OnKernelRegistryEvent failed"); }
             if (string.IsNullOrEmpty(processName))
             {
                 try { processName = ReadProcessName(pid); } catch { return; }
@@ -381,10 +381,10 @@ namespace Sentinel.Core
 
             int pid = evt.ProcessId;
             string processName = "";
-            try { processName = _ancestryCache.GetProcessInfo(pid).name; } catch { }
+            try { processName = _ancestryCache.GetProcessInfo(pid).name; } catch (Exception ex) { _logger.LogDebug(ex, "[EtwEventDispatcher] OnDnsClientEvent failed"); }
             if (string.IsNullOrEmpty(processName))
             {
-                try { processName = ReadProcessName(pid); } catch { }
+                try { processName = ReadProcessName(pid); } catch (Exception ex) { _logger.LogDebug(ex, "[EtwEventDispatcher] OnDnsClientEvent failed"); }
             }
 
             var telemetry = new DnsTelemetry
@@ -416,10 +416,10 @@ namespace Sentinel.Core
             int targetPid = evt.UserDataLength >= 8 ? Marshal.ReadInt32(evt.UserData, 0) : 0;
 
             string processName = "";
-            try { processName = _ancestryCache.GetProcessInfo(callerPid).name; } catch { }
+            try { processName = _ancestryCache.GetProcessInfo(callerPid).name; } catch (Exception ex) { _logger.LogDebug(ex, "[EtwEventDispatcher] OnThreatIntelEvent failed"); }
             if (string.IsNullOrEmpty(processName))
             {
-                try { processName = ReadProcessName(callerPid); } catch { }
+                try { processName = ReadProcessName(callerPid); } catch (Exception ex) { _logger.LogDebug(ex, "[EtwEventDispatcher] OnThreatIntelEvent failed"); }
             }
 
             var telemetry = new ThreatIntelTelemetry
@@ -460,7 +460,7 @@ namespace Sentinel.Core
 
             int pid = evt.ProcessId;
             string processName = "powershell.exe";
-            try { processName = ReadProcessName(pid); } catch { }
+            try { processName = ReadProcessName(pid); } catch (Exception ex) { _logger.LogDebug(ex, "[EtwEventDispatcher] OnPowerShellEvent failed"); }
 
             // Feed as a ProcessTelemetry with the script block as the command line
             // This allows existing detection rules (ReverseShellRule, AttackToolsRule) to evaluate it
@@ -557,7 +557,7 @@ namespace Sentinel.Core
                 else
                     HandleTcpNetworkEvent(evt);
             }
-            catch { /* ETW callback must never throw */ }
+            catch (Exception ex) { /* ETW callback must never throw */ _logger.LogDebug(ex, "[EtwEventDispatcher] OnKernelNetworkEvent failed"); }
         }
 
         private void HandleTcpNetworkEvent(EtwRawEvent evt)
@@ -657,11 +657,11 @@ namespace Sentinel.Core
         private string ResolveEtwProcessName(int pid)
         {
             string processName = "";
-            try { processName = _ancestryCache.GetProcessInfo(pid).name; } catch { }
+            try { processName = _ancestryCache.GetProcessInfo(pid).name; } catch (Exception ex) { _logger.LogDebug(ex, "[EtwEventDispatcher] ResolveEtwProcessName failed"); }
             if (string.IsNullOrEmpty(processName) ||
                 processName.Equals("unknown", StringComparison.OrdinalIgnoreCase))
             {
-                try { processName = ReadProcessName(pid); } catch { }
+                try { processName = ReadProcessName(pid); } catch (Exception ex) { _logger.LogDebug(ex, "[EtwEventDispatcher] ResolveEtwProcessName failed"); }
             }
             return processName ?? "";
         }
@@ -695,7 +695,7 @@ namespace Sentinel.Core
                 if (pid > 4)
                     processName = ReadProcessName(pid);
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[EtwEventDispatcher] OnWmiActivityEvent failed"); }
 
             bool permanent = evt.EventId == WmiPermConsumer || evt.EventId == WmiPermBinding;
             bool hostile = WmiPersistenceSignals.LooksHostile(payload);
@@ -732,7 +732,7 @@ namespace Sentinel.Core
             };
 
             try { _ = _detectionEngine.EmitAsync(detection); }
-            catch { }
+            catch (Exception ex) { _logger.LogWarning(ex, "[EtwEventDispatcher] OnWmiActivityEvent failed"); }
         }
 
         // 

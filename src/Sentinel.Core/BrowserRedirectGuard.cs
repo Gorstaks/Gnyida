@@ -85,7 +85,7 @@ namespace Sentinel.Core
         private static Dictionary<string, string> Snapshot()
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            try { AddPolicies(map, "HKLM", Registry.LocalMachine, string.Empty); } catch (Exception) { }
+            try { AddPolicies(map, "HKLM", Registry.LocalMachine, string.Empty); } catch (Exception ex) { BestEffort.Debug(ex, "BrowserRedirectGuard.Snapshot()"); }
             string[] sids;
             try { sids = Registry.Users.GetSubKeyNames(); } catch (Exception) { sids = Array.Empty<string>(); }
             foreach (var sid in sids.Where(s => !s.EndsWith("_Classes", StringComparison.OrdinalIgnoreCase)))
@@ -100,7 +100,7 @@ namespace Sentinel.Core
                         if (prog != null) map[$"HKU\\{sid} default {scheme} handler"] = prog;
                     }
                 }
-                catch (Exception) { /* a user hive that cannot be read is skipped for this pass */ }
+                catch (Exception ex) { /* a user hive that cannot be read is skipped for this pass */ BestEffort.Debug(ex, "BrowserRedirectGuard.Snapshot()"); }
             }
             return map;
         }

@@ -317,7 +317,7 @@ namespace Sentinel.Core
         public void AddTestOverride(string filePath, bool isSigned, string signer)
         {
             string writeTime = "";
-            try { writeTime = FileFingerprint(filePath); } catch { }
+            try { writeTime = FileFingerprint(filePath); } catch (Exception ex) { _logger.LogDebug(ex, "[SignerTrustService] AddTestOverride failed"); }
             Store(filePath, isSigned, signer, "test:" + writeTime);
         }
 

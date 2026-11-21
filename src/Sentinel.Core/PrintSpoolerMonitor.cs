@@ -99,7 +99,7 @@ namespace Sentinel.Core
                     };
                     _printToFileWatcher.Created += OnXpsFileCreated;
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[PrintSpoolerMonitor] ExecuteAsync failed"); }
             }
 
             while (!ct.IsCancellationRequested)
@@ -143,7 +143,7 @@ namespace Sentinel.Core
                     ProcessId = 0
                 });
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[PrintSpoolerMonitor] OnXpsFileCreated failed"); }
         }
 
         private async Task CheckSpoolBurst(CancellationToken ct)
@@ -212,7 +212,7 @@ namespace Sentinel.Core
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[PrintSpoolerMonitor] ScanForSuspiciousPrintOutput failed"); }
         }
 
         // 
@@ -325,7 +325,7 @@ namespace Sentinel.Core
                         await _detectionEngine.EmitAsync(evt);
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[PrintSpoolerMonitor] DetectNewDriverDlls failed"); }
             }
         }
 
@@ -447,14 +447,14 @@ namespace Sentinel.Core
                                     }
                                 });
                             }
-                            catch { }
+                            catch (Exception ex) { _logger.LogDebug(ex, "[PrintSpoolerMonitor] DetectSpoolerChildProcesses #1 failed"); }
                             finally { proc.Dispose(); }
                         }
                     }
                     finally { spooler.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[PrintSpoolerMonitor] DetectSpoolerChildProcesses #2 failed"); }
         }
 
         private static int GetSpoolerPid()
@@ -469,7 +469,7 @@ namespace Sentinel.Core
                     return pid;
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "PrintSpoolerMonitor.GetSpoolerPid"); }
             return 0;
         }
 
@@ -484,7 +484,7 @@ namespace Sentinel.Core
                     return Convert.ToInt32(obj["ParentProcessId"]);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "PrintSpoolerMonitor.GetParentPid"); }
             return 0;
         }
 
@@ -495,13 +495,13 @@ namespace Sentinel.Core
         {
             if (_spoolWatcher != null)
             {
-                try { _spoolWatcher.Created -= OnSpoolFileCreated; } catch { }
-                try { _spoolWatcher.Dispose(); } catch { }
+                try { _spoolWatcher.Created -= OnSpoolFileCreated; } catch (Exception ex) { _logger.LogDebug(ex, "[PrintSpoolerMonitor] Dispose #1 failed"); }
+                try { _spoolWatcher.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[PrintSpoolerMonitor] Dispose #2 failed"); }
             }
             if (_printToFileWatcher != null)
             {
-                try { _printToFileWatcher.Created -= OnXpsFileCreated; } catch { }
-                try { _printToFileWatcher.Dispose(); } catch { }
+                try { _printToFileWatcher.Created -= OnXpsFileCreated; } catch (Exception ex) { _logger.LogDebug(ex, "[PrintSpoolerMonitor] Dispose #3 failed"); }
+                try { _printToFileWatcher.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[PrintSpoolerMonitor] Dispose #4 failed"); }
             }
             base.Dispose();
         }

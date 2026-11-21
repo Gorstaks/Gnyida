@@ -120,8 +120,15 @@ namespace Sentinel.Core
 
                 dirInfo.SetAccessControl(security);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // The key directory may stay readable by more principals than intended.
+                BestEffort.Warn(ex, "FileVerdictAds.GetOrCreateHmacKey(lock directory ACL)");
+            }
 
+            // Unreadable (sharing violation, access denied) is transient: keep the file. A file that was read
+            // but does not decrypt to a 32-byte key is corrupt: regenerate and overwrite it so verdicts heal.
+            bool keyFileUnreadable = false;
             try
             {
                 if (File.Exists(keyFilePath))
@@ -132,9 +139,19 @@ namespace Sentinel.Core
                     {
                         return rawKey;
                     }
+                    System.Diagnostics.Trace.TraceWarning("FileVerdictAds: HMAC key file is corrupt; regenerating it.");
                 }
             }
-            catch { }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                keyFileUnreadable = true;
+                BestEffort.Warn(ex, "FileVerdictAds.GetOrCreateHmacKey(read key)");
+            }
+            catch (Exception ex)
+            {
+                // Decryption or format failure: treated as corrupt, regenerated below.
+                BestEffort.Warn(ex, "FileVerdictAds.GetOrCreateHmacKey(decrypt key)");
+            }
 
             // Create new key
             var newKey = new byte[32];
@@ -143,12 +160,26 @@ namespace Sentinel.Core
                 rng.GetBytes(newKey);
             }
 
+            // A key file that exists but could not be read (sharing violation, access denied) is not
+            // overwritten: that would silently rotate the key and invalidate every stored verdict.
+            // This process uses an ephemeral key instead, so verdicts it writes simply fail to verify
+            // after restart (fail closed: an unverifiable verdict is never trusted).
+            if (keyFileUnreadable)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "FileVerdictAds: existing HMAC key unreadable; using an ephemeral in-memory key for this process.");
+                return newKey;
+            }
+
             try
             {
                 var encryptedBytes = Protect(newKey);
                 File.WriteAllBytes(keyFilePath, encryptedBytes);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                BestEffort.Warn(ex, "FileVerdictAds.GetOrCreateHmacKey(persist key)");
+            }
 
             return newKey;
         }
@@ -226,9 +257,10 @@ namespace Sentinel.Core
 
                 return ParseAndValidatePayload(text!, expectedSha256);
             }
-            catch
+            catch (Exception ex)
             {
                 // Degrade gracefully
+                BestEffort.Debug(ex, "FileVerdictAds.GetVerdict()");
             }
             return HashVerdict.Unknown;
         }
@@ -255,9 +287,10 @@ namespace Sentinel.Core
                 var finalPayload = $"{payloadStr}|{signatureHex}";
                 TryWriteVerdictPayload(filePath, fileSha256, finalPayload);
             }
-            catch
+            catch (Exception ex)
             {
                 // Degrade gracefully
+                BestEffort.Warn(ex, "FileVerdictAds.SetVerdict()");
             }
         }
 
@@ -363,7 +396,7 @@ namespace Sentinel.Core
                                 continue;
                             drives.Add(d.RootDirectory.FullName);
                         }
-                        catch { }
+                        catch (Exception ex) { BestEffort.Debug(ex, "FileVerdictAds.PurgeLegacySidecarFiles()"); }
                     }
                 }
                 catch (Exception ex)
@@ -474,15 +507,17 @@ namespace Sentinel.Core
                         if (deleted <= 20 || deleted % 100 == 0)
                             log?.Invoke($"Deleted legacy verdict sidecar ({deleted}): {file}");
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         // locked / ACL - best effort
+                        BestEffort.Debug(ex, "FileVerdictAds.WalkAndDeleteLegacySidecars()");
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // no list permission
+                BestEffort.Debug(ex, "FileVerdictAds.WalkAndDeleteLegacySidecars()");
             }
 
             string[]? children = null;
@@ -514,9 +549,10 @@ namespace Sentinel.Core
                     Directory.CreateDirectory(dir);
                 File.WriteAllText(cachePath, payload, Encoding.UTF8);
             }
-            catch
+            catch (Exception ex)
             {
                 // continue - try ADS if path available
+                BestEffort.Warn(ex, "FileVerdictAds.TryWriteVerdictPayload()");
             }
 
             // 2) Optional NTFS ADS on the target (invisible; not a separate visible file)
@@ -533,9 +569,10 @@ namespace Sentinel.Core
                     sw.Write(payload);
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // ADS unavailable (FAT, some network shares, path validation) - central cache is enough
+                BestEffort.Warn(ex, "FileVerdictAds.TryWriteVerdictPayload()");
             }
 
             // 3) NEVER write adjacent .sentinel_verdict sidecars (legacy pollution)
@@ -546,9 +583,10 @@ namespace Sentinel.Core
                 if (File.Exists(side))
                     File.Delete(side);
             }
-            catch
+            catch (Exception ex)
             {
                 // best-effort cleanup
+                BestEffort.Debug(ex, "FileVerdictAds.TryWriteVerdictPayload()");
             }
         }
 
@@ -561,9 +599,10 @@ namespace Sentinel.Core
                 if (File.Exists(cachePath))
                     return File.ReadAllText(cachePath, Encoding.UTF8);
             }
-            catch
+            catch (Exception ex)
             {
                 // fall through
+                BestEffort.Debug(ex, "FileVerdictAds.TryReadVerdictPayload()");
             }
 
             // 2) NTFS ADS on the target
@@ -579,9 +618,10 @@ namespace Sentinel.Core
                         return sr.ReadToEnd();
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
                     // fall through
+                    BestEffort.Debug(ex, "FileVerdictAds.TryReadVerdictPayload()");
                 }
 
                 // 3) Legacy sidecar - migrate into central cache, then delete
@@ -602,16 +642,17 @@ namespace Sentinel.Core
                                     Directory.CreateDirectory(dir);
                                 File.WriteAllText(cachePath, text, Encoding.UTF8);
                             }
-                            catch { }
+                            catch (Exception ex) { BestEffort.Debug(ex, "FileVerdictAds.TryReadVerdictPayload()"); }
 
-                            try { File.Delete(side); } catch { }
+                            try { File.Delete(side); } catch (Exception ex) { BestEffort.Debug(ex, "FileVerdictAds.TryReadVerdictPayload()"); }
                         }
                         return text;
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
                     // fall through
+                    BestEffort.Debug(ex, "FileVerdictAds.TryReadVerdictPayload()");
                 }
             }
 

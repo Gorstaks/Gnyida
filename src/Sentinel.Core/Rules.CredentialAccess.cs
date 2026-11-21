@@ -31,7 +31,7 @@ namespace Sentinel.Core
                 if (created > 0 && DateTime.FromFileTimeUtc(created) <= file.Timestamp)
                     creationTime = created.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
-            catch { /* Unavailable identity retains the existing observe-only read path. */ }
+            catch (Exception ex) { /* Unavailable identity retains the existing observe-only read path. */ BestEffort.Debug(ex, "SensitiveStoreReadRule.Evaluate()"); }
 
             return new DetectionEvent
             {

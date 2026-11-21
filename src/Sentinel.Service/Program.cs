@@ -76,13 +76,19 @@ namespace Sentinel.Service
                     {
                         while (!watchdogCts.Token.IsCancellationRequested)
                         {
-                            try { InstallBootstrap.TryStartService(); } catch { }
+                            try { InstallBootstrap.TryStartService(); } catch (Exception ex2) { BestEffort.Debug(ex2, "Program.Main()"); }
                             try { Task.Delay(20000, watchdogCts.Token).GetAwaiter().GetResult(); }
                             catch (OperationCanceledException) { break; }
                         }
                     }
                     finally { watchdogCts.Dispose(); }
                 }
+                // The guard runs without a generic host: give its Trace warnings a bounded file of their own
+                // (a separate file avoids sharing-mode contention with the main service's diagnostic.jsonl).
+                var guardDiagnostics = new DiagnosticFileLoggerProvider(Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    "Sentinel", "Logs", "guard-diagnostic.jsonl"));
+                System.Diagnostics.Trace.Listeners.Add(new LoggerTraceListener(guardDiagnostics.CreateLogger("Sentinel.Guard")));
                 ServiceBase.Run(new SentinelGuardService());
                 return;
             }
@@ -203,7 +209,7 @@ namespace Sentinel.Service
                     Sentinel.Core.ShutdownContext.MarkExpected(
                         Sentinel.Core.ExpectedShutdownReason.SystemShutdown));
             }
-            catch { /* best-effort lifecycle hook */ }
+            catch (Exception ex2) { /* best-effort lifecycle hook */ BestEffort.Debug(ex2, "Program.Main()"); }
 
             AppendDiagnostic("startup_trace.log",
                 $"[{DateTime.UtcNow:O}] host.StartAsync() completed. Waiting for graceful shutdown...\n");
@@ -302,7 +308,7 @@ namespace Sentinel.Service
                 EnsureRestrictedProgramDataDir(dir);
                 File.AppendAllText(Path.Combine(dir, fileName), content);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "Program.AppendDiagnostic()"); }
         }
 
         private static void EnsureRestrictedProgramDataDir(string dirPath)
@@ -322,7 +328,7 @@ namespace Sentinel.Service
                     File.AppendAllText(Path.Combine(Path.GetTempPath(), "sentinel_acl_failure.log"),
                         "[" + DateTime.UtcNow.ToString("O") + "] " + dirPath + ": " + ex.Message + Environment.NewLine);
                 }
-                catch (IOException) { /* diagnostic only; the Trace line above is the record */ }
+                catch (IOException ex2) { /* diagnostic only; the Trace line above is the record */ BestEffort.Debug(ex2, "Program.EnsureRestrictedProgramDataDir()"); }
             }
         }
 
@@ -334,9 +340,14 @@ namespace Sentinel.Service
                     // The default WindowsService EventLog provider can throw from any log call.
                     // Keep the guarded critical-only SentinelEventLogWriter as the Event Log trail.
                     logging.ClearProviders();
-                    logging.AddProvider(new DiagnosticFileLoggerProvider(Path.Combine(
+                    var diagnosticProvider = new DiagnosticFileLoggerProvider(Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                        "Sentinel", "Logs", "diagnostic.jsonl")));
+                        "Sentinel", "Logs", "diagnostic.jsonl"));
+                    logging.AddProvider(diagnosticProvider);
+                    // Route Trace output (BestEffort records, legacy Trace lines) into the same bounded trail.
+                    foreach (var existing in System.Diagnostics.Trace.Listeners.OfType<LoggerTraceListener>().ToList())
+                        System.Diagnostics.Trace.Listeners.Remove(existing);
+                    System.Diagnostics.Trace.Listeners.Add(new LoggerTraceListener(diagnosticProvider.CreateLogger("Sentinel.Trace")));
                 })
                 .ConfigureAppConfiguration((_, cfg) => HostDiskJson.RemoveJsonSources(cfg))
                 .ConfigureServices((hostContext, services) =>
@@ -997,7 +1008,8 @@ namespace Sentinel.Service
     internal sealed class SentinelGuardService : ServiceBase
     {
         private Thread? _thread;
-        private volatile bool _stop;
+        // Signalled by OnStop so the 20 s poll wait ends immediately instead of holding the SCM stop.
+        private readonly ManualResetEvent _stopSignal = new ManualResetEvent(false);
 
         public SentinelGuardService()
         {
@@ -1007,14 +1019,26 @@ namespace Sentinel.Service
 
         protected override void OnStart(string[] args)
         {
-            _stop = false;
+            _stopSignal.Reset();
             _thread = new Thread(() =>
             {
-                while (!_stop)
+                bool lastFailed = false;
+                do
                 {
-                    try { InstallBootstrap.TryStartService(); } catch { }
-                    Thread.Sleep(20000);
+                    try
+                    {
+                        InstallBootstrap.TryStartService();
+                        lastFailed = false;
+                    }
+                    catch (Exception ex)
+                    {
+                        // Warn on the transition into failure only; repeats every 20 s stay at Debug.
+                        if (lastFailed) Sentinel.Core.BestEffort.Debug(ex, "SentinelGuardService(TryStartService)");
+                        else Sentinel.Core.BestEffort.Warn(ex, "SentinelGuardService(TryStartService)");
+                        lastFailed = true;
+                    }
                 }
+                while (!_stopSignal.WaitOne(20000));
             })
             { IsBackground = true };
             _thread.Start();
@@ -1026,7 +1050,11 @@ namespace Sentinel.Service
             // process treats it as a normal lifecycle stop, not a tamper suppression (B1).
             Sentinel.Core.ShutdownContext.MarkExpected(
                 Sentinel.Core.ExpectedShutdownReason.ServiceControllerStop);
-            _stop = true;
+            _stopSignal.Set();
+            // Let the poll thread observe the signal before the service object is torn down. The event
+            // is deliberately never disposed: disposing it under a thread still inside WaitOne would throw
+            // ObjectDisposedException on a thread with no handler and crash the process while stopping.
+            _thread?.Join(TimeSpan.FromSeconds(5));
         }
     }
 }

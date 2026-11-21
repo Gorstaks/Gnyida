@@ -218,13 +218,13 @@ namespace Sentinel.Core
                     string name = obj["Name"]?.ToString() ?? "";
                     string description = obj["InterfaceDescription"]?.ToString() ?? "";
                     bool virt = false;
-                    try { virt = Convert.ToBoolean(obj["Virtual"]); } catch { }
+                    try { virt = Convert.ToBoolean(obj["Virtual"]); } catch (Exception ex) { BestEffort.Debug(ex, "NetworkInterfaceGuard.EnumerateAdapters()"); }
                     int ifType = 0;
-                    try { ifType = Convert.ToInt32(obj["InterfaceType"]); } catch { }
+                    try { ifType = Convert.ToInt32(obj["InterfaceType"]); } catch (Exception ex) { BestEffort.Debug(ex, "NetworkInterfaceGuard.EnumerateAdapters()"); }
                     results.Add((index, name, virt, ifType, description));
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "NetworkInterfaceGuard.EnumerateAdapters()"); }
             return results;
         }
 

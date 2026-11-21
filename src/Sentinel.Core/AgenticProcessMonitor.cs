@@ -88,7 +88,7 @@ namespace Sentinel.Core
             foreach (var p in procs)
             {
                 try { byId[p.Id] = p; }
-                catch { /* disposed */ }
+                catch (Exception ex) { /* disposed */ _logger.LogDebug(ex, "[AgenticProcessMonitor] Scan #1 failed"); }
             }
 
             foreach (var p in procs)
@@ -142,7 +142,7 @@ namespace Sentinel.Core
                     continue;
 
                 string? path = null;
-                try { path = SecurityValidation.GetProcessImagePath(p.Id); } catch { /* access denied */ }
+                try { path = SecurityValidation.GetProcessImagePath(p.Id); } catch (Exception ex) { /* access denied */ _logger.LogDebug(ex, "[AgenticProcessMonitor] Scan #2 failed"); }
 
                 var credTouch = path != null && CredentialPathFragments.Any(f =>
                     path.Contains(f));
@@ -196,7 +196,7 @@ namespace Sentinel.Core
 
             foreach (var p in procs)
             {
-                try { p.Dispose(); } catch { /* ignore */ }
+                try { p.Dispose(); } catch (Exception ex) { /* ignore */ _logger.LogDebug(ex, "[AgenticProcessMonitor] Scan #3 failed"); }
             }
         }
     }

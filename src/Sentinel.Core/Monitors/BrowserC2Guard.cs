@@ -175,7 +175,7 @@ namespace Sentinel.Core
                         _alertedPids[proc.Id] = DateTimeOffset.UtcNow;
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[BrowserC2Guard] ScanForHeadlessProxyAsync failed"); }
                 finally { proc.Dispose(); }
             }
         }
@@ -228,7 +228,7 @@ namespace Sentinel.Core
                         _alertedPids[proc.Id] = DateTimeOffset.UtcNow;
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[BrowserC2Guard] ScanForActiveDebugPortsAsync failed"); }
                 finally { proc.Dispose(); }
             }
         }
@@ -314,10 +314,10 @@ namespace Sentinel.Core
                                 _alertedExtensions.Add(extId);
                             }
                         }
-                        catch { } // Malformed manifest - skip
+                        catch (Exception ex) { _logger.LogDebug(ex, "[BrowserC2Guard] ScanExtensionManifestsAsync failed"); } // Malformed manifest - skip
                     }
                 }
-                catch { } // Access denied to extensions directory
+                catch (Exception ex) { _logger.LogDebug(ex, "[BrowserC2Guard] ScanExtensionManifestsAsync failed"); } // Access denied to extensions directory
             }
         }
 
@@ -390,7 +390,7 @@ namespace Sentinel.Core
                 }
                 finally { Marshal.AllocHGlobal(size); Marshal.FreeHGlobal(buffer); }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[BrowserC2Guard] CheckForCdpClients failed"); }
             return false;
         }
 
@@ -455,7 +455,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "BrowserC2Guard.ExtractDangerousPermissions()"); }
             return found;
         }
 
@@ -472,7 +472,7 @@ namespace Sentinel.Core
                         return val;
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "BrowserC2Guard.ExtractExtensionName()"); }
             return null;
         }
 
@@ -487,7 +487,7 @@ namespace Sentinel.Core
                     return obj["CommandLine"]?.ToString() ?? "";
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "BrowserC2Guard.GetCommandLine()"); }
             return "";
         }
 
@@ -508,7 +508,7 @@ namespace Sentinel.Core
                     catch { return (null, parentPid); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "BrowserC2Guard.GetParentInfo()"); }
             return (null, 0);
         }
 

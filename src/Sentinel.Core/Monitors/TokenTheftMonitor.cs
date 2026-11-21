@@ -363,7 +363,7 @@ namespace Sentinel.Core
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[TokenTheftMonitor] ScanForTokenTheftAsync failed"); }
                 finally { proc.Dispose(); }
             }
         }

@@ -90,10 +90,10 @@ namespace Sentinel.Core
                         if (pid <= 4) continue;
 
                         string? path = null;
-                        try { path = SecurityValidation.GetProcessImagePath(pid); } catch { }
+                        try { path = SecurityValidation.GetProcessImagePath(pid); } catch (Exception ex) { _logger.LogDebug(ex, "[DreamJobCampaignMonitor] ScanAsync failed"); }
 
                         string? cmd = null;
-                        try { cmd = proc.StartInfo?.Arguments; } catch { }
+                        try { cmd = proc.StartInfo?.Arguments; } catch (Exception ex) { _logger.LogDebug(ex, "[DreamJobCampaignMonitor] ScanAsync failed"); }
 
                         if (August2026CveHeuristics.IsFudModuleName(name) ||
                             August2026CveHeuristics.IsFudModuleName(path))
@@ -151,7 +151,7 @@ namespace Sentinel.Core
                                     }
                                 }
                             }
-                            catch { }
+                            catch (Exception ex) { _logger.LogWarning(ex, "[DreamJobCampaignMonitor] ScanAsync failed"); }
                         }
 
                         if (August2026CveHeuristics.IsTempNewExe(path, name))
@@ -162,7 +162,7 @@ namespace Sentinel.Core
                                 if (_ancestry != null)
                                     parentName = _ancestry.GetParent(pid).name ?? "";
                             }
-                            catch { }
+                            catch (Exception ex) { _logger.LogDebug(ex, "[DreamJobCampaignMonitor] ScanAsync failed"); }
 
                             if (August2026CveHeuristics.IsPdfViewerProcess(parentName) ||
                                 August2026CveHeuristics.IsPdfViewerProcess(name) ||
@@ -178,10 +178,10 @@ namespace Sentinel.Core
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogWarning(ex, "[DreamJobCampaignMonitor] ScanAsync failed"); }
                     finally
                     {
-                        try { proc.Dispose(); } catch { }
+                        try { proc.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[DreamJobCampaignMonitor] ScanAsync failed"); }
                     }
                 }
             }
@@ -189,7 +189,7 @@ namespace Sentinel.Core
             {
                 foreach (var p in procs)
                 {
-                    try { p.Dispose(); } catch { }
+                    try { p.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[DreamJobCampaignMonitor] ScanAsync failed"); }
                 }
             }
         }
@@ -210,7 +210,7 @@ namespace Sentinel.Core
                         "SYSTEM", 0, null, SignalType.AntiTamper, weak: true).ConfigureAwait(false);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[DreamJobCampaignMonitor] CheckSmartAppControlAsync failed"); }
         }
 
         private async Task EmitAsync(
@@ -386,7 +386,7 @@ namespace Sentinel.Core
                     if (!string.IsNullOrEmpty(sid)) sids.Add(sid!);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "LegacyHiveMonitor.GetLoggedOnSids()"); }
             return sids;
         }
 
@@ -408,10 +408,10 @@ namespace Sentinel.Core
                         if (leaf.Equals(username, StringComparison.OrdinalIgnoreCase))
                             return sid;
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "LegacyHiveMonitor.SidFromUsername()"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "LegacyHiveMonitor.SidFromUsername()"); }
             return null;
         }
 
@@ -507,7 +507,7 @@ namespace Sentinel.Core
         {
             _logger.LogInformation("[CloudFilesHydrationMonitor] Started - CfApi sync roots / ShieldBreak placeholders");
             try { SnapshotSyncRoots(_baselineRoots); _baselined = true; }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[CloudFilesHydrationMonitor] ExecuteAsync failed"); }
 
             while (!ct.IsCancellationRequested)
             {
@@ -603,7 +603,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[CloudFilesHydrationMonitor] ScanStagingPlaceholdersAsync failed"); }
 
             foreach (var dir in roots)
             {
@@ -648,7 +648,7 @@ namespace Sentinel.Core
                             }
                         }).ConfigureAwait(false);
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[CloudFilesHydrationMonitor] ScanStagingPlaceholdersAsync failed"); }
                 }
             }
         }
@@ -910,7 +910,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex2) { _logger.LogDebug(ex2, "[ClfsExploitationMonitor] ScanForCnpfAsync failed"); }
 
             foreach (var dir in roots)
             {

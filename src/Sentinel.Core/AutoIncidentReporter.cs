@@ -106,7 +106,7 @@ namespace Sentinel.Core
                     Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                     "Sentinel", "IncidentReports");
 
-            try { Directory.CreateDirectory(_reportRoot); } catch { /* best effort */ }
+            try { Directory.CreateDirectory(_reportRoot); } catch (Exception ex) { /* best effort */ BestEffort.Debug(ex, "AutoIncidentReporter.AutoIncidentReporter"); }
         }
 
         public long PacksGenerated => Interlocked.Read(ref _packsGenerated);
@@ -166,7 +166,7 @@ namespace Sentinel.Core
                         if (!string.IsNullOrEmpty(packPath) && _windowsEventLog != null)
                             _windowsEventLog.WriteEvidencePack(detection, packPath);
                     }
-                    catch { /* Event Log optional */ }
+                    catch (Exception ex) { /* Event Log optional */ BestEffort.Debug(ex, "AutoIncidentReporter.HandleDetectionAsync"); }
 
                     // B1: mirror a signed summary off-host so a local admin who suppresses
                     // Sentinel cannot also erase the proof. Opt-in + fail-closed; the local pack
@@ -562,7 +562,7 @@ namespace Sentinel.Core
                     Path.Combine(reportDir, "network_snapshot.txt"),
                     networkLines).ConfigureAwait(false);
             }
-            catch { /* best effort */ }
+            catch (Exception ex) { /* best effort */ _logger.LogDebug(ex, "[AutoIncidentReporter] WriteEvidencePackAsync failed"); }
 
             if (incident?.Detections is { Count: > 0 })
             {
@@ -847,7 +847,7 @@ namespace Sentinel.Core
                     if (File.Exists(hmacPath))
                         manifestHmac = File.ReadAllText(hmacPath).Trim().ToLowerInvariant();
                 }
-                catch { /* origin proof is optional; summary still useful */ }
+                catch (Exception ex) { /* origin proof is optional; summary still useful */ _logger.LogDebug(ex, "[AutoIncidentReporter] MirrorEvidenceOffHostAsync failed"); }
 
                 var checkpoint = _eventLogger?.GetAuditCheckpoint();
                 var summary = new EvidenceSummary

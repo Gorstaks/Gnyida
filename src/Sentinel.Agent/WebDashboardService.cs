@@ -129,8 +129,8 @@ namespace Sentinel.Agent
 
         public override Task StopAsync(CancellationToken cancellationToken)
         {
-            try { _listener?.Stop(); } catch { }
-            try { _listener?.Close(); } catch { }
+            try { _listener?.Stop(); } catch (Exception ex) { _logger.LogDebug(ex, "[WebDashboardService] StopAsync failed"); }
+            try { _listener?.Close(); } catch (Exception ex) { _logger.LogDebug(ex, "[WebDashboardService] StopAsync failed"); }
             _wsClients.Dispose();
             return base.StopAsync(cancellationToken);
         }
@@ -243,7 +243,7 @@ namespace Sentinel.Agent
                     response.StatusCode = 500;
                     response.Close();
                 }
-                catch { }
+                catch (Exception ex2) { _logger.LogDebug(ex2, "[WebDashboardService] HandleRequestAsync failed"); }
             }
         }
 
@@ -688,11 +688,11 @@ namespace Sentinel.Agent
                             records.Add((root.TryGetProperty("type", out var t) ? t.GetString() ?? "unknown" : "unknown",
                                 root.TryGetProperty("timestamp", out var ts) ? ts.GetString() ?? "" : "", line));
                         }
-                        catch (JsonException) { }
+                        catch (JsonException ex) { _logger.LogDebug(ex, "[WebDashboardService] HandleEvents failed"); }
                     }
                 }
-                catch (IOException) { }
-                catch (UnauthorizedAccessException) { }
+                catch (IOException ex) { _logger.LogDebug(ex, "[WebDashboardService] HandleEvents failed"); }
+                catch (UnauthorizedAccessException ex) { _logger.LogDebug(ex, "[WebDashboardService] HandleEvents failed"); }
             }
             var events = records.OrderByDescending(record => record.Timestamp, StringComparer.Ordinal)
                 .Take(count).Select(record => new { type = record.Type, timestamp = record.Timestamp, data = record.Data }).ToList();
@@ -800,7 +800,7 @@ namespace Sentinel.Agent
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[WebDashboardService] HandlePacks failed"); }
             }
 
             await WriteJson(response, new { ok = true, packs }).ConfigureAwait(false);
@@ -940,7 +940,7 @@ namespace Sentinel.Agent
                     agentRunning = System.Diagnostics.Process.GetProcessesByName("Sentinel.Agent").Length > 0;
                     serviceRunning = System.Diagnostics.Process.GetProcessesByName("Sentinel.Service").Length > 0;
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[WebDashboardService] HandleDiagnostics failed"); }
 
                 sb.AppendLine($"Agent process: {(agentRunning ? "running" : "not found")}");
                 sb.AppendLine($"Service process: {(serviceRunning ? "running" : "not found")}");
@@ -1007,7 +1007,7 @@ namespace Sentinel.Agent
                     // We don't process incoming messages - this is a push-only stream
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[WebDashboardService] HandleWebSocket failed"); }
             finally
             {
                 _wsClients.Remove(ws);
@@ -1057,7 +1057,7 @@ namespace Sentinel.Agent
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[WebDashboardService] WatchAndBroadcastEvents failed"); }
 
                 await Task.Delay(1000, ct).ConfigureAwait(false);
             }
@@ -1169,7 +1169,7 @@ namespace Sentinel.Agent
                 }
                 lines.AddRange(buffer);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WebDashboardService.ReadLastLines()"); }
             return lines;
         }
 

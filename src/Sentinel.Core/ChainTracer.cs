@@ -600,7 +600,7 @@ namespace Sentinel.Core
                     if (SecurityValidation.VerifyAuthenticodeSignature(imagePath!))
                         return true;
                 }
-                catch { /* treat as untrusted */ }
+                catch (Exception ex) { /* treat as untrusted */ BestEffort.Debug(ex, "ChainTracer.IsLegitimateBrowserHost()"); }
             }
 
             return false;
@@ -659,7 +659,7 @@ namespace Sentinel.Core
             {
                 return verifySignature(imagePath!);
             }
-            catch { /* treat as untrusted */ }
+            catch (Exception ex) { /* treat as untrusted */ BestEffort.Debug(ex, "ChainTracer.IsLegitimateIdeHost()"); }
 
             return false;
         }

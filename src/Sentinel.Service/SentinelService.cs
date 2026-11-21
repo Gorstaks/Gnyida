@@ -176,7 +176,7 @@ namespace Sentinel.Service
                         _monitorRegistry.ReportProgress(monitor.Name, source.Progress.Snapshot());
                 }
             }
-            catch { /* heartbeat is best-effort */ }
+            catch (Exception ex) { /* heartbeat is best-effort */ _logger.LogDebug(ex, "[SentinelService] HeartbeatOwnedMonitors failed"); }
         }
 
         /// <summary>Best-effort category assignment for IMonitor implementations by name.</summary>
@@ -305,7 +305,7 @@ namespace Sentinel.Service
             {
                 _windowsEventLog?.WriteServiceStart(_version);
             }
-            catch { /* Event Log optional on stripped Windows */ }
+            catch (Exception ex2) { /* Event Log optional on stripped Windows */ _logger.LogDebug(ex2, "[SentinelService] ExecuteAsync failed"); }
 
             try
             {
@@ -318,7 +318,7 @@ namespace Sentinel.Service
                     HeartbeatOwnedMonitors();
                 }
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException ex2) { _logger.LogDebug(ex2, "[SentinelService] ExecuteAsync failed"); }
             catch (Exception ex)
             {
                 _logger.LogCritical(ex, "Unexpected exception in keep-alive loop");
@@ -326,7 +326,7 @@ namespace Sentinel.Service
             finally
             {
                 _logger.LogInformation("Sentinel Service stopping...");
-                try { _windowsEventLog?.WriteServiceStop(_version); } catch { /* optional */ }
+                try { _windowsEventLog?.WriteServiceStop(_version); } catch (Exception ex2) { /* optional */ _logger.LogDebug(ex2, "[SentinelService] ExecuteAsync failed"); }
 
                 // Stop and dispose IMonitors
                 foreach (var monitor in _monitors)
@@ -385,7 +385,7 @@ namespace Sentinel.Service
                 // STABILITY: Never let ExecuteAsync return - that kills the host.
                 // Log the error and enter infinite sleep until SCM sends stop signal.
                 _logger.LogCritical(ex, "FATAL: ExecuteAsync threw unexpectedly. Entering infinite wait to prevent host shutdown.");
-                try { await Task.Delay(Timeout.Infinite, stoppingToken); } catch { }
+                try { await Task.Delay(Timeout.Infinite, stoppingToken); } catch (Exception ex2) { _logger.LogDebug(ex2, "[SentinelService] ExecuteAsync failed"); }
             }
         }
 

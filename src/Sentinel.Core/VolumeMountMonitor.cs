@@ -706,9 +706,10 @@ namespace Sentinel.Core
                             return true; // Standard removable/fixed/network drive - don't dismount
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         // Drive not accessible - fall through to suspicious
+                        _logger.LogDebug(ex, "[VolumeMountMonitor] IsLikelyLegitimateVolume failed");
                     }
                 }
             }
@@ -885,7 +886,7 @@ namespace Sentinel.Core
                                 }
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[VolumeMountMonitor] EnumerateUserSessionSubstDrives failed"); }
                     }
                 }
 
@@ -967,7 +968,7 @@ namespace Sentinel.Core
                     if (File.Exists(tempFile))
                     {
                         var output = File.ReadAllText(tempFile);
-                        try { File.Delete(tempFile); } catch { }
+                        try { File.Delete(tempFile); } catch (Exception ex) { _logger.LogDebug(ex, "[VolumeMountMonitor] RunInUserSession failed"); }
                         return output;
                     }
                 }
@@ -1087,7 +1088,7 @@ namespace Sentinel.Core
                 if (di.DriveType == DriveType.CDRom)
                     return true;
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "VolumeMountMonitor.IsWimMountDrive #1"); }
 
             // Also guard the race window: servicing process running but DriveType not yet CDRom
             try
@@ -1105,10 +1106,10 @@ namespace Sentinel.Core
                             n.Equals("trustedinstaller", StringComparison.OrdinalIgnoreCase))
                             return true;
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "VolumeMountMonitor.IsWimMountDrive #2"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "VolumeMountMonitor.IsWimMountDrive #3"); }
 
             return false;
         }
@@ -1130,7 +1131,7 @@ namespace Sentinel.Core
                     if (driveInfo.DriveType == DriveType.CDRom)
                         return "ISO";
                 }
-                catch {}
+                catch (Exception ex) { _logger.LogDebug(ex, "[VolumeMountMonitor] ClassifyVolume failed"); }
 
                 // Check if it's a SUBST drive
                 var buffer = new char[260];

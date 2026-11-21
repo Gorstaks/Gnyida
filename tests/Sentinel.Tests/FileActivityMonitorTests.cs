@@ -27,13 +27,84 @@ namespace Sentinel.Tests
             return new FileActivityMonitor(null!, null!, config, logger, signerTrust);
         }
 
+        [Theory]
+        [InlineData("trustedinstaller")]
+        [InlineData("svchost")]
+        [InlineData("svchost_x.exe")]
+        [InlineData("sfc_helper.exe")]
+        [InlineData("services")]
+        [InlineData("system")]
+        [InlineData("windowssentinel.service")]
+        public void IsTrustedSystemWriter_TrustedLookingNameAlone_IsNotTrusted(string name)
+        {
+            // Adversarial: the writer's name is attacker-chosen. A PID that cannot resolve to a
+            // signed image must stay untrusted no matter what the process is called.
+            using var monitor = CreateMonitor(out _);
+            Assert.False(monitor.IsTrustedSystemWriter(int.MaxValue - 13, name, "dummy.txt"));
+        }
+
         [Fact]
-        public void IsTrustedSystemWriter_TrustedProcessNames_ReturnsTrue()
+        public void IsTrustedWriterImage_NullOrEmptyPath_IsNotTrusted()
         {
             using var monitor = CreateMonitor(out _);
-            Assert.True(monitor.IsTrustedSystemWriter(1234, "trustedinstaller", "dummy.txt"));
-            Assert.True(monitor.IsTrustedSystemWriter(1234, "svchost", "dummy.txt"));
-            Assert.True(monitor.IsTrustedSystemWriter(1234, "windowssentinel.service", "dummy.txt"));
+            Assert.False(monitor.IsTrustedWriterImage(null));
+            Assert.False(monitor.IsTrustedWriterImage(string.Empty));
+        }
+
+        [Theory]
+        [InlineData("Sentinel", "evil.exe")]
+        [InlineData("Windows Defender", "MsMpEng.exe")]
+        [InlineData("Microsoft Security Client", "msseces.exe")]
+        public void IsTrustedWriterImage_UnsignedFileInTrustedLookingFolder_IsNotTrusted(string folder, string file)
+        {
+            // Folder names are attacker-chosen: a drop under ...\Sentinel\ or ...\Windows Defender\
+            // used to be trusted by substring. Only a valid signature (or the ACL-proven install image) counts.
+            var dir = Path.Combine(_tempPath, folder);
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, file);
+            File.WriteAllBytes(path, new byte[] { 0x4D, 0x5A, 0x00, 0x00 });
+
+            using var monitor = CreateMonitor(out _);
+            Assert.False(monitor.IsTrustedWriterImage(path));
+        }
+
+        [Theory]
+        [InlineData("Sentinel.Service.exe")]
+        [InlineData("Sentinel.Agent.exe")]
+        public void IsTrustedWriterImage_SentinelBinaryNameInWritableSentinelFolder_IsNotTrusted(string file)
+        {
+            // The real attack on the former "\Sentinel\" substring trust: drop a file named like Sentinel's
+            // own executable into a user-writable folder called Sentinel. Old code trusted this path; the
+            // install-image check now requires Sentinel's own directory AND a DACL non-admins cannot write.
+            var dir = Path.Combine(_tempPath, "Sentinel");
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, file);
+            File.WriteAllBytes(path, new byte[] { 0x4D, 0x5A, 0x00, 0x00 });
+
+            using var monitor = CreateMonitor(out _);
+            Assert.False(monitor.IsTrustedWriterImage(path));
+        }
+
+        [Fact]
+        public void IsTrustedWriterImage_UntrustedResultIsNotCached_SoLaterVerdictCanChange()
+        {
+            // A negative verdict must not be pinned: the same path is evaluated afresh each time.
+            var path = Path.Combine(_tempPath, "writer.exe");
+            File.WriteAllBytes(path, new byte[] { 0x4D, 0x5A, 0x00, 0x00 });
+            using var monitor = CreateMonitor(out _);
+            Assert.False(monitor.IsTrustedWriterImage(path));
+            Assert.False(monitor.IsTrustedWriterImage(path));
+        }
+
+        [Fact]
+        public void IsTrustedWriterImage_CatalogSignedSystemBinary_IsTrusted()
+        {
+            using var monitor = CreateMonitor(out _);
+            var cmdPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+            if (File.Exists(cmdPath) && SecurityValidation.VerifyAuthenticodeSignature(cmdPath))
+            {
+                Assert.True(monitor.IsTrustedWriterImage(cmdPath));
+            }
         }
 
         [Fact]

@@ -169,7 +169,7 @@ namespace Sentinel.Core
             {
                 Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "AntiTamperGuard.Dispose"); }
             base.Dispose();
         }
 
@@ -630,7 +630,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { } // Service exists - all good
+            catch (Exception ex) { _logger.LogDebug(ex, "[AntiTamperGuard] CheckServiceRegistration failed"); } // Service exists - all good
         }
 
         /// <summary>
@@ -673,7 +673,7 @@ namespace Sentinel.Core
                 });
                 File.AppendAllText(_lastGaspPath, entry + Environment.NewLine);
             }
-            catch { } // Best-effort - we're dying
+            catch (Exception ex) { BestEffort.Debug(ex, "AntiTamperGuard.WriteLastGasp #1"); } // Best-effort - we're dying
 
             // B1: classify the stop and record it durably in the append-only audit trail.
             // Expected (cooperative SCM stop / OS shutdown / upgrade / uninstall) -> lifecycle event.
@@ -719,10 +719,10 @@ namespace Sentinel.Core
                             ProcessId = 0
                         });
                     }
-                    catch { /* engine may be gone - audit record already written */ }
+                    catch (Exception ex) { /* engine may be gone - audit record already written */ BestEffort.Warn(ex, "AntiTamperGuard.WriteLastGasp #2"); }
                 }
             }
-            catch { } // Best-effort - never throw out of the exit path.
+            catch (Exception ex) { BestEffort.Debug(ex, "AntiTamperGuard.WriteLastGasp #3"); } // Best-effort - never throw out of the exit path.
         }
 
         /// <summary>

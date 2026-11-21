@@ -95,7 +95,7 @@ namespace Sentinel.Core
                     var val = key?.GetValue("EnableVirtualizationBasedSecurity");
                     vbsEnabled = val is int v && v == 1;
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[HardwareSecurityGuard] CheckIommuAsync failed"); }
 
                 bool hypervisorAuto = false;
                 try
@@ -113,7 +113,7 @@ namespace Sentinel.Core
                             && output.Contains("Auto");
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[HardwareSecurityGuard] CheckIommuAsync failed"); }
 
                 if (ShouldEmit("IOMMU/VT-d", !vbsEnabled && !hypervisorAuto))
                 {
@@ -155,7 +155,7 @@ namespace Sentinel.Core
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogWarning(ex, "[HardwareSecurityGuard] CheckSecureBootAsync failed"); }
         }
 
         private async Task CheckBitLockerAsync(CancellationToken ct)
@@ -175,7 +175,7 @@ namespace Sentinel.Core
                         if (cDrive != null) bitlockerActive = true;
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[HardwareSecurityGuard] CheckBitLockerAsync failed"); }
 
                 // Fallback: query manage-bde
                 if (!bitlockerActive)
@@ -196,7 +196,7 @@ namespace Sentinel.Core
                                 || output.Contains("Fully Encrypted");
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[HardwareSecurityGuard] CheckBitLockerAsync failed"); }
                 }
 
                 if (ShouldEmit("BitLocker", !bitlockerActive))
@@ -380,10 +380,10 @@ namespace Sentinel.Core
                             devices.Add($"{subKeyName}\\{instanceName}");
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "UsbHidWhitelist.EnumerateHidDevices()"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "UsbHidWhitelist.EnumerateHidDevices()"); }
             return devices;
         }
 
@@ -570,7 +570,7 @@ namespace Sentinel.Core
                     total += stats.BytesSent;
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "TrafficVolumeBaseline.GetTotalBytesSent()"); }
             return total;
         }
     }

@@ -74,9 +74,9 @@ namespace Sentinel.Core
                 if (GetProcessMemoryInfo(h, out pmc, pmc.cb))
                     pageFaults = pmc.PageFaultCount;
             }
-            catch
-            {
+            catch (Exception ex) {
                 /* best-effort */
+                BestEffort.Debug(ex, "HardFaultProbe.ReadCurrent()");
             }
 
             return new Snapshot(hardOk ? hard : 0, pageFaults, ws, hardOk);

@@ -258,11 +258,11 @@ namespace Sentinel.Core
                 string name;
                 int pid;
                 try { name = p.ProcessName; pid = p.Id; }
-                catch { try { p.Dispose(); } catch { } continue; }
+                catch { try { p.Dispose(); } catch (Exception ex) { BestEffort.Debug(ex, "StateReconciliationMonitor.SnapshotLongLivedProcesses(dispose)"); } continue; }
 
                 if (!LongLivedProcessNames.Contains(name))
                 {
-                    try { p.Dispose(); } catch { }
+                    try { p.Dispose(); } catch (Exception ex) { BestEffort.Debug(ex, "StateReconciliationMonitor.SnapshotLongLivedProcesses(dispose)"); }
                     continue;
                 }
 
@@ -270,14 +270,14 @@ namespace Sentinel.Core
                 if (!NativeProcessMemory.CanInspect(pid, imagePath))
                 {
                     // Not inspectable: skip. Do NOT enumerate (avoids clobbering MappedModuleCache).
-                    try { p.Dispose(); } catch { }
+                    try { p.Dispose(); } catch (Exception ex) { BestEffort.Debug(ex, "StateReconciliationMonitor.SnapshotLongLivedProcesses(dispose)"); }
                     continue;
                 }
 
                 List<(string, string, IntPtr, int)> modules;
                 try { modules = NativeProcessMemory.EnumModules(pid); }
                 catch { modules = new List<(string, string, IntPtr, int)>(); }
-                finally { try { p.Dispose(); } catch { } }
+                finally { try { p.Dispose(); } catch (Exception ex) { BestEffort.Debug(ex, "StateReconciliationMonitor.SnapshotLongLivedProcesses(dispose)"); } }
 
                 yield return (pid, name, imagePath, modules);
             }

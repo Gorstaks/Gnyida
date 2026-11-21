@@ -26,7 +26,7 @@ namespace Sentinel.Core
                     return result.Count < max;
                 });
             }
-            catch (Exception) { /* best effort: the finding is reported without network context */ }
+            catch (Exception ex) { /* best effort: the finding is reported without network context */ BestEffort.Debug(ex, "ProcessTcpConnections.GetEstablished()"); }
             return result;
         }
 

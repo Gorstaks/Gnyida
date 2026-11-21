@@ -243,13 +243,13 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch (OperationCanceledException)
-            {
+            catch (OperationCanceledException ex) {
                 // Normal shutdown
+                _logger.LogDebug(ex, "[DetectionEngine] ProcessTelemetryQueueAsync failed");
             }
-            catch (ObjectDisposedException)
-            {
+            catch (ObjectDisposedException ex) {
                 // CTS disposed during shutdown - safe to exit
+                _logger.LogDebug(ex, "[DetectionEngine] ProcessTelemetryQueueAsync failed");
             }
             catch (Exception ex)
             {
@@ -442,8 +442,8 @@ namespace Sentinel.Core
                                             }
                                         }
                                     }
-                                    catch (OperationCanceledException) { }
-                                    catch (ObjectDisposedException) { } // CTS disposed during shutdown - safe to ignore
+                                    catch (OperationCanceledException ex) { _logger.LogDebug(ex, "[DetectionEngine] ProcessContextAsync failed"); }
+                                    catch (ObjectDisposedException ex) { _logger.LogDebug(ex, "[DetectionEngine] ProcessContextAsync failed"); } // CTS disposed during shutdown - safe to ignore
                                     catch (Exception ex)
                                     {
                                         _logger.LogError(ex, "[DetectionEngine] Error checking process reputation for {ProcessName} (PID {ProcessId})", pt.ProcessName, pt.ProcessId);
@@ -603,13 +603,13 @@ namespace Sentinel.Core
         {
             if (_stopped) return;
             _stopped = true;
-            try { _cts.Cancel(); } catch (ObjectDisposedException) { }
+            try { _cts.Cancel(); } catch (ObjectDisposedException ex) { _logger.LogDebug(ex, "[DetectionEngine] Stop failed"); }
             try
             {
                 _processingTask?.Wait(2000);
                 _reputationWork.CompleteAsync().Wait(2000);
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[DetectionEngine] Stop failed"); }
         }
 
         private volatile bool _stopped;

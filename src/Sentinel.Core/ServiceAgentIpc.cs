@@ -50,7 +50,7 @@ namespace Sentinel.Core
                     return PipeName + "-" + BitConverter.ToString(hash, 0, 4).Replace("-", "").ToLowerInvariant();
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ServiceAgentIpc.InstancePipeName()"); }
             return PipeName;
         });
 
@@ -155,7 +155,7 @@ namespace Sentinel.Core
             catch
             {
                 // Fallback: direct write + immediate ACL lock (original behavior)
-                try { File.Delete(tempPath); } catch { }
+                try { File.Delete(tempPath); } catch (Exception ex) { BestEffort.Debug(ex, "ServiceAgentIpc.EnsureServerToken()"); }
                 File.WriteAllBytes(path, token);
                 LockTokenAcl(path);
             }
@@ -359,7 +359,7 @@ namespace Sentinel.Core
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
-                    try { next?.Dispose(); } catch (ObjectDisposedException) { }
+                    try { next?.Dispose(); } catch (ObjectDisposedException ex) { _logger.LogDebug(ex, "[ServiceAgentIpcHost] ExecuteAsync failed"); }
                     break;
                 }
                 catch (Exception ex)
@@ -368,7 +368,7 @@ namespace Sentinel.Core
                 }
                 finally
                 {
-                    try { current.Dispose(); } catch (ObjectDisposedException) { }
+                    try { current.Dispose(); } catch (ObjectDisposedException ex) { _logger.LogDebug(ex, "[ServiceAgentIpcHost] ExecuteAsync failed"); }
                 }
 
                 current = next ?? TryCreateStandingPipe();
@@ -378,7 +378,7 @@ namespace Sentinel.Core
                     break;
                 }
             }
-            try { current?.Dispose(); } catch (ObjectDisposedException) { }
+            try { current?.Dispose(); } catch (ObjectDisposedException ex) { _logger.LogDebug(ex, "[ServiceAgentIpcHost] ExecuteAsync failed"); }
         }
 
         private NamedPipeServerStream? TryCreateStandingPipe()

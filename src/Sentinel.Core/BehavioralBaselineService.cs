@@ -185,7 +185,7 @@ namespace Sentinel.Core
                 foreach (var pc in data.ParentChild) _knownParentChild[$"{pc.ParentName.ToLowerInvariant()}->{pc.ChildName.ToLowerInvariant()}"] = pc;
                 foreach (var n in data.NetworkDestinations) _knownNetworkDestinations[$"{n.ProcessName.ToLowerInvariant()}:{n.RemoteAddress}:{n.RemotePort}"] = n;
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[BehavioralBaselineService] LoadBaseline failed"); }
         }
 
         private void SaveBaseline()

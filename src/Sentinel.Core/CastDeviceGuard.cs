@@ -161,12 +161,12 @@ namespace Sentinel.Core
                         if (name != null && name.StartsWith(CastBlockRulePrefix, StringComparison.Ordinal))
                             toRemove.Add(name);
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[CastDeviceGuard] RemoveLegacyCastGuardBlocks #1 failed"); }
                 }
 
                 foreach (var name in toRemove)
                 {
-                    try { policy.Rules.Remove(name); } catch { }
+                    try { policy.Rules.Remove(name); } catch (Exception ex) { _logger.LogWarning(ex, "[CastDeviceGuard] RemoveLegacyCastGuardBlocks #2 failed"); }
                 }
 
                 if (toRemove.Count > 0)
@@ -210,7 +210,7 @@ namespace Sentinel.Core
 
                 foreach (var name in toDelete)
                 {
-                    try { policy.Rules.Remove(name); } catch { }
+                    try { policy.Rules.Remove(name); } catch (Exception ex) { _logger.LogWarning(ex, "[CastDeviceGuard] DeleteCastToDeviceInboundRules failed"); }
                 }
 
                 if (toDelete.Count > 0)
@@ -276,7 +276,10 @@ namespace Sentinel.Core
                 if (!isBrowser && ProductPosture.AllowsMitmDefenseMutations(_config))
                 {
                     try { HardeningModule.SafeKillProcessTree(conn.OwnerPid); }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "[CastDeviceGuard] Kill of Cast channel owner PID {Pid} failed", conn.OwnerPid);
+                    }
                 }
 
                 var alertKey = $"{conn.RemoteAddress}:{conn.RemotePort}";
@@ -537,7 +540,7 @@ namespace Sentinel.Core
                 }
                 finally { Marshal.FreeHGlobal(buffer); }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "CastDeviceGuard.GetArpIpToMac"); }
             return map;
         }
 

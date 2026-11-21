@@ -107,7 +107,7 @@ namespace Sentinel.Core.Monitors
                             if (!suspicious.ContainsKey(norm))
                                 suspicious[norm] = new X509Certificate2(cert.RawData);
                         }
-                        catch { /* per-cert best effort */ }
+                        catch (Exception ex) { /* per-cert best effort */ _logger.LogDebug(ex, "[RootStoreGuard] SweepAsync failed"); }
                         finally { cert.Dispose(); }
                     }
                 }

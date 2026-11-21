@@ -49,7 +49,7 @@ namespace Sentinel.Core
                     using var fs = new FileStream(ntdllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                     _baselineNtdllHash = System.Security.Cryptography.Sha256Net48.HashData(fs);
                 }
-                catch { /* access race */ }
+                catch (Exception ex) { /* access race */ _logger.LogDebug(ex, "[SyscallStubMonitor] ExecuteAsync failed"); }
             }
 
             int cycleCount = 0;
@@ -176,7 +176,7 @@ namespace Sentinel.Core
                 }
                 catch
                 {
-                    try { proc.Dispose(); } catch { }
+                    try { proc.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[SyscallStubMonitor] ScanForIndirectSyscallPatternsAsync failed"); }
                 }
             }
         }

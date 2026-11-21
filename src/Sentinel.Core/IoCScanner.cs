@@ -32,9 +32,9 @@ namespace Sentinel.Core
                         _hashIoCs.Add(line);
                 }
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Cache may not exist yet - degrade gracefully
+                BestEffort.Debug(ex, "IoCScanner.LoadFromCache()");
             }
         }
 
@@ -62,7 +62,7 @@ namespace Sentinel.Core
             {
                 _cacheStore.Save("ioc", "hashes", string.Join("\n", _hashIoCs));
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "IoCScanner.Persist()"); }
         }
 
         public bool IsKnownBadHash(string hash)

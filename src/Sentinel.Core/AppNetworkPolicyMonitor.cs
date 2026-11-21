@@ -132,9 +132,9 @@ namespace Sentinel.Core
                             using var proc = System.Diagnostics.Process.GetProcessById(pid);
                             processName = proc.ProcessName;
                         }
-                        catch
-                        {
+                        catch (Exception ex) {
                             // Ignore access denied / terminated
+                            BestEffort.Debug(ex, "AppNetworkPolicyMonitor.ProcessEstabConnection()");
                         }
                     }
 
@@ -181,9 +181,9 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Degrade gracefully
+                BestEffort.Debug(ex, "AppNetworkPolicyMonitor.ScanNetworkConnections()");
             }
             finally
             {
@@ -225,7 +225,7 @@ namespace Sentinel.Core
             // v1.8.3: UUP dump / portable download tools (often unsigned aria2c under Downloads)
             // pull from many Microsoft CDN /24s. Do not treat as unusual-destination policy noise.
             string? imagePathForPortable = null;
-            try { imagePathForPortable = SecurityValidation.GetProcessImagePath(pid); } catch { /* ignore */ }
+            try { imagePathForPortable = SecurityValidation.GetProcessImagePath(pid); } catch (Exception ex) { /* ignore */ BestEffort.Debug(ex, "AppNetworkPolicyMonitor.RegisterConnection()"); }
             if (InstallerHeuristics.IsBenignPortableWorkContext(stem, imagePathForPortable))
                 return;
 
@@ -357,6 +357,12 @@ namespace Sentinel.Core
             "svchost", "lsass", "sihost", "taskhostw", "RuntimeBroker", "SearchHost", "System"
         };
 
+        // Catalog-signed OS binaries (svchost, lsass) carry no embedded signature, so WinVerifyTrust
+        // is consulted as well as the cached signer lookup.
+        private bool IsSignedImage(string path) =>
+            (_signerTrust != null && _signerTrust.IsSignedFile(path)) ||
+            SecurityValidation.VerifyAuthenticodeSignature(path);
+
         private bool IsVerifiedAllowlistProcess(int pid, string stem)
         {
             if (_allowlistVerificationCache.TryGetValue(pid, out var cached))
@@ -373,24 +379,27 @@ namespace Sentinel.Core
                     return false;
                 }
 
-                var pathLower = imagePath!.ToLowerInvariant();
-
-                // System processes (svchost, lsass, etc.) must reside in Windows directory
+                // System processes (svchost, lsass, etc.) must be a signed binary in a Windows location
+                // that non-administrators cannot write. The process name ("stem") is attacker-chosen and
+                // a path under C:\Windows is not enough on its own: Tasks, Temp and tracing are writable.
                 bool isSystemEntry = SystemEntryStems.Contains(stem);
 
                 if (isSystemEntry)
                 {
-                    var winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows).ToLowerInvariant();
-                    var winDirTrailing = winDir.EndsWith("\\", StringComparison.Ordinal) ? winDir : winDir + '\\';
-                    verified = pathLower.StartsWith(winDirTrailing, StringComparison.OrdinalIgnoreCase);
+                    var winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                    verified = OsImageTrust.IsSignedWindowsImage(imagePath, winDir, IsSignedImage);
                 }
                 else
                 {
                     // Non-system allowlisted processes must be Authenticode signed
-                    verified = _signerTrust != null && _signerTrust.IsSignedFile(imagePath);
+                    verified = _signerTrust != null && _signerTrust.IsSignedFile(imagePath!);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Fail closed: verified stays false when the image cannot be resolved or checked.
+                BestEffort.Debug(ex, "AppNetworkPolicyMonitor.IsVerifiedAllowlistProcess");
+            }
 
             _allowlistVerificationCache[pid] = verified;
             return verified;

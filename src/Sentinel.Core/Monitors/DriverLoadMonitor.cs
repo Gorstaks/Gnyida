@@ -210,7 +210,7 @@ namespace Sentinel.Core
                             _baselineDriverServices.Add(svcName);
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[DriverLoadMonitor] BaselineExistingDrivers failed"); }
                 }
 
                 _logger.LogInformation("[DriverLoadMonitor] Baselined {Count} existing kernel driver services", _baselineDriverServices.Count);
@@ -256,12 +256,12 @@ namespace Sentinel.Core
                             continue;
 
                         int pid = 0;
-                        try { pid = record.ProcessId ?? 0; } catch { }
+                        try { pid = record.ProcessId ?? 0; } catch (Exception ex) { _logger.LogDebug(ex, "[DriverLoadMonitor] CheckEventLogForDriverInstallsAsync failed"); }
                         await EvaluateNewDriverAsync(serviceName, imagePath, ct, pid);
                     }
                 }
             }
-            catch (EventLogNotFoundException) { }
+            catch (EventLogNotFoundException ex) { _logger.LogDebug(ex, "[DriverLoadMonitor] CheckEventLogForDriverInstallsAsync failed"); }
             catch (Exception ex) { _logger.LogDebug(ex, "[DriverLoadMonitor] EventLog check error"); }
         }
 
@@ -293,7 +293,7 @@ namespace Sentinel.Core
                         _baselineDriverServices.Add(svcName);
                         await EvaluateNewDriverAsync(svcName, imagePath, ct);
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[DriverLoadMonitor] CheckRegistryForNewDriverServicesAsync failed"); }
                 }
             }
             catch (Exception ex) { _logger.LogDebug(ex, "[DriverLoadMonitor] Registry check error"); }
@@ -383,7 +383,7 @@ namespace Sentinel.Core
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex2) { _logger.LogDebug(ex2, "[DriverLoadMonitor] CheckSuspiciousDriverFilesAsync failed"); }
             }
         }
 
@@ -452,7 +452,7 @@ namespace Sentinel.Core
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[DriverLoadMonitor] CheckSuspiciousGpuDriverDropAsync failed"); }
             }
         }
 
@@ -486,7 +486,7 @@ namespace Sentinel.Core
                     hash = ConvertHex.ToHexString(System.Security.Cryptography.Sha256Net48.HashData(fs));
                     hashMatch = VulnerableDriverHashes.Contains(hash);
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[DriverLoadMonitor] EvaluateNewDriverAsync failed"); }
             }
 
             // Determine confidence and response based on signals
@@ -743,7 +743,7 @@ namespace Sentinel.Core
                             if (sc.Status != System.ServiceProcess.ServiceControllerStatus.Stopped)
                                 sc.Stop();
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[DriverLoadMonitor] ScanForOtherDriversSignedByCertAsync failed"); }
 
                         DisableAndDeleteServiceNative(driverName);
 
@@ -773,7 +773,7 @@ namespace Sentinel.Core
 
                         quarantined++;
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[DriverLoadMonitor] ScanForOtherDriversSignedByCertAsync failed"); }
                 }
             }
             catch (Exception ex)

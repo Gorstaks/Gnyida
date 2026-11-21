@@ -75,8 +75,7 @@ namespace Sentinel.Core
                 string? path = SafeGetMainModuleFileName(process);
                 if (!string.IsNullOrEmpty(path)) return (process.StartTime.ToUniversalTime(), path!);
             }
-            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception || ex is InvalidOperationException || ex is ArgumentException || ex is NotSupportedException || ex is NullReferenceException)
-            { /* Unavailable identity receives no exemption. */ }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception || ex is InvalidOperationException || ex is ArgumentException || ex is NotSupportedException || ex is NullReferenceException) { /* Unavailable identity receives no exemption. */ BestEffort.Debug(ex, "ManagementChildRegistry.ReadIdentity()"); }
             return null;
         }
         internal static bool IsRoutineObservation(DetectionEvent detection) =>

@@ -61,9 +61,9 @@ namespace Sentinel.Core
                                 .CheckAndUnloadAsync(proc.Id, name)
                                 .GetAwaiter().GetResult();
                         }
-                        catch (System.ComponentModel.Win32Exception) { }
-                        catch (InvalidOperationException) { }
-                        catch { }
+                        catch (System.ComponentModel.Win32Exception ex) { _logger.LogDebug(ex, "[MemoryBehaviorAnalyzer] ScanMemory failed"); }
+                        catch (InvalidOperationException ex) { _logger.LogDebug(ex, "[MemoryBehaviorAnalyzer] ScanMemory failed"); }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[MemoryBehaviorAnalyzer] ScanMemory failed"); }
                         finally
                         {
                             proc.Dispose();

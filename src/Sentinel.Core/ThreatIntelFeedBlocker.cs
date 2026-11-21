@@ -240,7 +240,7 @@ namespace Sentinel.Core
                         if (name != null && name.StartsWith(RuleNamePrefix, StringComparison.Ordinal))
                             toRemove.Add(name);
                     }
-                    catch { /* skip malformed rule */ }
+                    catch (Exception ex) { /* skip malformed rule */ BestEffort.Debug(ex, "ThreatIntelFeedBlocker.RemoveProactiveFirewallRules()"); }
                 }
 
                 foreach (var name in toRemove)
@@ -250,7 +250,7 @@ namespace Sentinel.Core
                         fwPolicy.Rules.Remove(name);
                         removed++;
                     }
-                    catch { /* rule may already be gone */ }
+                    catch (Exception ex) { /* rule may already be gone */ BestEffort.Debug(ex, "ThreatIntelFeedBlocker.RemoveProactiveFirewallRules()"); }
                 }
             }
             catch
@@ -291,7 +291,7 @@ namespace Sentinel.Core
                         if (d is { ExitCode: 0 }) removed++;
                     }
                 }
-                catch { /* best effort */ }
+                catch (Exception ex) { /* best effort */ BestEffort.Debug(ex, "ThreatIntelFeedBlocker.RemoveProactiveFirewallRules()"); }
             }
 
             return removed;
@@ -334,7 +334,7 @@ namespace Sentinel.Core
                             using var proc = System.Diagnostics.Process.GetProcessById(pid);
                             processName = proc.ProcessName;
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[ThreatIntelFeedBlocker] CheckActiveConnections failed"); }
                     }
 
                     // Observe-first: act only when ActiveResponse is on AND something is
@@ -456,7 +456,7 @@ namespace Sentinel.Core
                     results.Add((0, remoteIp));
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ThreatIntelFeedBlocker.GetEstablishedConnections()"); }
 
             return results;
         }

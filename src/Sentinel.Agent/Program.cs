@@ -74,7 +74,7 @@ namespace Sentinel.Agent
             HardeningModule.ApplyOrFail(applyHostPolicies: false);
 
             // Detach from parent console window (installer / Run key launch)
-            try { FreeConsole(); } catch { }
+            try { FreeConsole(); } catch (Exception ex) { BestEffort.Debug(ex, "Program.Main()"); }
 
             //  Build & run host 
             var host = CreateHostBuilder(args).Build();
@@ -88,6 +88,10 @@ namespace Sentinel.Agent
 
             // v2.6.0: Wire ancestry cache into ResponsePolicy for cross-PID chain correlation.
             ResponsePolicy.SetAncestryCache(host.Services.GetRequiredService<ProcessAncestryCache>());
+
+            // Route Trace warnings (BestEffort.Warn from Core components hosted here) into the Agent's logging.
+            System.Diagnostics.Trace.Listeners.Add(new LoggerTraceListener(
+                host.Services.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>().CreateLogger("Sentinel.Trace")));
 
             // v2.0.3: Clear restart marker on successful startup - host built and wired
             ClearRestartMarker();
@@ -160,9 +164,10 @@ namespace Sentinel.Agent
 
                 Process.Start(psi);
             }
-            catch
+            catch (Exception ex)
             {
                 // Best-effort - if we can't self-restart, the AgentWatchdog will cover it
+                LogCrash("SelfRestartFailed", ex);
             }
         }
 
@@ -193,7 +198,7 @@ namespace Sentinel.Agent
 
                 Process.Start(psi);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "Program.ScheduleDelayedRelaunch()"); }
         }
 
         // 
@@ -254,7 +259,7 @@ namespace Sentinel.Agent
                 if (File.Exists(markerPath))
                     File.Delete(markerPath);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "Program.ClearRestartMarker()"); }
         }
 
         private static string GetRestartMarkerPath()
@@ -280,7 +285,7 @@ namespace Sentinel.Agent
                           $"\n-----------------------------------\n";
                 File.AppendAllText(crashLog, msg);
             }
-            catch { }
+            catch (Exception ex2) { System.Diagnostics.Trace.WriteLine("Sentinel.Agent crash log unavailable: " + ex2.Message); }
         }
 
         // 

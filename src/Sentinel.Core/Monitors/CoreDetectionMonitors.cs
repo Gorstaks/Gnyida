@@ -71,7 +71,7 @@ namespace Sentinel.Core
                                     });
                                 }
                             }
-                            catch { }
+                            catch (Exception ex) { _logger.LogDebug(ex, "[DiskWideDllScanner] ExecuteAsync failed"); }
                         }
                     }
                 }
@@ -141,7 +141,7 @@ namespace Sentinel.Core
                                     });
                                 }
                             }
-                            catch { }
+                            catch (Exception ex) { _logger.LogDebug(ex, "[DllEntropyAnalyzer] ExecuteAsync failed"); }
                         }
                     }
                 }
@@ -237,7 +237,7 @@ namespace Sentinel.Core
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[DllLoadFailureMonitor] ExecuteAsync failed"); }
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex) { _logger.LogDebug(ex, "[DllLoadFailureMonitor] Error"); }
@@ -264,7 +264,7 @@ namespace Sentinel.Core
             var selfDir = AppContext.BaseDirectory;
             foreach (var dll in Directory.EnumerateFiles(selfDir, "*.dll"))
             {
-                try { _baselineHashes[dll] = HashFile(dll); } catch { }
+                try { _baselineHashes[dll] = HashFile(dll); } catch (Exception ex) { _logger.LogDebug(ex, "[ModuleValidationMonitor] ExecuteAsync failed"); }
             }
 
             while (!ct.IsCancellationRequested)
@@ -366,7 +366,7 @@ namespace Sentinel.Core
                                 });
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogWarning(ex, "[RuntimeModuleIntegrityMonitor] ExecuteAsync failed"); }
                     }
                 }
                 catch (OperationCanceledException) { break; }
@@ -453,10 +453,10 @@ namespace Sentinel.Core
                                         }
                                     }
                                 }
-                                catch { }
+                                catch (Exception ex) { _logger.LogDebug(ex, "[AdsDataStagingMonitor] ExecuteAsync failed"); }
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[AdsDataStagingMonitor] ExecuteAsync failed"); }
                     }
 
                     // Limit alertedFiles growth
@@ -616,8 +616,8 @@ namespace Sentinel.Core
                         }
                     });
                 }
-                catch { /* per-process best effort */ }
-                finally { try { proc.Dispose(); } catch { } }
+                catch (Exception ex) { /* per-process best effort */ _logger.LogDebug(ex, "[DormantPayloadMonitor] ScanOnce failed"); }
+                finally { try { proc.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[DormantPayloadMonitor] ScanOnce failed"); } }
             }
         }
 
@@ -763,7 +763,7 @@ namespace Sentinel.Core
                     var signerName = _signerTrust.GetSignerName(processPath);
                     isSigned = !string.IsNullOrEmpty(signerName);
                 }
-                catch { /* failed to get signer */ }
+                catch (Exception ex) { /* failed to get signer */ _logger.LogDebug(ex, "[CrossFilesystemExecutionMonitor] AnalyzeProcessCreation failed"); }
 
                 // Emit Tier2 signal: unsigned binary from network source
                 if (!isSigned)
@@ -832,7 +832,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { /* couldn't determine */ }
+            catch (Exception ex) { /* couldn't determine */ _logger.LogDebug(ex, "[CrossFilesystemExecutionMonitor] ClassifyFilesystem failed"); }
 
             return ("Local", false);
         }

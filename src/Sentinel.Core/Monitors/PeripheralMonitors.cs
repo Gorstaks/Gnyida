@@ -69,7 +69,7 @@ namespace Sentinel.Core
                 if (key == null) return;
                 foreach (var sub in key.GetSubKeyNames()) target.Add(sub);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "BluetoothMonitor.SnapshotBluetoothDevices()"); }
         }
     }
 
@@ -137,7 +137,7 @@ namespace Sentinel.Core
                                 _baselineDrivers.Add(svcName); // Baseline all services to avoid noise
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[DeviceInstallMonitor] ExecuteAsync baseline failed"); }
                     }
                 }
                 _logger.LogInformation("[DeviceInstallMonitor] Baseline captured: {Count} services", _baselineDrivers.Count);
@@ -192,7 +192,7 @@ namespace Sentinel.Core
                                 _baselineDrivers.Add(svcName);
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogWarning(ex, "[DeviceInstallMonitor] ExecuteAsync failed"); }
                     }
                     _lastCheck = DateTime.UtcNow;
                 }
@@ -295,7 +295,7 @@ namespace Sentinel.Core
                 // Instead, enumerate via registry (more reliable for userland EDR)
                 Marshal.ReleaseComObject(obj);
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[MtpTransferGuard] EnumeratePortableDevices failed"); }
 
             // Fallback: enumerate WPD devices via registry
             EnumerateViaRegistry();
@@ -332,7 +332,7 @@ namespace Sentinel.Core
                             _connectedDevices[subKeyName] = friendlyName ?? subKeyName;
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[MtpTransferGuard] EnumerateViaRegistry failed"); }
                 }
 
                 if (_connectedDevices.Count > 0)
@@ -388,7 +388,7 @@ namespace Sentinel.Core
                                 file, string.Join(", ", _connectedDevices.Values))).ConfigureAwait(false);
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogWarning(ex, "[MtpTransferGuard] ScanForUnauthorizedTransfersAsync failed"); }
                 }
 
                 // Prune old blocked transfer records (older than 5 minutes)
@@ -420,7 +420,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { } // Access denied for system processes - fine
+            catch (Exception ex) { BestEffort.Debug(ex, "MtpTransferGuard.IsWpdProcess()"); } // Access denied for system processes - fine
             return false;
         }
 
@@ -456,7 +456,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "MtpTransferGuard.GetStagedNonMediaFiles()"); }
             return results;
         }
 
@@ -487,7 +487,7 @@ namespace Sentinel.Core
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { BestEffort.Debug(ex, "MtpTransferGuard.ScanExplorerRecentTransfers()"); }
             }
         }
 
@@ -527,7 +527,7 @@ namespace Sentinel.Core
                     return obj["CommandLine"]?.ToString() ?? "";
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "MtpTransferGuard.GetProcessCommandLine()"); }
             return "";
         }
 
@@ -601,7 +601,7 @@ namespace Sentinel.Core
                         _quarantinedInbound[file] = DateTime.UtcNow;
 
                         // Delete the dangerous file immediately
-                        try { File.Delete(file); } catch { }
+                        try { File.Delete(file); } catch (Exception ex) { _logger.LogDebug(ex, "[MtpTransferGuard] ScanForInboundThreatsAsync failed"); }
 
                         _logger.LogWarning("[MtpTransferGuard] Quarantined inbound threat from MTP: {File}", Path.GetFileName(file));
 
@@ -632,7 +632,7 @@ namespace Sentinel.Core
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[MtpTransferGuard] ScanForInboundThreatsAsync failed"); }
             }
 
             // Scan drop targets only when MTP devices are connected
@@ -659,7 +659,7 @@ namespace Sentinel.Core
 
                             _quarantinedInbound[file] = DateTime.UtcNow;
 
-                            try { File.Delete(file); } catch { }
+                            try { File.Delete(file); } catch (Exception ex) { _logger.LogDebug(ex, "[MtpTransferGuard] ScanForInboundThreatsAsync failed"); }
 
                             _logger.LogWarning("[MtpTransferGuard] Blocked inbound MTP threat in {Dir}: {File}",
                                 Path.GetFileName(dropDir), Path.GetFileName(file));
@@ -688,7 +688,7 @@ namespace Sentinel.Core
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[MtpTransferGuard] ScanForInboundThreatsAsync failed"); }
                 }
             }
 
@@ -731,11 +731,11 @@ namespace Sentinel.Core
                         if (IsWpdProcess(proc))
                             return (proc.Id, proc.ProcessName);
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "MtpTransferGuard.GetCreatorProcess()"); }
                     finally { proc.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "MtpTransferGuard.GetCreatorProcess()"); }
             return (0, "Unknown");
         }
     }

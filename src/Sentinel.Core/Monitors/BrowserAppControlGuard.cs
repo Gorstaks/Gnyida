@@ -280,10 +280,10 @@ namespace Sentinel.Core
                         var host = ReadManifest(hostName, manifestPath, $"{hiveName}\\{subKey}");
                         if (host != null) into.Add(host);
                     }
-                    catch { /* single host unreadable - skip */ }
+                    catch (Exception ex) { /* single host unreadable - skip */ _logger.LogDebug(ex, "[NativeMessagingHostGuard] CollectFromHive #1 failed"); }
                 }
             }
-            catch { /* hive/subkey missing - normal */ }
+            catch (Exception ex) { /* hive/subkey missing - normal */ _logger.LogDebug(ex, "[NativeMessagingHostGuard] CollectFromHive #2 failed"); }
         }
 
         private static NativeHost? ReadManifest(string hostName, string? manifestPath, string source)
@@ -310,7 +310,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { /* malformed manifest - still record the registration */ }
+            catch (Exception ex) { /* malformed manifest - still record the registration */ BestEffort.Debug(ex, "NativeMessagingHostGuard.ReadManifest"); }
 
             // Key = host name + resolved target, so a re-point of an existing host is a new key.
             return new NativeHost
@@ -614,7 +614,7 @@ namespace Sentinel.Core
                     if (cachedParent == parentPid) return true;
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[LocalControlChannelMonitor] IsParentOf failed"); }
             return false;
         }
 

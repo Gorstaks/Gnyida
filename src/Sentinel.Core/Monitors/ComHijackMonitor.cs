@@ -120,7 +120,7 @@ namespace Sentinel.Core
                         ComHijackEvaluator.ServerKind.TreatAs, "TreatAs",
                         hklmHive, hklmClsidPath);
                 }
-                catch { /* per-CLSID best effort */ }
+                catch (Exception ex) { /* per-CLSID best effort */ _logger.LogDebug(ex, "[ComHijackMonitor] ScanClsidRoot failed"); }
             }
         }
 
@@ -147,7 +147,7 @@ namespace Sentinel.Core
                     hklmValue = hklmSub?.GetValue(null) as string;
                     hkcuShadowsHklm = !string.IsNullOrWhiteSpace(hklmValue);
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[ComHijackMonitor] EvaluateServer failed"); }
             }
 
             var registration = new ComHijackEvaluator.Registration(

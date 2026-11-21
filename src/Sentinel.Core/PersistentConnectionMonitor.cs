@@ -456,7 +456,7 @@ namespace Sentinel.Core
                         using var p = Process.GetProcessById((int)row.owningPid);
                         processName = p.ProcessName;
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[PersistentConnectionMonitor] GetEstablishedConnections failed"); }
 
                     long created = CurrentCreation((int)row.owningPid);
                     if (created <= 0) continue;
@@ -525,7 +525,7 @@ namespace Sentinel.Core
                         using var p = Process.GetProcessById((int)row.owningPid);
                         processName = p.ProcessName;
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[PersistentConnectionMonitor] AppendIpv6Connections failed"); }
                     long created = CurrentCreation((int)row.owningPid);
                     if (created <= 0) continue;
                     results.Add(new ActiveConnection

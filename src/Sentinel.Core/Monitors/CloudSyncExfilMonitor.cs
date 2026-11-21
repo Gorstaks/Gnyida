@@ -209,7 +209,7 @@ namespace Sentinel.Core
                     });
                     _alertedDirs[alertKey] = DateTime.UtcNow;
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[CloudSyncExfilMonitor] ScanExfilToolProcessesAsync failed"); }
                 finally { proc.Dispose(); }
             }
         }
@@ -275,7 +275,7 @@ namespace Sentinel.Core
                 if (!string.IsNullOrEmpty(val) && Directory.Exists(val!) && !dirs.Contains(val!))
                     dirs.Add(val!);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "CloudSyncExfilMonitor.TryAddRegistryPath()"); }
         }
 
         private static long CountFiles(string directory)
@@ -305,7 +305,7 @@ namespace Sentinel.Core
                 foreach (System.Management.ManagementObject obj in searcher.Get())
                     return obj["CommandLine"]?.ToString();
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "CloudSyncExfilMonitor.GetCommandLine()"); }
             return null;
         }
 

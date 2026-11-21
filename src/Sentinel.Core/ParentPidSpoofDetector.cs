@@ -89,7 +89,7 @@ namespace Sentinel.Core
                                 var cachedPath = _ancestryCache.GetProcessInfo(proc.Id).imagePath;
                                 if (!string.IsNullOrEmpty(cachedPath)) imagePath = cachedPath;
                             }
-                            catch { }
+                            catch (Exception ex) { _logger.LogDebug(ex, "[ParentPidSpoofDetector] Scan failed"); }
                         }
 
                         // Verify code signature for development tools and browser process exemptions
@@ -157,9 +157,9 @@ namespace Sentinel.Core
                             _alertedPids.Add(proc.Id);
                         }
                     }
-                    catch (System.ComponentModel.Win32Exception) { }
-                    catch (InvalidOperationException) { }
-                    catch { }
+                    catch (System.ComponentModel.Win32Exception ex) { _logger.LogDebug(ex, "[ParentPidSpoofDetector] Scan failed"); }
+                    catch (InvalidOperationException ex) { _logger.LogDebug(ex, "[ParentPidSpoofDetector] Scan failed"); }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ParentPidSpoofDetector] Scan failed"); }
                     finally { proc.Dispose(); }
                 }
 
@@ -188,7 +188,7 @@ namespace Sentinel.Core
                     (SecurityValidation.VerifyAuthenticodeSignature(path!) || _signerTrust.IsSignedFile(path!)))
                     return true;
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ParentPidSpoofDetector] IsBenignInstallerParent failed"); }
             return false;
         }
 

@@ -324,7 +324,7 @@ namespace Sentinel.Core
                 // Keep install-dir exclusions only (safe for upgrades)
                 ApplyAsrOnlyExclusions();
             }
-            catch { /* best effort */ }
+            catch (Exception ex) { /* best effort */ BestEffort.Debug(ex, "HardeningModule.ReleaseUserWorkSurface()"); }
         }
 
         /// <summary>Remove a Windows Firewall rule by name if present (fail-soft).</summary>
@@ -347,15 +347,15 @@ namespace Sentinel.Core
                         if (string.Equals((string)rule.Name, ruleName, StringComparison.OrdinalIgnoreCase))
                             toRemove.Add(rule);
                     }
-                    catch { /* skip bad rule */ }
+                    catch (Exception ex) { /* skip bad rule */ BestEffort.Debug(ex, "HardeningModule.RemoveFirewallRuleByName()"); }
                 }
 
                 foreach (var rule in toRemove)
                 {
-                    try { policy.Rules.Remove(rule.Name); } catch { /* ignore */ }
+                    try { policy.Rules.Remove(rule.Name); } catch (Exception ex) { /* ignore */ BestEffort.Debug(ex, "HardeningModule.RemoveFirewallRuleByName()"); }
                 }
             }
-            catch { /* barebone / no firewall COM */ }
+            catch (Exception ex) { /* barebone / no firewall COM */ BestEffort.Debug(ex, "HardeningModule.RemoveFirewallRuleByName()"); }
         }
 
         /// <summary>
@@ -371,21 +371,21 @@ namespace Sentinel.Core
 
                 foreach (var (guid, _) in AsrRules)
                 {
-                    try { key.DeleteValue(guid, throwOnMissingValue: false); } catch { }
+                    try { key.DeleteValue(guid, throwOnMissingValue: false); } catch (Exception ex) { BestEffort.Debug(ex, "HardeningModule.ReleaseAsrBlockPolicy()"); }
                 }
 
                 // Symmetric teardown of the audit-first tier.
                 foreach (var (guid, _) in AsrRulesAudit)
                 {
-                    try { key.DeleteValue(guid, throwOnMissingValue: false); } catch { }
+                    try { key.DeleteValue(guid, throwOnMissingValue: false); } catch (Exception ex) { BestEffort.Debug(ex, "HardeningModule.ReleaseAsrBlockPolicy()"); }
                 }
 
                 foreach (var bad in AsrRulesNeverBlock)
                 {
-                    try { key.DeleteValue(bad, throwOnMissingValue: false); } catch { }
+                    try { key.DeleteValue(bad, throwOnMissingValue: false); } catch (Exception ex) { BestEffort.Debug(ex, "HardeningModule.ReleaseAsrBlockPolicy()"); }
                 }
             }
-            catch { /* ignore */ }
+            catch (Exception ex) { /* ignore */ BestEffort.Debug(ex, "HardeningModule.ReleaseAsrBlockPolicy()"); }
         }
 
         private struct PortDef
@@ -595,7 +595,7 @@ namespace Sentinel.Core
                     key?.SetValue("", "Service", Microsoft.Win32.RegistryValueKind.String);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Warn(ex, "HardeningModule.RegisterForSafeMode()"); }
         }
 
         /// <summary>
@@ -623,9 +623,10 @@ namespace Sentinel.Core
                 // (old installs blocked SSH/RDP; default is now attack-only).
                 ReapplyIPSecPolicy();
             }
-            catch
+            catch (Exception ex)
             {
                 // Non-fatal
+                BestEffort.Warn(ex, "HardeningModule.ApplyIPSecPolicy()");
             }
         }
 
@@ -640,9 +641,10 @@ namespace Sentinel.Core
                     retired: PortBlockSpecifications().Concat(RetiredOutboundPortBlocks()));
                 System.Diagnostics.Debug.WriteLine("[PortHardening cleanup] " + result.Detail);
             }
-            catch
+            catch (Exception ex)
             {
                 // Non-fatal
+                BestEffort.Debug(ex, "HardeningModule.RemoveIPSecPolicyIfPresent()");
             }
         }
 
@@ -734,7 +736,7 @@ namespace Sentinel.Core
                         return true;
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "HardeningModule.IsInSystemDirectory()"); }
             return false;
         }
 
@@ -815,9 +817,10 @@ namespace Sentinel.Core
 
                 fileInfo.SetAccessControl(security);
             }
-            catch
+            catch (Exception ex)
             {
                 // Non-fatal
+                BestEffort.Warn(ex, "HardeningModule.ExcludeUninstallerFromDeny()");
             }
         }
 
@@ -861,9 +864,10 @@ namespace Sentinel.Core
 
                 dirInfo.SetAccessControl(security);
             }
-            catch
+            catch (Exception ex)
             {
                 // Non-fatal - Setup also unlocks via icacls for older installed binaries.
+                BestEffort.Warn(ex, "HardeningModule.UnlockInstallationDirectoryForUpgrade()");
             }
 
             try
@@ -871,7 +875,7 @@ namespace Sentinel.Core
                 foreach (var file in Directory.GetFiles(dir, "unins*"))
                     UnlockUninstallerStubForUpgrade(file);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "HardeningModule.UnlockInstallationDirectoryForUpgrade()"); }
         }
 
         private static void UnlockUninstallerStubForUpgrade(string filePath)
@@ -905,7 +909,7 @@ namespace Sentinel.Core
 
                 fileInfo.SetAccessControl(security);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Warn(ex, "HardeningModule.UnlockUninstallerStubForUpgrade()"); }
         }
 
         /// <summary>
@@ -943,7 +947,7 @@ namespace Sentinel.Core
                 ApplyCredentialHardening();
                 ApplyBrowserHardening();
             }
-            catch { /* Non-fatal: hardening is best-effort */ }
+            catch (Exception ex) { /* Non-fatal: hardening is best-effort */ BestEffort.Warn(ex, "HardeningModule.ApplyUserSetupScriptsHardening()"); }
         }
 
         #region Hardening: Service Disablement
@@ -1002,7 +1006,7 @@ namespace Sentinel.Core
                 if (sc.Status == System.ServiceProcess.ServiceControllerStatus.Running ||
                     sc.Status == System.ServiceProcess.ServiceControllerStatus.StartPending)
                 {
-                    try { sc.Stop(); } catch { }
+                    try { sc.Stop(); } catch (Exception ex) { BestEffort.Debug(ex, "HardeningModule.DisableServiceSafe()"); }
                 }
 
                 // Set to disabled via registry (ServiceController doesn't expose StartType setter)
@@ -1013,8 +1017,8 @@ namespace Sentinel.Core
                     key.SetValue("Start", 4, Microsoft.Win32.RegistryValueKind.DWord); // 4 = Disabled
                 }
             }
-            catch (InvalidOperationException) { } // Service doesn't exist - expected
-            catch { } // Access denied or other - non-fatal
+            catch (InvalidOperationException ex) { BestEffort.Debug(ex, "HardeningModule.DisableServiceSafe()"); } // Service doesn't exist - expected
+            catch (Exception ex) { BestEffort.Warn(ex, "HardeningModule.DisableServiceSafe()"); } // Access denied or other - non-fatal
         }
 
         #endregion
@@ -1105,7 +1109,11 @@ namespace Sentinel.Core
                 using var key = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(subKey, writable: true);
                 key?.SetValue(valueName, value, Microsoft.Win32.RegistryValueKind.DWord);
             }
-            catch { } // Non-fatal: may lack admin rights
+            catch (Exception ex)
+            {
+                // Non-fatal (may lack admin rights), but the hardening setting is NOT applied.
+                BestEffort.Warn(ex, @"HardeningModule.SetRegistryDword(HKLM\" + subKey + @"\" + valueName + ")");
+            }
         }
 
         private static void SetRegistryString(string subKey, string valueName, string value)
@@ -1115,7 +1123,10 @@ namespace Sentinel.Core
                 using var key = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(subKey, writable: true);
                 key?.SetValue(valueName, value, Microsoft.Win32.RegistryValueKind.String);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                BestEffort.Warn(ex, @"HardeningModule.SetRegistryString(HKLM\" + subKey + @"\" + valueName + ")");
+            }
         }
 
         private static void SetRegistryDwordCurrentUser(string subKey, string valueName, int value)
@@ -1125,7 +1136,10 @@ namespace Sentinel.Core
                 using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(subKey, writable: true);
                 key?.SetValue(valueName, value, Microsoft.Win32.RegistryValueKind.DWord);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                BestEffort.Warn(ex, @"HardeningModule.SetRegistryDwordCurrentUser(HKCU\" + subKey + @"\" + valueName + ")");
+            }
         }
 
         #endregion
@@ -1149,7 +1163,7 @@ namespace Sentinel.Core
                 using var proc = Process.Start(psi);
                 proc?.WaitForExit(5000);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Warn(ex, "HardeningModule.EnforceDepAlwaysOn()"); }
         }
 
         #endregion
@@ -1201,7 +1215,7 @@ namespace Sentinel.Core
                 using var proc = Process.Start(psi);
                 proc?.WaitForExit(30000);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Warn(ex, "HardeningModule.ApplyLgpoSecurityPolicy()"); }
         }
 
 
@@ -1304,12 +1318,12 @@ namespace Sentinel.Core
                 // Drop rules that break our own (and most) installers if an older Sentinel applied them.
                 foreach (var bad in AsrRulesNeverBlock)
                 {
-                    try { key.DeleteValue(bad, throwOnMissingValue: false); } catch { /* ignore */ }
+                    try { key.DeleteValue(bad, throwOnMissingValue: false); } catch (Exception ex) { /* ignore */ BestEffort.Debug(ex, "HardeningModule.ApplyAsrRules()"); }
                 }
 
                 ApplyAsrOnlyExclusions();
             }
-            catch { /* Non-fatal */ }
+            catch (Exception ex) { /* Non-fatal */ BestEffort.Warn(ex, "HardeningModule.ApplyAsrRules()"); }
         }
 
         /// <summary>
@@ -1345,7 +1359,7 @@ namespace Sentinel.Core
                     if (!string.IsNullOrEmpty(baseDir))
                         Add(baseDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
                 }
-                catch { /* ignore */ }
+                catch (Exception ex) { /* ignore */ BestEffort.Debug(ex, "HardeningModule.ApplyAsrOnlyExclusions()"); }
 
                 if (paths.Count == 0) return;
 
@@ -1362,7 +1376,7 @@ namespace Sentinel.Core
 
                 key.SetValue("ASROnlyExclusions", paths.ToArray(), Microsoft.Win32.RegistryValueKind.MultiString);
             }
-            catch { /* Non-fatal - barebone / locked policy hives */ }
+            catch (Exception ex) { /* Non-fatal - barebone / locked policy hives */ BestEffort.Warn(ex, "HardeningModule.ApplyAsrOnlyExclusions()"); }
         }
 
         /// <summary>

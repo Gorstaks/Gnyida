@@ -325,7 +325,7 @@ namespace Sentinel.Core
                 }
                 finally { Marshal.FreeHGlobal(buffer); }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ArpSpoofMonitor.GetArpTable()"); }
             return results;
         }
 
@@ -349,7 +349,7 @@ namespace Sentinel.Core
                     if (gw != null) return gw.Address.ToString();
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ArpSpoofMonitor.GetDefaultGateway()"); }
             return null;
         }
 
@@ -365,7 +365,7 @@ namespace Sentinel.Core
                 if (SendARP(ipInt, 0, mac, ref macLen) == 0)
                     return BitConverter.ToString(mac, 0, macLen);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ArpSpoofMonitor.ResolveMac()"); }
             return null;
         }
     }
@@ -561,10 +561,10 @@ namespace Sentinel.Core
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogWarning(ex, "[WifiSecurityMonitor] CheckPublicNetworkProfiles failed"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[WifiSecurityMonitor] CheckPublicNetworkProfiles failed"); }
         }
 
         /// <summary>
@@ -604,7 +604,7 @@ namespace Sentinel.Core
                         return (ssid, bssid, authMode);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WifiSecurityMonitor.GetCurrentWifiState()"); }
 
             // Fallback: check NetworkList for connected interface info
             try
@@ -618,7 +618,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WifiSecurityMonitor.GetCurrentWifiState()"); }
 
             return (null, null, null);
         }
@@ -745,7 +745,7 @@ namespace Sentinel.Core
                                                 ImplantTunnelNames.Any(name.Contains);
 
                                 string? imagePath = null;
-                                try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch { }
+                                try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch (Exception ex) { _logger.LogDebug(ex, "[RemoteAccessMonitor] ExecuteAsync failed"); }
 
                                 bool fromSuspiciousPath = imagePath != null &&
                                     (imagePath.Contains(@"\Temp\") ||
@@ -775,7 +775,7 @@ namespace Sentinel.Core
                                 });
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[RemoteAccessMonitor] ExecuteAsync failed"); }
                         finally { proc.Dispose(); }
                     }
                 }
@@ -1004,7 +1004,7 @@ namespace Sentinel.Core
                 }
                 foreach (var name in toRemove)
                 {
-                    try { policy.Rules.Remove(name); } catch { }
+                    try { policy.Rules.Remove(name); } catch (Exception ex) { _logger.LogDebug(ex, "[PhantomDeviceMonitor] CleanupOrphanedFirewallRules failed"); }
                 }
                 if (toRemove.Count > 0)
                     _logger.LogInformation("[PhantomDeviceMonitor] Cleaned up {Count} orphaned firewall rules from previous session", toRemove.Count);
@@ -1077,7 +1077,7 @@ namespace Sentinel.Core
 
                 policy.Rules.Add(rule);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Warn(ex, "PhantomDeviceMonitor.AddFirewallRule()"); }
         }
 
         private static void RemoveFirewallRule(string name)
@@ -1090,7 +1090,7 @@ namespace Sentinel.Core
                 if (policy == null) return;
                 policy.Rules.Remove(name);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "PhantomDeviceMonitor.RemoveFirewallRule()"); }
         }
 
         private Task CleanupDepartedBlocks(List<NetworkDevice> currentDevices)
@@ -1111,7 +1111,7 @@ namespace Sentinel.Core
                         toRemove.Add(kvp.Key);
                         _logger.LogInformation("[PhantomDeviceMonitor] Removed block for departed device {Ip}", kvp.Key);
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[PhantomDeviceMonitor] CleanupDepartedBlocks failed"); }
                 }
             }
             foreach (var ip in toRemove) _blockedIps.TryRemove(ip, out _);
@@ -1196,7 +1196,7 @@ namespace Sentinel.Core
                 }
                 finally { Marshal.FreeHGlobal(buffer); }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "PhantomDeviceMonitor.GetArpTable()"); }
             return devices;
         }
 
@@ -1269,12 +1269,12 @@ namespace Sentinel.Core
                         }
                         catch (ArgumentException) { return true; } // Process doesn't exist = ghost
                         catch (InvalidOperationException) { return true; }
-                        catch { }
+                        catch (Exception ex) { BestEffort.Debug(ex, "PhantomDeviceMonitor.HasGhostConnectionTo()"); }
                     }
                 }
                 finally { Marshal.FreeHGlobal(buffer); }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "PhantomDeviceMonitor.HasGhostConnectionTo()"); }
             return false;
         }
 

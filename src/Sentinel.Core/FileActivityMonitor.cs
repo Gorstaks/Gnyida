@@ -17,6 +17,15 @@ namespace Sentinel.Core
         private readonly ILogger<FileActivityMonitor> _logger;
         private readonly SignerTrustService _signerTrust;
         private readonly List<FileSystemWatcher> _watchers = new();
+        // Ends the short attribution/sharing-violation retry waits when the monitor is disposed.
+        private readonly CancellationTokenSource _shutdown = new();
+
+        /// <summary>Cancellable replacement for Thread.Sleep. True when shutdown was requested.</summary>
+        private bool WaitOrShutdown(int milliseconds)
+        {
+            try { return _shutdown.Token.WaitHandle.WaitOne(milliseconds); }
+            catch (ObjectDisposedException) { return true; }
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         private struct RM_UNIQUE_PROCESS
@@ -341,7 +350,7 @@ namespace Sentinel.Core
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[FileActivityMonitor] OnFileEvent failed"); }
             }
 
             // Skip user working directories where tools like NTLite, UUP dump, DISM perform
@@ -380,7 +389,7 @@ namespace Sentinel.Core
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[FileActivityMonitor] OnFileEvent failed"); }
             }
 
             // Opening every user-profile file (Restart Manager + FileStream) hard-faults
@@ -413,12 +422,12 @@ namespace Sentinel.Core
 
                 if (isExecutableOrLibrary)
                 {
-                    // Only alert if the writer is NOT TrustedInstaller, Windows Update, Defender, or Sentinel itself
-                    if (!IsTrustedSystemWriter(processInfo.pid, processInfo.name, e.FullPath) &&
-                        !processInfo.name.Contains("Sentinel") &&
-                        !processInfo.name.Contains("Delivery Optimization") &&
-                        !processInfo.name.Contains("AppX") &&
-                        !processInfo.name.Contains("WinStore"))
+                    // Only alert if the writer is NOT a signed/OS-anchored writer (TrustedInstaller, Windows
+                    // Update, Defender, Delivery Optimization and AppX via their signed svchost/service images,
+                    // Sentinel via its ACL-protected install image). The former process-name exclusions
+                    // ("Sentinel", "Delivery Optimization", "AppX", "WinStore") let any process with such a name
+                    // hide a System32 drop; IsTrustedSystemWriter now covers those writers by signature instead.
+                    if (!IsTrustedSystemWriter(processInfo.pid, processInfo.name, e.FullPath))
                     {
                         var changeVerb = e.ChangeType == WatcherChangeTypes.Created ? "created" : "changed";
                         // Observe-only: Steam DirectX / GPU redistributables write here constantly.
@@ -513,7 +522,7 @@ namespace Sentinel.Core
         // probeOpen=false (default policy): no data handle is opened on the file. Restart Manager
         // still reports the holder; it queries process IDs through an attribute-only open, which
         // does not take part in share-mode checks, so it cannot fail another process's open.
-        private static (int pid, string name) GetProcessUsingFile(string filePath, bool probeOpen)
+        private (int pid, string name) GetProcessUsingFile(string filePath, bool probeOpen)
         {
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
             {
@@ -533,11 +542,12 @@ namespace Sentinel.Core
                 }
                 catch (IOException ex) when ((ex.HResult & 0xFFFF) == 32) // Sharing violation (locked)
                 {
-                    Thread.Sleep(30);
+                    if (WaitOrShutdown(30)) break;
                     retries--;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    BestEffort.Debug(ex, "FileActivityMonitor.GetProcessUsingFile(probe)");
                     break;
                 }
             }
@@ -585,9 +595,9 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Ignore and fall through
+                BestEffort.Debug(ex, "FileActivityMonitor.GetProcessUsingFile(restartManager)");
             }
             finally
             {
@@ -716,26 +726,13 @@ namespace Sentinel.Core
 
         internal bool IsTrustedSystemWriter(int pid, string processName, string filePath)
         {
-            // TrustedInstaller (Windows Modules Installer), Windows Update, Defender, DISM, NTLite
-            var trustedNames = new[] { "trustedinstaller", "tiworker", "msiexec",
-                "wuauclt", "usoclient", "musnotification",
-                "msmpeng", "nissrv", "securityhealthservice",
-                "dism", "dismhost", "sfc", "poqexec",
-                // NTLite performs offline OS servicing (feature removal, component cleanup)
-                // and commits changes to mounted WIM images - writes signed MS binaries to System32
-                "ntlite",
-                // Critical system processes that legitimately modify System32
-                "csrss", "smss", "wininit", "services", "lsass", "svchost",
-                "lsaiso", "cng key isolation", "credential guard",
-                "vbs key protection", "keyiso",
-                // Sentinel itself
-                "windowssentinel.service", "windowssentinel.agent",
-                "windows sentinel" };
+            // Trust is anchored on what the writer IS, never on what it is called. The process name is
+            // chosen by the attacker (a dropper called "sfc_helper.exe" or "svchost_x.exe" matched the
+            // former substring list), so it is ignored here. TrustedInstaller, Windows Update, Defender,
+            // DISM, NTLite and the OS service hosts all qualify through the signature of the image the OS
+            // resolves from the PID (see IsTrustedWriterImage).
 
-            var lowerName = processName.ToLowerInvariant();
-            if (trustedNames.Any(t => lowerName.Contains(t))) return true;
-
-            // PID 4 = SYSTEM kernel
+            // PID 4 = SYSTEM kernel. The OS assigns it; a writer cannot choose it.
             if (pid == 4) return true;
 
             // If PID is 0 (unresolved process because the handle was closed quickly),
@@ -765,8 +762,12 @@ namespace Sentinel.Core
                             }
                         }
                     }
-                    catch { }
-                    Thread.Sleep(50);
+                    catch (Exception ex)
+                    {
+                        BestEffort.Debug(ex, "FileActivityMonitor.IsTrustedSystemWriter(pid0)");
+                    }
+                    // Bounded attribution retry: the shutdown token ends the wait early.
+                    if (WaitOrShutdown(50)) break;
                 }
                 return false;
             }
@@ -774,40 +775,96 @@ namespace Sentinel.Core
             // Own PID = Sentinel itself writing (e.g., quarantine lock files)
             if (pid == System.Net48Environment.ProcessId) return true;
 
-             // Verify by path - only trust if running from System32/Windows or Defender folder, or if it is signed by Microsoft
-             try
-             {
-                 var imagePath = SecurityValidation.GetProcessImagePath(pid);
-                 if (!string.IsNullOrEmpty(imagePath))
-                 {
-                     if (imagePath!.StartsWith(@"C:\Windows\", StringComparison.Ordinal) ||
-                         imagePath.Contains(@"\Windows Defender\") ||
-                         imagePath.Contains(@"\Microsoft Security Client\") ||
-                         imagePath.Contains(@"\Sentinel\"))
-                     {
-                         return true;
-                     }
+            // The OS resolves the image from the PID; an unresolved or protected-process image stays
+            // untrusted (fail closed). The previous "access denied => trust a process named System"
+            // branch granted trust to a name and is gone: PID 4 is handled above by number.
+            string? imagePath = null;
+            try
+            {
+                imagePath = SecurityValidation.GetProcessImagePath(pid);
+            }
+            catch (Exception ex)
+            {
+                BestEffort.Debug(ex, "FileActivityMonitor.IsTrustedSystemWriter(resolve)");
+            }
 
-                     // Trust any Authenticode-signed Microsoft updater/setup tool running from non-standard paths (e.g. dxsetup.exe from Steam)
-                     if (_signerTrust.IsSignedFile(imagePath))
-                     {
-                         return true;
-                     }
-                 }
-             }
-             catch (System.ComponentModel.Win32Exception)
-             {
-                 // Access denied - likely a protected system process (csrss, smss, lsass)
-                 // If we can't read it but it has a system-like name, trust it
-                 return lowerName == "system" || pid <= 4;
-             }
-             catch { }
- 
-             return false;
-         }
+            return IsTrustedWriterImage(imagePath);
+        }
+
+        private const int TrustedWriterCacheLimit = 512;
+        // Positive verdicts only, keyed by path and invalidated when write time or size changes. A negative
+        // result is never cached: a transient WinVerifyTrust/IO failure must not pin a legitimate signed
+        // writer as untrusted (that verdict feeds the reparse-point response path).
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (long LastWriteTicks, long Length)> _trustedWriterCache =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// True when the writer's image carries a valid Authenticode (embedded or catalog) signature, or is
+        /// one of Sentinel's own binaries in a directory only administrators can write. A folder or file
+        /// name never authorizes a writer: <c>C:\Users\x\Sentinel\evil.exe</c> and
+        /// <c>C:\Temp\Windows Defender\x.exe</c> are plain drops and fail here.
+        /// The verdict is cached per path and invalidated when the file's write time changes.
+        /// </summary>
+        internal bool IsTrustedWriterImage(string? imagePath)
+        {
+            if (string.IsNullOrEmpty(imagePath)) return false;
+            try
+            {
+                var info = new FileInfo(imagePath!);
+                if (!info.Exists) return false;
+                var stamp = (info.LastWriteTimeUtc.Ticks, info.Length);
+                if (_trustedWriterCache.TryGetValue(imagePath!, out var cached) && cached == stamp)
+                    return true;
+
+                // SignerTrustService first: it leases the file and rejects a file modified during
+                // verification. WinVerifyTrust is the fallback for catalog-signed OS binaries (no embedded
+                // signature); it is only consulted when the file is unchanged across the check.
+                bool trusted = _signerTrust.IsSignedFile(imagePath!)
+                    || IsUnchangedCatalogSigned(info, stamp)
+                    || IsSentinelInstallImage(imagePath!);
+
+                if (trusted)
+                {
+                    if (_trustedWriterCache.Count >= TrustedWriterCacheLimit) _trustedWriterCache.Clear();
+                    _trustedWriterCache[imagePath!] = stamp;
+                }
+                return trusted;
+            }
+            catch (Exception ex)
+            {
+                BestEffort.Debug(ex, "FileActivityMonitor.IsTrustedWriterImage");
+                return false;
+            }
+        }
+
+        private static bool IsUnchangedCatalogSigned(FileInfo info, (long, long) before)
+        {
+            if (!SecurityValidation.VerifyAuthenticodeSignature(info.FullName)) return false;
+            info.Refresh();
+            return info.Exists && (info.LastWriteTimeUtc.Ticks, info.Length) == before;
+        }
+
+        /// <summary>
+        /// Sentinel's own service/agent executable, in the directory this process runs from, when that
+        /// directory is not writable by a non-administrator (proven from the DACL, not from the name).
+        /// </summary>
+        private static bool IsSentinelInstallImage(string imagePath)
+        {
+            string fileName = Path.GetFileName(imagePath);
+            if (!fileName.Equals("Sentinel.Service.exe", StringComparison.OrdinalIgnoreCase) &&
+                !fileName.Equals("Sentinel.Agent.exe", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string installDir = Path.GetFullPath(AppContext.BaseDirectory).TrimEnd('\\');
+            string imageDir = Path.GetDirectoryName(Path.GetFullPath(imagePath))?.TrimEnd('\\') ?? string.Empty;
+            return string.Equals(installDir, imageDir, StringComparison.OrdinalIgnoreCase)
+                && !WritableLocationAcl.IsWritableByNonAdmin(imagePath);
+        }
 
         public void Dispose()
         {
+            try { _shutdown.Cancel(); }
+            catch (ObjectDisposedException ex) { /* already disposed: waits are already released */ _logger.LogDebug(ex, "[FileActivityMonitor] Dispose failed"); }
             foreach (var watcher in _watchers)
             {
                 try
@@ -815,9 +872,13 @@ namespace Sentinel.Core
                     watcher.EnableRaisingEvents = false;
                     watcher.Dispose();
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    BestEffort.Debug(ex, "FileActivityMonitor.Dispose(watcher)");
+                }
             }
             _watchers.Clear();
+            _shutdown.Dispose();
         }
     }
 }

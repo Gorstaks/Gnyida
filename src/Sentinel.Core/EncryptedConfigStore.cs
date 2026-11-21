@@ -159,7 +159,10 @@ namespace Sentinel.Core
                             StringComparison.OrdinalIgnoreCase))
                         LockFileAcl(_configPath);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "[EncryptedConfigStore] Could not verify ACL lock on config.enc");
+                }
                 return true;
             }
             catch (Exception ex)
@@ -377,7 +380,11 @@ namespace Sentinel.Core
 
                 fi.SetAccessControl(security);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // config.enc may remain readable by principals other than SYSTEM and Administrators.
+                BestEffort.Warn(ex, "EncryptedConfigStore.LockFileAcl");
+            }
         }
     }
 }

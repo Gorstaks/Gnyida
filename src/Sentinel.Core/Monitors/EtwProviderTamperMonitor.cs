@@ -208,7 +208,7 @@ namespace Sentinel.Core
                     if (!isPatched) continue;
 
                     string processName = "unknown";
-                    try { using var p = Process.GetProcessById(pid); processName = p.ProcessName; } catch { }
+                    try { using var p = Process.GetProcessById(pid); processName = p.ProcessName; } catch (Exception ex) { _logger.LogDebug(ex, "[EtwProviderTamperMonitor] CheckProcessEtwPatchingAsync failed"); }
 
                     await _detectionEngine.EmitAsync(new DetectionEvent
                     {
@@ -264,7 +264,7 @@ namespace Sentinel.Core
                     if (!LooksPatched(ours, remote, read)) continue;
 
                     string processName = "unknown";
-                    try { using var p = Process.GetProcessById(pid); processName = p.ProcessName; } catch (ArgumentException) { }
+                    try { using var p = Process.GetProcessById(pid); processName = p.ProcessName; } catch (ArgumentException ex) { _logger.LogDebug(ex, "[EtwProviderTamperMonitor] CheckNtTraceEventPatchingAsync failed"); }
 
                     await _detectionEngine.EmitAsync(new DetectionEvent
                     {
@@ -335,7 +335,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[EtwProviderTamperMonitor] GetCriticalEtwProcesses failed"); }
             return pids;
         }
 
@@ -438,7 +438,7 @@ namespace Sentinel.Core
                                         sessions.Add(name);
                                 }
                             }
-                            catch { }
+                            catch (Exception ex) { _logger.LogDebug(ex, "[EtwProviderTamperMonitor] EnumerateEtwSessions failed"); }
                         }
                     }
                 }
@@ -475,7 +475,7 @@ namespace Sentinel.Core
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex2) { _logger.LogDebug(ex2, "[EtwProviderTamperMonitor] EnumerateEtwSessions failed"); }
             }
 
             return sessions;

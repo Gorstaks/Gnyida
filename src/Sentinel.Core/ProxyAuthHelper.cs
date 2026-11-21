@@ -159,7 +159,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ProxyAuthHelper.IsPinMatch()"); }
             return false;
         }
 
@@ -184,7 +184,7 @@ namespace Sentinel.Core
                 if (rawKey != null && rawKey.Length > 0)
                     list.Add(Sha256Base64(rawKey));
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ProxyAuthHelper.EnumeratePinCandidates()"); }
 
             return list;
         }
@@ -209,7 +209,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ProxyAuthHelper.TryExportSubjectPublicKeyInfo()"); }
 
             try
             {
@@ -222,14 +222,14 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ProxyAuthHelper.TryExportSubjectPublicKeyInfo()"); }
 
             // Last resort: rebuild SPKI from PublicKey ASN.1 pieces (RSA/ECDSA algorithm OID + key)
             try
             {
                 return EncodeSpkiFromPublicKeyBlob(cert.PublicKey);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ProxyAuthHelper.TryExportSubjectPublicKeyInfo()"); }
 
             return null;
         }

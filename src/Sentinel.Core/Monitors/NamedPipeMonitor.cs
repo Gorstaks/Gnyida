@@ -364,7 +364,7 @@ namespace Sentinel.Core
                 if (GetNamedPipeServerProcessId(handle, out uint pid))
                     return pid;
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[NamedPipeMonitor] TryGetPipeOwner failed"); }
             finally
             {
                 if (handle != IntPtr.Zero && handle != new IntPtr(-1))

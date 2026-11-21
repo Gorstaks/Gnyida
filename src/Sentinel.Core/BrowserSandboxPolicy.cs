@@ -130,7 +130,7 @@ namespace Sentinel.Core
                     using var target = System.Diagnostics.Process.GetProcessById(tit.TargetProcessId);
                     targetName = target.ProcessName ?? "";
                 }
-                catch (Exception) { /* target gone or unreadable: treated as foreign below */ }
+                catch (Exception ex) { /* target gone or unreadable: treated as foreign below */ BestEffort.Debug(ex, "BrowserSandboxPolicy.Classify()"); }
             }
             bool same = SameFamily(callerName, targetName);
             if (genuine) return same ? Verdict.SandboxModel : Verdict.GenuineBrowserForeignTarget;

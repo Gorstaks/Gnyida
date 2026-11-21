@@ -79,9 +79,10 @@ namespace Sentinel.Core
 
                 _windowsEventLog.WriteChainResponse(detection, actionTaken, reason ?? "");
             }
-            catch
+            catch (Exception ex)
             {
                 // Absolute fail-soft - response path must never throw on Event Log
+                BestEffort.Debug(ex, "AdvancedResponseEngine.TryWriteWindowsEventLog()");
             }
         }
 
@@ -356,7 +357,7 @@ namespace Sentinel.Core
                         }
                     }
                 }
-                catch { /* process may have exited - continue with normal handling */ }
+                catch (Exception ex) { /* process may have exited - continue with normal handling */ BestEffort.Debug(ex, "AdvancedResponseEngine.HandleCoreAsync()"); }
             }
 
             // Live DetectionEngine classifies tier authority before dispatch.
@@ -373,7 +374,7 @@ namespace Sentinel.Core
                     imagePath = SecurityValidation.GetProcessImagePath(detection.ProcessId);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "AdvancedResponseEngine.HandleCoreAsync()"); }
 
             // v1.6.9: IDE / development tool protection - Electron/V8 apps generate JIT code
             // that matches syscall-stub patterns, RWX memory patterns, and other heuristics.
@@ -1102,7 +1103,7 @@ namespace Sentinel.Core
                             ErrorMessage = ex.Message
                         }, default).ConfigureAwait(false);
                     }
-                    catch { /* best-effort logging */ }
+                    catch (Exception ex2) { /* best-effort logging */ BestEffort.Debug(ex2, "AdvancedResponseEngine.HandleCoreAsync()"); }
                 }
 
                 var reasonText = $"Triggered by rule: {detection.RuleName}. {reason}{isolationContainmentNote}";
@@ -1294,14 +1295,22 @@ namespace Sentinel.Core
                             hash = ConvertHex.ToHexString(System.Security.Cryptography.Sha256Net48.HashData(fs)).ToLowerInvariant();
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        // The killed process may already be gone; without a hash reinfection is not tracked.
+                        BestEffort.Debug(ex, "AdvancedResponseEngine.NotifyReinfectionCorrelator(hash pid " + detection.ProcessId + ")");
+                    }
                 }
                 if (!string.IsNullOrEmpty(hash))
                 {
                     _reinfectionCorrelator.RegisterKilledHash(hash!, detection.ProcessName ?? "unknown", detection.ProcessName ?? "unknown");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                BestEffort.Warn(ex, "AdvancedResponseEngine.NotifyReinfectionCorrelator(" + detection.RuleName +
+                    ", pid " + detection.ProcessId + ")");
+            }
         }
 
     }

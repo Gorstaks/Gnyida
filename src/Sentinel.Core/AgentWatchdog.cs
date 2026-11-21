@@ -279,7 +279,7 @@ namespace Sentinel.Core
                         if (full.StartsWith(installDir, StringComparison.OrdinalIgnoreCase))
                             return true;
                     }
-                    catch { /* access denied on a transient PID — continue scanning */ }
+                    catch (Exception ex) { /* access denied on a transient PID — continue scanning */ _logger.LogDebug(ex, "[AgentWatchdog] IsAgentRunning failed"); }
                 }
                 return false;
             }

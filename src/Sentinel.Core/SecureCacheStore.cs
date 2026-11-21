@@ -83,9 +83,10 @@ namespace Sentinel.Core
                     LockDirectoryAcl(_secureDir);
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // Degrade gracefully
+                BestEffort.Warn(ex, "SecureCacheStore(prepare secure directory)");
             }
 
             // Derive a stable installation HMAC key; executable versions are not key material.
@@ -150,7 +151,11 @@ namespace Sentinel.Core
                     ms.Write(Encoding.UTF8.GetBytes(machineGuid));
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Derivation continues without this input; the derived key differs, so existing caches will not decrypt.
+                BestEffort.Warn(ex, "SecureCacheStore.GenerateBootBoundKey(MachineGuid)");
+            }
 
             // 2. Installation-specific random entropy (32 bytes).
             // v1.6.0: File ACL is SYSTEM-only (Administrators removed) so local admins
@@ -187,7 +192,11 @@ namespace Sentinel.Core
                     ms.Write(entropy);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Without the install entropy the key is derived from weaker inputs only.
+                BestEffort.Warn(ex, "SecureCacheStore.GenerateBootBoundKey(install entropy)");
+            }
 
             // 3. v2.0 RT-CRIT-3: DPAPI-bound machine secret (SYSTEM-context ciphertext).
             // Even if .install_entropy ACL is weakened and MachineGuid is public, an attacker
@@ -209,9 +218,10 @@ namespace Sentinel.Core
                 }
                 ms.Write(plainSecret, 0, plainSecret.Length);
             }
-            catch
+            catch (Exception ex)
             {
                 // Fail-soft: older installs without secret still derive from entropy+GUID
+                BestEffort.Warn(ex, "SecureCacheStore.GenerateBootBoundKey(DPAPI machine secret)");
             }
 
             // Legacy compatibility only; new writes remain stable across product upgrades.
@@ -544,9 +554,10 @@ namespace Sentinel.Core
 
                 dirInfo.SetAccessControl(security);
             }
-            catch
+            catch (Exception ex)
             {
                 // Best effort - may fail if process is not elevated
+                BestEffort.Warn(ex, "SecureCacheStore.LockDirectoryAcl");
             }
         }
 
@@ -577,9 +588,10 @@ namespace Sentinel.Core
 
                 fileInfo.SetAccessControl(security);
             }
-            catch
+            catch (Exception ex)
             {
                 // Best effort - requires SYSTEM or equivalent to set
+                BestEffort.Warn(ex, "SecureCacheStore.LockEntropyFileAcl");
             }
         }
     }

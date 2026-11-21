@@ -124,7 +124,7 @@ namespace Sentinel.Core
                 try { await process.WaitForExitAsync(cts.Token); }
                 catch (OperationCanceledException)
                 {
-                    try { process.Kill(); } catch { }
+                    try { process.Kill(); } catch (Exception ex) { _logger.LogDebug(ex, "[WfpIntegrityMonitor] ScanWfpFiltersAsync failed"); }
                     return;
                 }
 
@@ -143,7 +143,7 @@ namespace Sentinel.Core
             finally
             {
                 // Always clean up temp file
-                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch (Exception ex) { _logger.LogDebug(ex, "[WfpIntegrityMonitor] ScanWfpFiltersAsync failed"); }
             }
         }
 

@@ -52,7 +52,7 @@ namespace Sentinel.Core
                 }
 
                 long ws = 0;
-                try { ws = Process.GetProcessById(pid).WorkingSet64; } catch { /* gone */ }
+                try { ws = Process.GetProcessById(pid).WorkingSet64; } catch (Exception ex) { /* gone */ BestEffort.Debug(ex, "PageFaultDiag.Watch"); }
 
                 uint delta = havePrev && hard >= prev ? hard - prev : 0;
                 Console.WriteLine($"{(int)sw.Elapsed.TotalSeconds,4} {hard,8} {delta,6} {(ws / (1024.0 * 1024.0)),8:F1}");
@@ -124,7 +124,7 @@ namespace Sentinel.Core
                             if (!string.IsNullOrEmpty(SecurityValidation.GetProcessImagePath(p.Id)))
                                 ok++;
                         }
-                        catch { /* access */ }
+                        catch (Exception ex) { /* access */ BestEffort.Debug(ex, "PageFaultDiag.Run #1"); }
                         finally { p.Dispose(); }
                     }
                 }
@@ -263,7 +263,7 @@ namespace Sentinel.Core
                                 mods++;
                             }
                         }
-                        catch { /* access */ }
+                        catch (Exception ex) { /* access */ BestEffort.Debug(ex, "PageFaultDiag.Run #2"); }
                         finally { proc.Dispose(); }
                     }
                     Thread.Sleep(5000);
@@ -295,7 +295,7 @@ namespace Sentinel.Core
                         procs++;
                         mods += NativeProcessMemory.EnumModules(proc.Id).Count;
                     }
-                    catch { /* access */ }
+                    catch (Exception ex) { /* access */ BestEffort.Debug(ex, "PageFaultDiag.Run #3"); }
                     finally { proc.Dispose(); }
                 }
                 return $"{procs} inspectable, {mods} modules";
@@ -337,7 +337,7 @@ namespace Sentinel.Core
             _ = SecurityValidation.GetProcessImagePath(Process.GetCurrentProcess().Id);
             _ = NativeProcessMemory.EnumModules(Process.GetCurrentProcess().Id);
             string? selfPath = null;
-            try { selfPath = Process.GetCurrentProcess().MainModule?.FileName; } catch { /* restricted */ }
+            try { selfPath = Process.GetCurrentProcess().MainModule?.FileName; } catch (Exception ex) { /* restricted */ BestEffort.Debug(ex, "PageFaultDiag.Warmup"); }
             _ = ModuleIdentity.Evaluate(
                 selfPath,
                 typeof(PageFaultDiag).Assembly.Location,
@@ -356,7 +356,7 @@ namespace Sentinel.Core
                     if (!NativeProcessMemory.CanInspect(proc.Id, path)) continue;
                     list.Add((proc.Id, proc.ProcessName, path ?? ""));
                 }
-                catch { /* access */ }
+                catch (Exception ex) { /* access */ BestEffort.Debug(ex, "PageFaultDiag.SnapshotInspectable"); }
                 finally { proc.Dispose(); }
             }
             return list;

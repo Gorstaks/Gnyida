@@ -41,7 +41,7 @@ namespace Sentinel.Core
 
         public Task StopAsync(CancellationToken cancellationToken)
         {
-            try { _cts?.Cancel(); } catch { }
+            try { _cts?.Cancel(); } catch (Exception ex) { _logger.LogDebug(ex, "[LegacyVerdictSidecarPurgeService] StopAsync failed"); }
             return Task.CompletedTask;
         }
 
@@ -80,7 +80,7 @@ namespace Sentinel.Core
 
         public void Dispose()
         {
-            try { _cts?.Cancel(); } catch { }
+            try { _cts?.Cancel(); } catch (Exception ex) { _logger.LogDebug(ex, "[LegacyVerdictSidecarPurgeService] Dispose failed"); }
             _cts?.Dispose();
         }
     }

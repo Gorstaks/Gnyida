@@ -93,16 +93,17 @@ namespace Sentinel.Core
                                     _registry[name!] = attr.Category;
                             }
                         }
-                        catch
+                        catch (Exception ex)
                         {
                             // Constructor requires parameters - fall through to class name
+                            BestEffort.Debug(ex, "RuleCategoryRegistry.RuleCategoryRegistry()");
                         }
                     }
 
                     // Always register the class name as well (handles rules with DI constructors)
                     _registry[type.Name] = attr.Category;
                 }
-                catch { }
+                catch (Exception ex) { BestEffort.Debug(ex, "RuleCategoryRegistry.RuleCategoryRegistry()"); }
             }
         }
 

@@ -173,10 +173,10 @@ namespace Sentinel.Core
                             target.Add($"{vidPid}\\{serial}");
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "PhysicalAccessMonitor.SnapshotUsbDevices()"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "PhysicalAccessMonitor.SnapshotUsbDevices()"); }
         }
 
         private static void SnapshotBluetoothDevices(HashSet<string> target)
@@ -189,7 +189,7 @@ namespace Sentinel.Core
                 foreach (var sub in key.GetSubKeyNames())
                     target.Add(sub);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "PhysicalAccessMonitor.SnapshotBluetoothDevices()"); }
         }
 
         private static void SnapshotSessionIds(HashSet<int> target)
@@ -199,11 +199,11 @@ namespace Sentinel.Core
                 foreach (var proc in Process.GetProcessesByName("explorer"))
                 {
                     try { target.Add(proc.SessionId); }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "PhysicalAccessMonitor.SnapshotSessionIds()"); }
                     finally { proc.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "PhysicalAccessMonitor.SnapshotSessionIds()"); }
         }
     }
 }

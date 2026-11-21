@@ -200,7 +200,7 @@ namespace Sentinel.Core.Ml
                 if (Uri.TryCreate(host.Contains("://") ? host : "http://" + host, UriKind.Absolute, out var uri))
                     host = uri.IdnHost ?? uri.Host ?? host;
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "MlThreatScorer.IsWellKnownBenignHost()"); }
 
             host = host.TrimEnd('.');
             // Suffix match for common platforms (not a security boundary - ML dampening only)
@@ -326,7 +326,7 @@ namespace Sentinel.Core.Ml
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "MlThreatScorer.ResolveModelPath()"); }
 
             return null;
         }

@@ -46,9 +46,9 @@ namespace Sentinel.Core
                 if (string.IsNullOrWhiteSpace(customPath))
                     SecureCacheStore.TryLockDirectoryAcl(_baselineDir);
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Degrade gracefully - reconciliation still works in-memory this session.
+                BestEffort.Warn(ex, "ModuleBaselineStore.ModuleBaselineStore()");
             }
         }
 

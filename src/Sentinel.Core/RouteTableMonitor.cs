@@ -474,7 +474,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogWarning(ex, "[RouteTableMonitor] CheckPersistentRouteRegistry failed"); }
         }
 
         #region Helpers
@@ -618,7 +618,7 @@ namespace Sentinel.Core
                     if (gw != null) return gw.Address.ToString();
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "RouteTableMonitor.GetDefaultGateway()"); }
             return null;
         }
 
@@ -646,7 +646,7 @@ namespace Sentinel.Core
                         results.Add(new KeyValuePair<string, string>(ni.Id, gw.Address.ToString()));
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "RouteTableMonitor.GetInterfaceGateways()"); }
             return results;
         }
 

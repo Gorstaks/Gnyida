@@ -197,7 +197,7 @@ namespace Sentinel.Core
 
                     // Get image path
                     string? imagePath = null;
-                    try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch { }
+                    try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch (Exception ex) { _logger.LogDebug(ex, "[NetworkReinfectionDetector] ScanForSuspiciousSpawnsAsync failed"); }
                     if (string.IsNullOrEmpty(imagePath)) continue;
 
                     // Must be from a suspicious path
@@ -241,7 +241,7 @@ namespace Sentinel.Core
                         }
                     });
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[NetworkReinfectionDetector] ScanForSuspiciousSpawnsAsync failed"); }
                 finally { proc.Dispose(); }
             }
         }
@@ -264,7 +264,7 @@ namespace Sentinel.Core
                     if (currentPid <= 4) break;
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[NetworkReinfectionDetector] HasUserInteractiveParent failed"); }
             return false;
         }
 

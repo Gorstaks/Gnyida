@@ -128,7 +128,7 @@ namespace Sentinel.Core
                     try
                     {
                         string? imagePath = null;
-                        try { imagePath = proc.MainModule?.FileName; } catch { }
+                        try { imagePath = proc.MainModule?.FileName; } catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanRunningProcesses failed"); }
                         if (string.IsNullOrEmpty(imagePath)) continue;
 
                         scanned++;
@@ -183,10 +183,10 @@ namespace Sentinel.Core
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanRunningProcesses failed"); }
                     finally
                     {
-                        try { proc.Dispose(); } catch { }
+                        try { proc.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanRunningProcesses failed"); }
                     }
                 }
 
@@ -294,7 +294,7 @@ namespace Sentinel.Core
                         result.Stats.PersistenceEntriesScanned++;
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanRunKeys failed"); }
             }
         }
 
@@ -329,10 +329,10 @@ namespace Sentinel.Core
                         }
                         result.Stats.PersistenceEntriesScanned++;
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanScheduledTasks failed"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanScheduledTasks failed"); }
         }
 
         private void ScanStartupFolder(ScanResult result, CancellationToken ct)
@@ -374,7 +374,7 @@ namespace Sentinel.Core
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanStartupFolder failed"); }
             }
         }
 
@@ -412,10 +412,10 @@ namespace Sentinel.Core
                         }
                         result.Stats.PersistenceEntriesScanned++;
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanServices failed"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanServices failed"); }
         }
 
         private void ScanIfeo(ScanResult result, CancellationToken ct)
@@ -447,10 +447,10 @@ namespace Sentinel.Core
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanIfeo failed"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanIfeo failed"); }
         }
 
         private void ScanWinlogon(ScanResult result, CancellationToken ct)
@@ -492,7 +492,7 @@ namespace Sentinel.Core
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanWinlogon failed"); }
         }
 
         #endregion
@@ -613,7 +613,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanCertStore failed"); }
         }
 
         #endregion
@@ -646,7 +646,7 @@ namespace Sentinel.Core
                             result.Stats.LnkFilesScanned++;
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanLnkFiles failed"); }
                 }
 
                 // Also scan taskbar pins
@@ -708,7 +708,7 @@ namespace Sentinel.Core
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] AnalyzeLnk failed"); }
         }
 
         #endregion
@@ -767,10 +767,10 @@ namespace Sentinel.Core
                                 }
                                 result.Stats.FilesScanned++;
                             }
-                            catch { }
+                            catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanStagingPaths failed"); }
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanStagingPaths failed"); }
                 }
             }
             catch (Exception ex)
@@ -801,7 +801,7 @@ namespace Sentinel.Core
                     {
                         using var p = Process.GetProcessById(pid);
                         string? imagePath = null;
-                        try { imagePath = p.MainModule?.FileName; } catch { }
+                        try { imagePath = p.MainModule?.FileName; } catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanNetworkState failed"); }
                         if (!string.IsNullOrEmpty(imagePath) && IsStagingPath(imagePath!))
                         {
                             bool isListening = row.IsListening;
@@ -817,7 +817,7 @@ namespace Sentinel.Core
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScanEngine] ScanNetworkState failed"); }
                     return true;
                 });
                 if (!read) _logger.LogDebug("[ScanEngine] Connection table unavailable");

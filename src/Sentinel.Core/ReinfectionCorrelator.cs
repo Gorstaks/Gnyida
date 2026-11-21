@@ -75,7 +75,7 @@ namespace Sentinel.Core
                 if (dir != null && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 File.AppendAllText(KillLogPath, $"{hash}|{processName}|{imagePath}|{DateTime.UtcNow:O}\n");
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ReinfectionCorrelator] RegisterKilledHash failed"); }
         }
 
         /// <summary>
@@ -263,7 +263,7 @@ namespace Sentinel.Core
                 }
                 _logger.LogInformation("[ReinfectionCorrelator] Loaded {Count} total tracked hashes", _killedHashes.Count);
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ReinfectionCorrelator] LoadKillLog failed"); }
         }
 
         private async Task ScanRunningProcessesAsync(CancellationToken ct)
@@ -275,7 +275,7 @@ namespace Sentinel.Core
                 {
                     if (proc.Id <= 4) continue;
                     string? imagePath = null;
-                    try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch { }
+                    try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch (Exception ex) { _logger.LogDebug(ex, "[ReinfectionCorrelator] ScanRunningProcessesAsync failed"); }
                     if (string.IsNullOrEmpty(imagePath) || !File.Exists(imagePath)) continue;
 
                     // Never alert on Windows system binaries or protected install paths
@@ -319,7 +319,7 @@ namespace Sentinel.Core
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[ReinfectionCorrelator] ScanRunningProcessesAsync failed"); }
                 finally { proc.Dispose(); }
             }
         }
@@ -386,10 +386,10 @@ namespace Sentinel.Core
                                     });
                                 }
                             }
-                            catch { }
+                            catch (Exception ex) { _logger.LogDebug(ex, "[ReinfectionCorrelator] ScanPersistenceLocationsAsync failed"); }
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ReinfectionCorrelator] ScanPersistenceLocationsAsync failed"); }
                 }
             }
         }

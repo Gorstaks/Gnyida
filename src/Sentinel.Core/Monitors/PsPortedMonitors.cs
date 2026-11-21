@@ -140,7 +140,7 @@ namespace Sentinel.Core
             // Fallback delete if quarantine declined
             if (quarantined == null && File.Exists(lnkPath))
             {
-                try { File.Delete(lnkPath); } catch { /* best effort */ }
+                try { File.Delete(lnkPath); } catch (Exception ex) { /* best effort */ _logger.LogDebug(ex, "[LnkUncGuard] EvaluateLnkAsync failed"); }
             }
 
             await _detectionEngine.EmitAsync(new DetectionEvent
@@ -197,7 +197,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { /* ignore */ }
+            catch (Exception ex) { /* ignore */ BestEffort.Debug(ex, "LnkUncGuard.GetScanRoots"); }
 
             Add(Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory));
             Add(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu));
@@ -330,7 +330,7 @@ namespace Sentinel.Core
                             Marshal.FinalReleaseComObject(shell);
                         }
                     }
-                    catch { /* optional */ }
+                    catch (Exception ex) { /* optional */ BestEffort.Debug(ex, "LnkUncGuard.TryReadShortcut"); }
                 }
 
                 return !string.IsNullOrEmpty(targetPath) || !string.IsNullOrEmpty(arguments);
@@ -500,10 +500,10 @@ namespace Sentinel.Core
                         if (d.DriveType is DriveType.Fixed or DriveType.Removable or DriveType.Network)
                             roots.Add(d.RootDirectory.FullName);
                     }
-                    catch { /* skip unreadable drive */ }
+                    catch (Exception ex) { /* skip unreadable drive */ BestEffort.Debug(ex, "AggressiveUnsignedDllSweepMonitor.GetScanRoots #1"); }
                 }
             }
-            catch { /* ignore */ }
+            catch (Exception ex) { /* ignore */ BestEffort.Debug(ex, "AggressiveUnsignedDllSweepMonitor.GetScanRoots #2"); }
 
             // Explicit System32 pass for parity with the PS script (skipped by ShouldSkipPath).
             try
@@ -512,7 +512,7 @@ namespace Sentinel.Core
                 if (!string.IsNullOrWhiteSpace(sys32))
                     roots.Add(sys32);
             }
-            catch { /* ignore */ }
+            catch (Exception ex) { /* ignore */ BestEffort.Debug(ex, "AggressiveUnsignedDllSweepMonitor.GetScanRoots #3"); }
 
             return roots.Distinct(StringComparer.OrdinalIgnoreCase);
         }
@@ -801,7 +801,7 @@ namespace Sentinel.Core
                         });
                     }
                 }
-                catch { /* process exited */ }
+                catch (Exception ex) { /* process exited */ BestEffort.Debug(ex, "ScarewareWindowMonitor.ScanAsync"); }
             }
 
             return findings;
@@ -959,7 +959,7 @@ namespace Sentinel.Core
             _logger.LogInformation("[CookieIntegrityMonitor] Started - hashing browser cookie DBs");
 
             // Baseline first without alerting
-            try { await ScanAsync(alert: false, ct); } catch { /* ignore */ }
+            try { await ScanAsync(alert: false, ct); } catch (Exception ex) { /* ignore */ _logger.LogDebug(ex, "[CookieIntegrityMonitor] ExecuteAsync failed"); }
 
             while (!ct.IsCancellationRequested)
             {

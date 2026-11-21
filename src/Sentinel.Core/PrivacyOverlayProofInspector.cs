@@ -34,7 +34,7 @@ namespace Sentinel.Core
                     var proof = await InspectAsync(observation, ct).ConfigureAwait(false);
                     if (proof != null && !ct.IsCancellationRequested) await emit(proof).ConfigureAwait(false);
                 }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* normal shutdown */ }
+                catch (OperationCanceledException ex) when (ct.IsCancellationRequested) { /* normal shutdown */ _logger.LogDebug(ex, "[PrivacyOverlayProofInspector] Queue failed"); }
                 catch (Exception ex) { _logger.LogWarning(ex, "Overlay owner metadata unavailable; no compromise inferred"); }
                 finally { Interlocked.Decrement(ref _running); }
             });

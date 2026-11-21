@@ -195,7 +195,7 @@ namespace Sentinel.Agent
                     onFallback(reason);
                 }));
             }
-            catch { /* form gone */ }
+            catch (Exception ex) { /* form gone */ Sentinel.Core.BestEffort.Debug(ex, "WebView2Host.BeginInvokeFallback"); }
         }
 
         private static void DisposeControl(Form owner, WebView2 webView)
@@ -205,7 +205,7 @@ namespace Sentinel.Agent
                 owner.Controls.Remove(webView);
                 webView.Dispose();
             }
-            catch { /* best effort */ }
+            catch (Exception ex) { /* best effort */ Sentinel.Core.BestEffort.Debug(ex, "WebView2Host.DisposeControl"); }
         }
     }
 }

@@ -62,7 +62,7 @@ namespace Sentinel.Agent
                         result.ResponsesFailed++;
                     }
                 }
-                catch (JsonException) { /* a torn or foreign line: skip it */ }
+                catch (JsonException ex) { /* a torn or foreign line: skip it */ Sentinel.Core.BestEffort.Debug(ex, "ProtectionSummary.Count()"); }
             }
             result.WindowComplete = oldestSeen.HasValue && oldestSeen.Value <= since;
             return result;

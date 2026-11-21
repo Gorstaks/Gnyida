@@ -279,7 +279,7 @@ namespace System.Diagnostics
             tcs.Task.ContinueWith(_ =>
             {
                 registration.Dispose();
-                try { process.Exited -= Handler; } catch (Exception) { /* disposed Process: nothing left to detach */ }
+                try { process.Exited -= Handler; } catch (Exception ex) { /* disposed Process: nothing left to detach */ Sentinel.Core.BestEffort.Debug(ex, "ProcessNet48.WaitForExitAsync()"); }
             }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             return tcs.Task;
         }
@@ -324,7 +324,7 @@ namespace System.Net.Sockets
             var tcs = new TaskCompletionSource<object?>();
             ct.Register(() =>
             {
-                try { client.Close(); } catch { }
+                try { client.Close(); } catch (Exception ex) { Sentinel.Core.BestEffort.Debug(ex, "SocketNet48.ConnectAsync()"); }
                 tcs.TrySetCanceled(ct);
             });
             connectTask.ContinueWith(t =>

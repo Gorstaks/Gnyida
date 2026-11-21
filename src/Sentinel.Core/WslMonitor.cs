@@ -194,7 +194,7 @@ namespace Sentinel.Core
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[WslMonitor] ScanWslProcesses failed"); }
                 finally { proc.Dispose(); }
             }
 
@@ -230,7 +230,7 @@ namespace Sentinel.Core
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[WslMonitor] CheckNewDistroInstalls failed"); }
         }
 
         private async Task MonitorWslFileAccess(CancellationToken ct)
@@ -277,13 +277,13 @@ namespace Sentinel.Core
                                 });
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[WslMonitor] MonitorWslFileAccess #1 failed"); }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[WslMonitor] MonitorWslFileAccess #2 failed"); }
                     finally { proc.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[WslMonitor] MonitorWslFileAccess #3 failed"); }
         }
 
         private void BaselineDistros()
@@ -311,7 +311,7 @@ namespace Sentinel.Core
                         distros.Add(name!);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WslMonitor.GetInstalledDistros"); }
             return distros;
         }
 
@@ -326,7 +326,7 @@ namespace Sentinel.Core
                     return obj["CommandLine"]?.ToString() ?? "";
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WslMonitor.GetProcessCommandLine"); }
             return "";
         }
 
@@ -505,7 +505,7 @@ namespace Sentinel.Core
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[WslMonitor] DetectWslInteropEscalation failed"); }
                 finally { proc.Dispose(); }
             }
         }
@@ -580,7 +580,7 @@ namespace Sentinel.Core
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[WslMonitor] DetectDockerEscapeIndicators failed"); }
                 finally { proc.Dispose(); }
             }
 
@@ -602,7 +602,7 @@ namespace Sentinel.Core
                     return Convert.ToInt32(obj["ParentProcessId"]);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WslMonitor.GetParentPidForWsl"); }
             return 0;
         }
 

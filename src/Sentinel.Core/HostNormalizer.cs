@@ -54,7 +54,7 @@ namespace Sentinel.Core
             }
             string s = sb.ToString();
             try { s = s.Normalize(NormalizationForm.FormKC); }
-            catch (ArgumentException) { /* a lone surrogate: leave the text as it is */ }
+            catch (ArgumentException ex) { /* a lone surrogate: leave the text as it is */ BestEffort.Debug(ex, "HostNormalizer.NormalizeText()"); }
             s = Percent.Replace(s, m =>
             {
                 char decoded = (char)Convert.ToInt32(m.Groups["h"].Value, 16);
@@ -96,7 +96,7 @@ namespace Sentinel.Core
             if (host.Length > 0 && !IsAscii(host))
             {
                 try { host = new IdnMapping().GetAscii(host); }
-                catch (ArgumentException) { /* not a valid name: keep the text, it will not match a list entry */ }
+                catch (ArgumentException ex) { /* not a valid name: keep the text, it will not match a list entry */ BestEffort.Debug(ex, "HostNormalizer.Normalize()"); }
             }
             return host.TrimEnd('.').ToLowerInvariant();
         }

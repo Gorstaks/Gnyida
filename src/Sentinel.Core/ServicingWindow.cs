@@ -66,7 +66,7 @@ namespace Sentinel.Core
                     string n;
                     try { n = proc.ProcessName; }
                     catch { continue; }
-                    finally { try { proc.Dispose(); } catch { } }
+                    finally { try { proc.Dispose(); } catch (Exception ex) { BestEffort.Debug(ex, "ServicingWindow.ScanForServicingProcess()"); } }
 
                     foreach (var svc in ServicingProcessNames)
                     {
@@ -75,7 +75,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ServicingWindow.ScanForServicingProcess()"); }
             return false;
         }
     }

@@ -1228,6 +1228,9 @@ namespace Sentinel.Core
         private static long _lastSweepTicks = Environment.TickCount;
         private const int SweepIntervalMs = 120_000; // sweep every 2 minutes
 
+        /// <summary>Milliseconds from <paramref name="last"/> to <paramref name="now"/>, correct across the Environment.TickCount wrap.</summary>
+        internal static uint ElapsedTickMs(int now, int last) => unchecked((uint)(now - last));
+
         /// <summary>
         /// v2.0.3: Evict PID buffers whose last activity exceeds the chain window + grace.
         /// Called lazily from RegisterAndEvaluateChain and explicitly from SentinelHealthCheck.
@@ -1436,8 +1439,11 @@ namespace Sentinel.Core
         {
             long now = Environment.TickCount;
             long last = Interlocked.Read(ref _lastSweepTicks);
-            // Avoid sweep storms - only one sweep per interval
-            if (unchecked(now - last) >= SweepIntervalMs)
+            // Avoid sweep storms - only one sweep per interval.
+            // Environment.TickCount is an int that wraps negative after ~24.9 days of uptime. Subtract
+            // in 32-bit arithmetic so the elapsed time stays correct across the wrap; a 64-bit
+            // subtraction went negative at the wrap and stopped the stale-PID sweep for ~24.8 days.
+            if (ElapsedTickMs((int)now, (int)last) >= SweepIntervalMs)
             {
                 if (Interlocked.CompareExchange(ref _lastSweepTicks, now, last) == last)
                 {

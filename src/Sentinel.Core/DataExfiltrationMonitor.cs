@@ -173,7 +173,7 @@ namespace Sentinel.Core
                     total += stats.BytesSent;
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "DataExfiltrationMonitor.GetTotalBytesSent()"); }
             return total;
         }
     }

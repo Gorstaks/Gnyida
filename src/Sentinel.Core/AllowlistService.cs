@@ -164,7 +164,11 @@ namespace Sentinel.Core
                     _userAllowlist[e.ProcessName.ToLowerInvariant()] = e;
                 _logger.LogInformation("Allowlist: Loaded {Count} user entries", _userAllowlist.Count);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Fail closed: no user entries load, so nothing is allowlisted by a corrupt or tampered cache.
+                _logger.LogWarning(ex, "Allowlist: user allowlist could not be loaded; continuing with none");
+            }
         }
 
         private void SaveUserAllowlist()
@@ -174,7 +178,10 @@ namespace Sentinel.Core
                 var json = JsonSerializer.Serialize(_userAllowlist.Values.ToList());
                 _cacheStore.Save("allowlist", "user", json);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Allowlist: user allowlist could not be saved; changes last until restart");
+            }
         }
     }
 

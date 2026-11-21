@@ -298,7 +298,7 @@ namespace Sentinel.Core
                 using var proc = Process.GetProcessById(targetPid);
                 name = proc.ProcessName;
             }
-            catch { /* dead */ }
+            catch (Exception ex) { /* dead */ _logger.LogDebug(ex, "[DllUnloadEngine] UnloadInjectedDllAsync failed"); }
 
             return await ScanProcessAsync(targetPid, name, allowRemediateOnProvenLoad: true, forceRemediate: true);
         }
@@ -677,7 +677,7 @@ namespace Sentinel.Core
                         found.Add(path);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[DllUnloadEngine] FindHostileSideloadDlls failed"); }
             return found;
         }
 
@@ -710,11 +710,11 @@ namespace Sentinel.Core
                             continue;
                         list.Add(proc.Id);
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[DllUnloadEngine] FindProcessIdsFromDirectory failed"); }
                     finally { proc.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[DllUnloadEngine] FindProcessIdsFromDirectory failed"); }
             return list;
         }
 

@@ -87,9 +87,10 @@ namespace Sentinel.Core
                                     list.Add(name!);
                             }
                         }
-                        catch
+                        catch (Exception ex)
                         {
                             // Per-service failure must not abort full refresh.
+                            BestEffort.Debug(ex, "ServiceProcessMap.Refresh");
                         }
                     }
 

@@ -31,7 +31,7 @@ namespace Sentinel.Core
         {
             using var cts = new CancellationTokenSource(timeout);
             try { await process.WaitForExitAsync(cts.Token); }
-            catch (OperationCanceledException) { /* reported by the caller's verification */ }
+            catch (OperationCanceledException ex) { /* reported by the caller's verification */ BestEffort.Debug(ex, "IsolationResponseEngine.WaitForExitBoundedAsync()"); }
         }
 
         /// <summary>Waits for a child process; kills it on timeout. True if it exited in time.</summary>
@@ -46,8 +46,8 @@ namespace Sentinel.Core
             catch (OperationCanceledException)
             {
                 try { process.Kill(); }
-                catch (InvalidOperationException) { }
-                catch (System.ComponentModel.Win32Exception) { }
+                catch (InvalidOperationException ex) { BestEffort.Debug(ex, "IsolationResponseEngine.WaitOrKillAsync()"); }
+                catch (System.ComponentModel.Win32Exception ex) { BestEffort.Debug(ex, "IsolationResponseEngine.WaitOrKillAsync()"); }
                 return false;
             }
         }

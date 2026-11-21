@@ -276,7 +276,7 @@ namespace Sentinel.Core
                     return obj["CommandLine"]?.ToString();
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "RpcLateralMonitor.GetCommandLine()"); }
             return null;
         }
 

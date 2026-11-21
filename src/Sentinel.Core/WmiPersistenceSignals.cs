@@ -102,7 +102,7 @@ namespace Sentinel.Core
                         finally { p.Dispose(); }
                     }
                 }
-                catch { }
+                catch (Exception ex) { BestEffort.Debug(ex, "WmiPersistenceSignals.TryGetLiveWmiHostPid()"); }
             }
             return 0;
         }

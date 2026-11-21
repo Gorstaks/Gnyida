@@ -104,7 +104,7 @@ namespace Sentinel.Core
                         _baselinePrefetch.Add(Path.GetFileName(file));
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[EphemeralProcessMonitor] ExecuteAsync failed"); }
 
                 // Set up FileSystemWatcher on Prefetch for real-time detection
                 try
@@ -129,7 +129,7 @@ namespace Sentinel.Core
             {
                 await Task.Delay(Timeout.Infinite, ct);
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException ex) { _logger.LogDebug(ex, "[EphemeralProcessMonitor] ExecuteAsync failed"); }
 
             _prefetchWatcher?.Dispose();
         }
@@ -144,7 +144,7 @@ namespace Sentinel.Core
 
                 await AnalyzePrefetchEntry(fileName, e.FullPath);
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[EphemeralProcessMonitor] OnPrefetchCreated failed"); }
         }
 
         private async Task ScanPrefetchDelta(CancellationToken ct)
@@ -162,7 +162,7 @@ namespace Sentinel.Core
                     await AnalyzePrefetchEntry(fileName, file);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[EphemeralProcessMonitor] ScanPrefetchDelta failed"); }
         }
 
         private async Task AnalyzePrefetchEntry(string prefetchFileName, string fullPath)
@@ -327,7 +327,7 @@ namespace Sentinel.Core
                         _ = _reputationService.GetVerdictAsync(sha256, sha1: sha1);
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[EphemeralProcessMonitor] AnalyzePrefetchEntry failed"); }
             }
         }
 
@@ -370,7 +370,7 @@ namespace Sentinel.Core
                     });
                 }
             }
-            catch { } // Security log access may fail without SeSecurityPrivilege
+            catch (Exception ex) { _logger.LogDebug(ex, "[EphemeralProcessMonitor] ScanSecurityEventLog failed"); } // Security log access may fail without SeSecurityPrivilege
         }
 
         private static string? ExtractExeNameFromPrefetch(string prefetchFileName)
@@ -444,10 +444,10 @@ namespace Sentinel.Core
                                 if (File.Exists(nested)) return nested;
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { BestEffort.Debug(ex, "EphemeralProcessMonitor.FindExecutable()"); }
                     }
                 }
-                catch { }
+                catch (Exception ex) { BestEffort.Debug(ex, "EphemeralProcessMonitor.FindExecutable()"); }
             }
 
             return null;
@@ -490,7 +490,7 @@ namespace Sentinel.Core
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { BestEffort.Debug(ex, "EphemeralProcessMonitor.EnumerateSteamLibraryRoots()"); }
             }
 
             return roots;

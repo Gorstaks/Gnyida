@@ -32,8 +32,8 @@ namespace Sentinel.Core
                 return Result(read, 5000);
             }
             try { process.Kill(); }
-            catch (Exception) { /* exited between the timeout and the kill, or access denied */ }
-            try { process.WaitForExit(2000); } catch (Exception) { }
+            catch (Exception ex) { /* exited between the timeout and the kill, or access denied */ BestEffort.Debug(ex, "BoundedProcess.ReadOutput()"); }
+            try { process.WaitForExit(2000); } catch (Exception ex) { BestEffort.Debug(ex, "BoundedProcess.ReadOutput()"); }
             // A grandchild that inherited the pipe can keep it open after the kill; do not wait for it.
             return Result(read, 1000);
         }
@@ -59,7 +59,7 @@ namespace Sentinel.Core
                 catch (OperationCanceledException)
                 {
                     try { process.Kill(); }
-                    catch (Exception) { /* already exited, or access denied */ }
+                    catch (Exception ex) { /* already exited, or access denied */ BestEffort.Debug(ex, "BoundedProcess.ReadOutputAsync()"); }
                     if (ct.IsCancellationRequested) throw;
                     return await ResultAsync(read, 1000).ConfigureAwait(false);
                 }

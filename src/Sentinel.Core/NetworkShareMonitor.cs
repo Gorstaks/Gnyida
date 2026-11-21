@@ -308,7 +308,7 @@ namespace Sentinel.Core
                     NetApiBufferFree(bufPtr);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[NetworkShareMonitor] EnumerateLocalShares failed"); }
             return shares;
         }
 
@@ -378,7 +378,7 @@ namespace Sentinel.Core
                     NetApiBufferFree(bufPtr);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[NetworkShareMonitor] DetectAdminShareAccess failed"); }
         }
 
         private async Task DetectInboundSessions(CancellationToken ct)
@@ -443,7 +443,7 @@ namespace Sentinel.Core
                     NetApiBufferFree(bufPtr);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[NetworkShareMonitor] DetectInboundSessions failed"); }
         }
 
         private void BaselineMappedDrives()
@@ -481,7 +481,7 @@ namespace Sentinel.Core
                     mappings.Add(new DriveMapping { LocalDrive = local, RemotePath = remote });
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "NetworkShareMonitor.GetMappedDrives()"); }
             return mappings;
         }
 

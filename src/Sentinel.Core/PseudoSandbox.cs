@@ -259,13 +259,14 @@ namespace Sentinel.Core
                             break;
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         // Process may have exited during query
+                        _logger.LogDebug(ex, "[PseudoSandbox] MonitorJobAsync #1 failed");
                     }
                 }
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException ex) { _logger.LogDebug(ex, "[PseudoSandbox] MonitorJobAsync #2 failed"); }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "[PseudoSandbox] Monitor error");

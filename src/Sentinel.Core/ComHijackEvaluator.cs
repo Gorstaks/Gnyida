@@ -77,7 +77,7 @@ namespace Sentinel.Core
             // sees string? - the null-forgiving operator reflects the guarantee (CS8602).
             var s = raw!.Trim();
             try { s = Environment.ExpandEnvironmentVariables(s); }
-            catch { /* keep raw */ }
+            catch (Exception ex) { /* keep raw */ BestEffort.Debug(ex, "ComHijackEvaluator.ExtractServerPath"); }
             s = s.Trim().Trim('"');
             if (s.Length == 0) return "";
 

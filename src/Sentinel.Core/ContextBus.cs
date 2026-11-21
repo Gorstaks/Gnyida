@@ -289,8 +289,8 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch (OperationCanceledException) { }
-            catch (ObjectDisposedException) { } // CTS disposed during shutdown
+            catch (OperationCanceledException ex2) { _logger.LogDebug(ex2, "[ContextBus] DispatchLoopAsync failed"); }
+            catch (ObjectDisposedException ex2) { _logger.LogDebug(ex2, "[ContextBus] DispatchLoopAsync failed"); } // CTS disposed during shutdown
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[ContextBus] Critical dispatch loop failure");
@@ -342,10 +342,10 @@ namespace Sentinel.Core
                 if (!_cts.IsCancellationRequested)
                     _cts.Cancel();
             }
-            catch { }
-            try { _publishChannel.Writer.TryComplete(); } catch { }
-            try { _dispatchTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
-            try { _cts.Dispose(); } catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ContextBus] Dispose failed"); }
+            try { _publishChannel.Writer.TryComplete(); } catch (Exception ex) { _logger.LogDebug(ex, "[ContextBus] Dispose failed"); }
+            try { _dispatchTask.Wait(TimeSpan.FromSeconds(2)); } catch (Exception ex) { _logger.LogDebug(ex, "[ContextBus] Dispose failed"); }
+            try { _cts.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[ContextBus] Dispose failed"); }
         }
 
         private volatile bool _disposed;

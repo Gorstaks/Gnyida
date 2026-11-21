@@ -414,7 +414,7 @@ namespace Sentinel.Core
             {
                 using var proc = Process.GetProcessById(pid);
                 resolution.Name = proc.ProcessName;
-                try { resolution.ImagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch { }
+                try { resolution.ImagePath = SecurityValidation.GetProcessImagePath(proc.Id); } catch (Exception ex) { _logger.LogDebug(ex, "[GhostProcessMonitor] ResolveProcess failed"); }
                 resolution.Source = "direct";
 
                 if (string.IsNullOrEmpty(resolution.Name))

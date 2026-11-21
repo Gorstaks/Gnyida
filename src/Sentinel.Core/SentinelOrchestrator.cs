@@ -271,11 +271,11 @@ namespace Sentinel.Core
 
         public void Dispose()
         {
-            try { _backpressureTimer.Dispose(); } catch { }
-            try { _incidentManager.Dispose(); } catch { }
-            try { _monitorRegistry.Dispose(); } catch { }
-            try { _contextBus.Dispose(); } catch { }
-            try { _responseCoordinator.Dispose(); } catch { }
+            try { _backpressureTimer.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[SentinelOrchestrator] Dispose failed"); }
+            try { _incidentManager.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[SentinelOrchestrator] Dispose failed"); }
+            try { _monitorRegistry.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[SentinelOrchestrator] Dispose failed"); }
+            try { _contextBus.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[SentinelOrchestrator] Dispose failed"); }
+            try { _responseCoordinator.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[SentinelOrchestrator] Dispose failed"); }
         }
     }
 

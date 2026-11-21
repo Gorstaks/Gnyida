@@ -68,7 +68,7 @@ namespace Sentinel.Core
             _cts?.Cancel();
             if (_monitorTask != null)
             {
-                try { await _monitorTask; } catch { /* cancelled */ }
+                try { await _monitorTask; } catch (Exception ex) { /* cancelled */ _logger.LogDebug(ex, "[EtwThreatIntelMonitor] StopAsync failed"); }
             }
         }
 

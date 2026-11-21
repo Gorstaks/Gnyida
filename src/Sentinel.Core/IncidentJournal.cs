@@ -133,7 +133,7 @@ namespace Sentinel.Core
                         open.Add(record);
                     }
                 }
-                catch { /* corrupt/partial journal; skip */ }
+                catch (Exception ex) { /* corrupt/partial journal; skip */ BestEffort.Debug(ex, "IncidentJournal.RecoverOpenJournals()"); }
             }
             return open;
         }
@@ -161,7 +161,7 @@ namespace Sentinel.Core
                         record.JournalState == JournalState.SealedInterrupted))
                         records.Add(record);
                 }
-                catch { /* skip */ }
+                catch (Exception ex) { /* skip */ BestEffort.Debug(ex, "IncidentJournal.LoadSealed()"); }
             }
             return records;
         }

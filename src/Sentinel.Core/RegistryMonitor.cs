@@ -123,9 +123,9 @@ namespace Sentinel.Core
                     await Task.Delay(wmiAvailable ? 5000 : 15000, stoppingToken);
                 }
             }
-            catch (OperationCanceledException)
-            {
+            catch (OperationCanceledException ex) {
                 // Normal shutdown
+                _logger.LogDebug(ex, "[RegistryMonitor] ExecuteAsync failed");
             }
             finally
             {
@@ -151,7 +151,10 @@ namespace Sentinel.Core
                 // Check Services
                 PollServicesKey();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[RegistryMonitor] Persistence poll cycle failed");
+            }
         }
 
         private void PollRunKey(RegistryKey hive, string subPath, bool isHklm)
@@ -171,7 +174,10 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[RegistryMonitor] Run-key poll failed for {Hive}\\{Path}", isHklm ? "HKLM" : "HKCU", subPath);
+            }
         }
 
         private void PollServicesKey()
@@ -189,7 +195,10 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[RegistryMonitor] Services-key poll failed");
+            }
         }
 
         private void BuildBaselines()
@@ -215,9 +224,9 @@ namespace Sentinel.Core
                     result[name] = key.GetValue(name)?.ToString();
                 }
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Registry access may be denied for some keys
+                BestEffort.Debug(ex, "RegistryMonitor.SnapshotRegistryValues()");
             }
             return result;
         }
@@ -237,10 +246,10 @@ namespace Sentinel.Core
                         var imagePath = subKey?.GetValue("ImagePath")?.ToString();
                         result[name] = imagePath;
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "RegistryMonitor.SnapshotServiceNames()"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "RegistryMonitor.SnapshotServiceNames()"); }
             return result;
         }
 
@@ -669,7 +678,7 @@ namespace Sentinel.Core
                             currentClsid[subKeyName] = defaultValue;
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[RegistryMonitor] ScanClsidAsync failed"); }
                 }
 
                 // Find new CLSIDs
@@ -750,7 +759,7 @@ namespace Sentinel.Core
                     _proxyBaseline[$"{prefix}:{valueName}"] = val;
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[RegistryMonitor] CaptureProxyKeys failed"); }
         }
 
         private void AuditProxySettings()
@@ -850,7 +859,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[RegistryMonitor] CaptureExtensionValues failed"); }
         }
 
         private void AuditExtensionPolicies()
@@ -918,16 +927,16 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[RegistryMonitor] CheckExtensionValues failed"); }
         }
 
         public override void Dispose()
         {
-            try { _runHklmWatcher?.Stop(); _runHklmWatcher?.Dispose(); } catch { }
-            try { _runHkcuWatcher?.Stop(); _runHkcuWatcher?.Dispose(); } catch { }
-            try { _runOnceHklmWatcher?.Stop(); _runOnceHklmWatcher?.Dispose(); } catch { }
-            try { _servicesWatcher?.Stop(); _servicesWatcher?.Dispose(); } catch { }
-            try { _processWatcher?.Stop(); _processWatcher?.Dispose(); } catch { }
+            try { _runHklmWatcher?.Stop(); _runHklmWatcher?.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[RegistryMonitor] Dispose failed"); }
+            try { _runHkcuWatcher?.Stop(); _runHkcuWatcher?.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[RegistryMonitor] Dispose failed"); }
+            try { _runOnceHklmWatcher?.Stop(); _runOnceHklmWatcher?.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[RegistryMonitor] Dispose failed"); }
+            try { _servicesWatcher?.Stop(); _servicesWatcher?.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[RegistryMonitor] Dispose failed"); }
+            try { _processWatcher?.Stop(); _processWatcher?.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[RegistryMonitor] Dispose failed"); }
             base.Dispose();
         }
     }

@@ -169,7 +169,7 @@ namespace Sentinel.Core
                 _logger.LogDebug("[LsassDumpCanaryMonitor] Access denied to Sysmon log, trying Security log");
                 CheckSecurityAuditEvents();
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[LsassDumpCanaryMonitor] CheckSysmonProcessAccess failed"); }
         }
 
         /// <summary>
@@ -224,7 +224,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[LsassDumpCanaryMonitor] CheckSecurityAuditEvents failed"); }
         }
 
         /// <summary>
@@ -274,7 +274,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[LsassDumpCanaryMonitor] CheckDefenderAsrEvents failed"); }
         }
 
         private bool IsTrustedPath(string? path)

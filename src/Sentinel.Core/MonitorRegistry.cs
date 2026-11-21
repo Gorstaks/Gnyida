@@ -147,7 +147,7 @@ namespace Sentinel.Core
                 if (!_monitors.TryGetValue(name, out var status)) return;
                 status.Budget.Record(eventCount, latencyMs);
             }
-            catch { /* never crash a monitor */ }
+            catch (Exception ex) { /* never crash a monitor */ _logger.LogDebug(ex, "[MonitorRegistry] RecordTelemetry failed"); }
         }
 
         /// <summary>
@@ -420,7 +420,7 @@ namespace Sentinel.Core
 
                         // Stop then start (BackgroundService lifecycle)
                         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                        try { await bgService.StopAsync(cts.Token); } catch { }
+                        try { await bgService.StopAsync(cts.Token); } catch (Exception ex) { _logger.LogDebug(ex, "[MonitorRegistry] AttemptRestart failed"); }
 
                         await Task.Delay(1000); // Brief cooldown
 
@@ -455,7 +455,7 @@ namespace Sentinel.Core
                         _logger.LogWarning("[MonitorRegistry] Attempting restart of IMonitor '{Name}'...", name);
                         status.State = MonitorState.Recovering;
 
-                        try { await monitor.StopAsync(); } catch { }
+                        try { await monitor.StopAsync(); } catch (Exception ex) { _logger.LogDebug(ex, "[MonitorRegistry] AttemptRestart failed"); }
                         await Task.Delay(1000);
 
                         using var cts = new CancellationTokenSource();

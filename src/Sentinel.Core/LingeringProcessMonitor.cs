@@ -164,7 +164,7 @@ namespace Sentinel.Core
         {
             int parentPid = 0;
             string parentName = string.Empty;
-            try { (parentPid, parentName) = _ancestryCache.GetParent(pid); } catch { }
+            try { (parentPid, parentName) = _ancestryCache.GetParent(pid); } catch (Exception ex) { _logger.LogDebug(ex, "[LingeringProcessMonitor] EmitAsync failed"); }
             bool orphaned = parentPid > 0 && !IsLiveParentOf(parentPid, start);
             TimeSpan ceiling = Ceilings[Normalize(name)];
             bool strong = verdict != Verdict.Lingering;

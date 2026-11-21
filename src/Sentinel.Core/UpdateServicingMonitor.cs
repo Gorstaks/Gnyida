@@ -141,7 +141,7 @@ namespace Sentinel.Core
             var nameByPid = new Dictionary<int, string>();
             foreach (var p in all)
             {
-                try { nameByPid[p.Id] = p.ProcessName; } catch { }
+                try { nameByPid[p.Id] = p.ProcessName; } catch (Exception ex2) { _logger.LogDebug(ex2, "[UpdateServicingMonitor] CheckServicingActorChildren failed"); }
             }
 
             try
@@ -204,7 +204,7 @@ namespace Sentinel.Core
             {
                 foreach (var p in all)
                 {
-                    try { p.Dispose(); } catch { }
+                    try { p.Dispose(); } catch (Exception ex2) { _logger.LogDebug(ex2, "[UpdateServicingMonitor] CheckServicingActorChildren failed"); }
                 }
             }
         }
@@ -268,7 +268,7 @@ namespace Sentinel.Core
             {
                 foreach (var p in all)
                 {
-                    try { p.Dispose(); } catch { }
+                    try { p.Dispose(); } catch (Exception ex2) { _logger.LogDebug(ex2, "[UpdateServicingMonitor] CheckServicingBinarySignatures failed"); }
                 }
             }
         }
@@ -547,7 +547,7 @@ namespace Sentinel.Core
                     return obj["CommandLine"]?.ToString() ?? "";
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "UpdateServicingMonitor.GetProcessCommandLine()"); }
             return "";
         }
 
@@ -562,7 +562,7 @@ namespace Sentinel.Core
                     return Convert.ToInt32(obj["ParentProcessId"]);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "UpdateServicingMonitor.GetParentProcessId()"); }
             return -1;
         }
     }

@@ -50,7 +50,7 @@ namespace Sentinel.Agent
                 else
                     Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             }
-            catch { /* icon optional */ }
+            catch (Exception ex) { /* icon optional */ Sentinel.Core.BestEffort.Debug(ex, "AgentDashboardForm.AgentDashboardForm"); }
 
             Load += OnFormLoad;
         }
@@ -127,13 +127,13 @@ namespace Sentinel.Agent
                 System.Diagnostics.Trace.TraceWarning(
                     "Sentinel: WebView2 unavailable ({0}); settings window needs the WebView2 Runtime.", reason);
             }
-            catch { /* logging is best-effort */ }
+            catch (Exception ex) { /* logging is best-effort */ Sentinel.Core.BestEffort.Debug(ex, "AgentDashboardForm.ReportWebView2Unavailable"); }
         }
 
         private void MarkLegacyMode()
         {
             try { Text = "Sentinel"; }
-            catch { /* cosmetic */ }
+            catch (Exception ex) { /* cosmetic */ Sentinel.Core.BestEffort.Debug(ex, "AgentDashboardForm.MarkLegacyMode"); }
         }
 
         /// <summary>
@@ -203,7 +203,7 @@ namespace Sentinel.Agent
             {
                 var outcome = t.Status == System.Threading.Tasks.TaskStatus.RanToCompletion ? t.Result : WebView2Installer.Outcome.InstallerFailed;
                 try { BeginInvoke(new Action(() => AfterWebView2Install(outcome, install, progress))); }
-                catch (InvalidOperationException) { /* window closed while installing */ }
+                catch (InvalidOperationException ex) { /* window closed while installing */ Sentinel.Core.BestEffort.Debug(ex, "AgentDashboardForm.InstallWebView2"); }
             }, System.Threading.Tasks.TaskScheduler.Default);
         }
 

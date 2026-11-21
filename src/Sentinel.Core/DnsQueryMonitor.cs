@@ -73,8 +73,8 @@ namespace Sentinel.Core
         private static HashSet<string> BuildLocalHostNames()
         {
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "localhost", "wpad" };
-            try { names.Add(Dns.GetHostName()); } catch { }
-            try { names.Add(Environment.MachineName); } catch { }
+            try { names.Add(Dns.GetHostName()); } catch (Exception ex) { BestEffort.Debug(ex, "DnsQueryMonitor.BuildLocalHostNames()"); }
+            try { names.Add(Environment.MachineName); } catch (Exception ex) { BestEffort.Debug(ex, "DnsQueryMonitor.BuildLocalHostNames()"); }
             return names;
         }
 
@@ -397,7 +397,7 @@ namespace Sentinel.Core
                 if (!string.IsNullOrWhiteSpace(name))
                     return name;
             }
-            catch { /* process already exited */ }
+            catch (Exception ex) { /* process already exited */ BestEffort.Debug(ex, "DnsQueryMonitor.ResolveDnsProcessName()"); }
             return "unknown";
         }
 

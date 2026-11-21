@@ -85,7 +85,7 @@ namespace Sentinel.Core
                                 _alerted.Add(proc.Id);
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[ScreenCaptureMonitor] ExecuteAsync failed"); }
                         finally { proc.Dispose(); }
                     }
 
@@ -239,7 +239,7 @@ namespace Sentinel.Core
                 using var key2 = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture");
                 count += key2?.SubKeyCount ?? 0;
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "AudioHijackMonitor.CountAudioEndpoints"); }
             return count;
         }
     }
@@ -302,7 +302,7 @@ namespace Sentinel.Core
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[MicSessionMonitor] ExecuteAsync failed"); }
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex) { _logger.LogDebug(ex, "[MicSessionMonitor] Error"); }
@@ -486,7 +486,7 @@ namespace Sentinel.Core
                     {
                         string procName = "unknown";
                         try { using var p = Process.GetProcessById((int)pid); procName = p.ProcessName; }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[NeuroBehaviorVisualMonitor] ExecuteAsync failed"); }
 
                         await _detectionEngine.EmitAsync(new DetectionEvent
                         {
@@ -643,7 +643,7 @@ namespace Sentinel.Core
                     foreach (var extDir in Directory.GetDirectories(dir))
                         target.Add(extDir);
                 }
-                catch { }
+                catch (Exception ex) { BestEffort.Debug(ex, "BrowserExtensionMonitor.SnapshotExtensions"); }
             }
         }
     }

@@ -101,7 +101,7 @@ namespace Sentinel.Core
                     result.CompanyName = vi.CompanyName ?? string.Empty;
                 }
             }
-            catch { /* best effort */ }
+            catch (Exception ex) { /* best effort */ BestEffort.Debug(ex, "ProcessModuleAuditor.AuditProcess #1"); }
 
             if (!NativeProcessMemory.CanInspect(processId, imagePath))
             {
@@ -189,7 +189,7 @@ namespace Sentinel.Core
                             entry.Md5Hash = md5;
                             entry.Sha256Hash = sha256;
                         }
-                        catch { }
+                        catch (Exception ex) { BestEffort.Debug(ex, "ProcessModuleAuditor.AuditProcess #2"); }
                     }
                 }
                 else
@@ -240,7 +240,7 @@ namespace Sentinel.Core
                         ModuleCount = 0
                     });
                 }
-                catch { }
+                catch (Exception ex) { BestEffort.Debug(ex, "ProcessModuleAuditor.GetActiveProcesses"); }
                 finally
                 {
                     p.Dispose();

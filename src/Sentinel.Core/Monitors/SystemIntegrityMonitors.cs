@@ -108,7 +108,7 @@ namespace Sentinel.Core
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[SecureBootIntegrityMonitor] ExecuteAsync failed"); }
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex) { _logger.LogDebug(ex, "[SecureBootIntegrityMonitor] Error"); }
@@ -167,7 +167,7 @@ namespace Sentinel.Core
                 foreach (var f in Directory.EnumerateFiles(taskDir, "*", SearchOption.AllDirectories))
                     target.Add(f);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ScheduledTaskMonitor.SnapshotTasks"); }
         }
     }
 
@@ -398,7 +398,7 @@ namespace Sentinel.Core
                     _baselineThumbprints.Add(key);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[TlsCertificateMonitor] PollStoreAsync failed"); }
         }
 
         /// <summary>
@@ -457,7 +457,7 @@ namespace Sentinel.Core
                             if (sc.Status == System.ServiceProcess.ServiceControllerStatus.Running)
                                 sc.Stop();
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogWarning(ex, "[TlsCertificateMonitor] ScanAndQuarantineSignedDriversAsync #1 failed"); }
 
                         try
                         {
@@ -465,7 +465,7 @@ namespace Sentinel.Core
                                 @"SYSTEM\CurrentControlSet\Services", writable: true);
                             servicesKey?.DeleteSubKeyTree(driverName, throwOnMissingSubKey: false);
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogWarning(ex, "[TlsCertificateMonitor] ScanAndQuarantineSignedDriversAsync #2 failed"); }
 
                         acted++;
 
@@ -487,7 +487,7 @@ namespace Sentinel.Core
                             }
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogWarning(ex, "[TlsCertificateMonitor] ScanAndQuarantineSignedDriversAsync #3 failed"); }
                 }
             }
             catch (Exception ex)
@@ -758,7 +758,7 @@ namespace Sentinel.Core
                         isAllPurpose = true;
                     }
                 }
-                catch { }
+                catch (Exception ex) { BestEffort.Debug(ex, "TlsCertificateMonitor.AnalyzeCert"); }
 
                 // Score non-public CAs based on high-privilege capabilities:
                 if (!isPublicRootCA && !isEnterpriseCa && !isDevTool)
@@ -866,7 +866,7 @@ namespace Sentinel.Core
                 if (cn.Equals(machineName))
                     return true;
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "TlsCertificateMonitor.IsHostnameLike"); }
             // All-caps with dash, 8-15 chars = likely Windows auto-generated hostname
             if (cn.Length >= 8 && cn.Length <= 15 && cn.IndexOf('-') >= 0 &&
                 cn.All(c => char.IsLetterOrDigit(c) || c == '-'))
@@ -1125,7 +1125,10 @@ namespace Sentinel.Core
                                     ProcessName = proc.ProcessName, ProcessId = proc.Id
                                 });
                             }
-                            catch { }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "[UacBypassSurfaceMonitor] Detection for auto-elevate binary was not emitted");
+                            }
                             finally { proc.Dispose(); }
                         }
                     }
@@ -1228,7 +1231,7 @@ namespace Sentinel.Core
                     }).ConfigureAwait(false);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[WindowsUpdateIntegrityMonitor] CheckWuServiceDisabledAsync failed"); }
         }
 
         private async Task CheckAuPolicyAsync()
@@ -1261,7 +1264,7 @@ namespace Sentinel.Core
                     Metadata = new Dictionary<string, string> { ["Posture"] = "AUPolicyBlocked" }
                 }).ConfigureAwait(false);
             }
-            catch { }
+            catch (Exception ex) { _logger.LogWarning(ex, "[WindowsUpdateIntegrityMonitor] CheckAuPolicyAsync failed"); }
         }
 
         private async Task CheckPostureStaleAsync()
@@ -1321,7 +1324,7 @@ namespace Sentinel.Core
                     Metadata = new Dictionary<string, string> { ["Posture"] = "UpdatesStale" }
                 }).ConfigureAwait(false);
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[WindowsUpdateIntegrityMonitor] CheckPostureStaleAsync failed"); }
         }
 
         private async Task CheckKevPatchAsync()
@@ -1376,9 +1379,9 @@ namespace Sentinel.Core
                         "Sentinel: Windows KEV unpatched",
                         "CVE-2026-68820 (afd.sys) is exploited in the wild. Install this month's Windows Update and reboot.");
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[WindowsUpdateIntegrityMonitor] CheckKevPatchAsync #1 failed"); }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[WindowsUpdateIntegrityMonitor] CheckKevPatchAsync #2 failed"); }
         }
 
         private async Task CheckMissedPatchTuesdayAsync()
@@ -1430,9 +1433,9 @@ namespace Sentinel.Core
                         "Sentinel: Windows Update overdue",
                         "This PC missed the latest Patch Tuesday. Install Windows Updates and reboot - Sentinel cannot patch kernel bugs.");
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[WindowsUpdateIntegrityMonitor] CheckMissedPatchTuesdayAsync #1 failed"); }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[WindowsUpdateIntegrityMonitor] CheckMissedPatchTuesdayAsync #2 failed"); }
         }
     }
 
@@ -1543,11 +1546,11 @@ namespace Sentinel.Core
                                    ?? obj.GetHashCode().ToString();
                         target.Add(WmiPersistenceSignals.SnapshotKey(kind, ns, name, detail(obj)));
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "WmiPersistenceMonitor.SnapshotClass #1"); }
                     finally { obj.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WmiPersistenceMonitor.SnapshotClass #2"); }
         }
 
         private static string Combine(ManagementBaseObject obj, params string[] props)
@@ -1561,7 +1564,7 @@ namespace Sentinel.Core
                     if (!string.IsNullOrWhiteSpace(v))
                         parts.Add(v!);
                 }
-                catch { }
+                catch (Exception ex) { BestEffort.Debug(ex, "WmiPersistenceMonitor.Combine"); }
             }
             return string.Join(" ", parts);
         }
@@ -1687,7 +1690,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WmiPolicyRewriteMonitor.FingerprintPolicyHives"); }
 
             return sb.ToString();
         }
@@ -1702,7 +1705,7 @@ namespace Sentinel.Core
                 AppendValuesLimited(sb, key, depth: 0);
                 sb.Append(';');
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WmiPolicyRewriteMonitor.AppendKeyFingerprint"); }
         }
 
         private static void AppendValuesLimited(StringBuilder sb, RegistryKey key, int depth)
@@ -1716,7 +1719,7 @@ namespace Sentinel.Core
                     sb.Append(name).Append(':').Append(v).Append('|');
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WmiPolicyRewriteMonitor.AppendValuesLimited #1"); }
 
             if (depth >= 2) return;
             try
@@ -1732,10 +1735,10 @@ namespace Sentinel.Core
                         sb.Append(sub).Append('/');
                         AppendValuesLimited(sb, child, depth + 1);
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "WmiPolicyRewriteMonitor.AppendValuesLimited #2"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WmiPolicyRewriteMonitor.AppendValuesLimited #3"); }
         }
     }
 
@@ -2396,7 +2399,7 @@ namespace Sentinel.Core
                     }
                 });
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException ex) { _logger.LogDebug(ex, "[HostsFileGuard] EnsureHostsBaselineAsync failed"); }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "[HostsFileGuard] EnsureHostsBaseline error");
@@ -2784,8 +2787,8 @@ namespace Sentinel.Core
                 });
                 scProc?.WaitForExit(2000);
             }
-            catch { }
-            try { DnsFlushResolverCache(); } catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "HostsFileGuard.ReloadDnsClientPolicyAndCache #1"); }
+            try { DnsFlushResolverCache(); } catch (Exception ex) { BestEffort.Debug(ex, "HostsFileGuard.ReloadDnsClientPolicyAndCache #2"); }
         }
 
         /// <summary>
@@ -2944,7 +2947,7 @@ namespace Sentinel.Core
                     }
                 });
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException ex) { _logger.LogDebug(ex, "[HostsFileGuard] EnsureMitmLinesAsync failed"); }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "[HostsFileGuard] EnsureMitmLines error");
@@ -3060,10 +3063,10 @@ namespace Sentinel.Core
                             return (proc.Id, name);
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "HostsFileGuard.GetModifyingProcess #1"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "HostsFileGuard.GetModifyingProcess #2"); }
             return (0, "Unknown");
         }
 
@@ -3427,7 +3430,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "BootIntegrityGuard.CaptureBcdEntries"); }
             return entries;
         }
 
@@ -3450,10 +3453,10 @@ namespace Sentinel.Core
                         if (start is int s && type is int t && s <= 1 && (t == 1 || t == 2))
                             drivers.Add(name);
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "BootIntegrityGuard.CaptureBootDriverList #1"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "BootIntegrityGuard.CaptureBootDriverList #2"); }
             return drivers;
         }
 
@@ -3480,7 +3483,7 @@ namespace Sentinel.Core
                         if (Directory.Exists(Path.Combine(candidate, "EFI")))
                             return (candidate, false);
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "BootIntegrityGuard.FindEfiMountPoint #1"); }
                 }
 
                 // Find a free drive letter to mount onto - avoid any letter already in use
@@ -3514,7 +3517,7 @@ namespace Sentinel.Core
                 // Mount failed or no EFI folder - clean up immediately
                 UnmountEfiVolume(mountPath);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "BootIntegrityGuard.FindEfiMountPoint #2"); }
             return (null, false);
         }
 
@@ -3529,7 +3532,7 @@ namespace Sentinel.Core
                 using var proc = Process.Start(psi);
                 proc?.WaitForExit(5000);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "BootIntegrityGuard.UnmountEfiVolume"); }
         }
     }
 
@@ -3697,10 +3700,10 @@ namespace Sentinel.Core
                                 ProviderKey = $"{ns}\\{name}\\{clsid}"
                             });
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[WmiProviderIntegrityMonitor] EnumerateAllProviders #1 failed"); }
                     }
                 }
-                catch { } // Namespace may not exist or be inaccessible
+                catch (Exception ex) { _logger.LogDebug(ex, "[WmiProviderIntegrityMonitor] EnumerateAllProviders #2 failed"); } // Namespace may not exist or be inaccessible
             }
 
             return results;
@@ -3756,7 +3759,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { } // Some namespaces deny enumeration - skip silently
+            catch (Exception ex) { _logger.LogDebug(ex, "[WmiProviderIntegrityMonitor] EnumerateNamespacesRecursive failed"); } // Some namespaces deny enumeration - skip silently
         }
 
         /// <summary>
@@ -3791,7 +3794,7 @@ namespace Sentinel.Core
                         return Environment.ExpandEnvironmentVariables(dll);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "WmiProviderIntegrityMonitor.ResolveCLSIDtoDll"); }
 
             return null;
         }
@@ -3959,10 +3962,10 @@ namespace Sentinel.Core
                                         displayName, proc.Id, modulePath);
                                 }
                             }
-                            catch { } // Module access may fail for protected modules
+                            catch (Exception ex) { _logger.LogDebug(ex, "[WmiProviderIntegrityMonitor] ScanWmiHostModulesAsync #1 failed"); } // Module access may fail for protected modules
                         }
                     }
-                    catch { } // Process may exit during enumeration
+                    catch (Exception ex) { _logger.LogDebug(ex, "[WmiProviderIntegrityMonitor] ScanWmiHostModulesAsync #2 failed"); } // Process may exit during enumeration
                     finally { proc.Dispose(); }
                 }
             }

@@ -218,7 +218,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Warn(ex, "DynamicRulesEvaluator.DeriveRuleSigningKey()"); }
             return null;
         }
 
@@ -403,7 +403,7 @@ namespace Sentinel.Core
             // Coalesce burst of watcher events; single read+HMAC happens inside LoadRules.
             var cts = new CancellationTokenSource();
             var previous = Interlocked.Exchange(ref _reloadCts, cts);
-            try { previous?.Cancel(); } catch { }
+            try { previous?.Cancel(); } catch (Exception ex) { _logger.LogDebug(ex, "[DynamicRulesEvaluator] OnRulesChanged failed"); }
             previous?.Dispose();
 
             if (Interlocked.Exchange(ref _reloadScheduled, 1) == 1 && previous != null)
@@ -418,9 +418,10 @@ namespace Sentinel.Core
                     await Task.Delay(150, cts.Token).ConfigureAwait(false);
                     LoadRules();
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException ex)
                 {
                     // Superseded by a newer change event
+                    _logger.LogDebug(ex, "[DynamicRulesEvaluator] OnRulesChanged failed");
                 }
                 catch (Exception ex)
                 {
@@ -538,7 +539,7 @@ namespace Sentinel.Core
                 cts?.Cancel();
                 cts?.Dispose();
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[DynamicRulesEvaluator] Dispose failed"); }
             GC.SuppressFinalize(this);
         }
     }

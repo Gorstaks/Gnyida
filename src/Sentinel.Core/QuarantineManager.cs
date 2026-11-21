@@ -67,14 +67,16 @@ namespace Sentinel.Core
                 if (IsProductionQuarantinePath(_quarantineDir!))
                     SecureQuarantineDirectory(_quarantineDir);
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
                 // Running as user-session Agent - quarantine dir is owned by SYSTEM.
                 // This is expected; the Agent only reads quarantine metadata for display.
+                BestEffort.Warn(ex, "QuarantineManager.QuarantineManager()");
             }
-            catch
+            catch (Exception ex)
             {
-                // ACL lock may fail as non-elevated agent - ignore
+                // ACL lock may fail as non-elevated agent
+                BestEffort.Debug(ex, "QuarantineManager(prepare vault directory)");
             }
         }
 
@@ -257,7 +259,12 @@ namespace Sentinel.Core
 
             if (IsProductionQuarantinePath(_quarantineDir))
             {
-                try { SecureQuarantineDirectory(_quarantineDir); } catch { }
+                try { SecureQuarantineDirectory(_quarantineDir); }
+                catch (Exception ex)
+                {
+                    // The vault ACL could not be re-locked before writing: the blob still goes in, but say so.
+                    BestEffort.Warn(ex, "QuarantineManager.QuarantineFileAtomicAsync(lock vault ACL)");
+                }
             }
 
             // Machine-scoped DPAPI vault blob with SENQ magic header (Alyac/MSIL.Ransom FP mitigation:
@@ -294,7 +301,7 @@ namespace Sentinel.Core
                 var encryptedMeta = ProtectedData.Protect(metaBytes, null, DataProtectionScope.LocalMachine);
                 await System.IO.FileNet48.WriteAllBytesAsync(metaPath, encryptedMeta);
             }
-            catch { /* restore still possible by filename guess */ }
+            catch (Exception ex2) { /* restore still possible by filename guess */ BestEffort.Warn(ex2, "QuarantineManager.QuarantineFileAtomicAsync()"); }
 
             // Remove original attributes and delete. The vault copy is already written,
             // so from here the goal is to guarantee the ORIGINAL leaves disk - if it does
@@ -379,14 +386,14 @@ namespace Sentinel.Core
 
             // 1. Terminate processes that hold the file mapped (Stop-ProcessesUsingDLL parity).
             try { KillProcessesMappingFile(filePath); }
-            catch { /* best effort - continue to ownership seize + delete */ }
+            catch (Exception ex) { /* best effort - continue to ownership seize + delete */ BestEffort.Debug(ex, "QuarantineManager.TryHardenedDeleteAsync()"); }
 
             // Give the OS a moment to unmap after the holders die.
             if (await TryDeleteWithRetriesAsync(filePath)) return true;
 
             // 2. Seize ownership + reset ACL (Set-DLLFileOwnership parity), then retry.
             try { SeizeOwnership(filePath); }
-            catch { /* best effort */ }
+            catch (Exception ex) { /* best effort */ BestEffort.Debug(ex, "QuarantineManager.TryHardenedDeleteAsync()"); }
 
             return await TryDeleteWithRetriesAsync(filePath);
         }
@@ -417,13 +424,13 @@ namespace Sentinel.Core
                                 break;
                             }
                         }
-                        catch { /* module path unreadable - skip */ }
+                        catch (Exception ex) { /* module path unreadable - skip */ BestEffort.Debug(ex, "QuarantineManager.KillProcessesMappingFile()"); }
                     }
                     if (maps)
                         HardeningModule.SafeKillProcessTree(proc.Id);
                 }
-                catch { /* access denied / process exited - skip */ }
-                finally { try { proc.Dispose(); } catch { } }
+                catch (Exception ex) { /* access denied / process exited - skip */ BestEffort.Debug(ex, "QuarantineManager.KillProcessesMappingFile()"); }
+                finally { try { proc.Dispose(); } catch (Exception ex) { BestEffort.Debug(ex, "QuarantineManager.KillProcessesMappingFile()"); } }
             }
         }
 
@@ -436,7 +443,7 @@ namespace Sentinel.Core
         /// </summary>
         private static void SeizeOwnership(string filePath)
         {
-            try { File.SetAttributes(filePath, FileAttributes.Normal); } catch { }
+            try { File.SetAttributes(filePath, FileAttributes.Normal); } catch (Exception ex) { BestEffort.Debug(ex, "QuarantineManager.SeizeOwnership()"); }
 
             // Preferred: managed ACL - take ownership for Administrators and grant full control.
             try
@@ -504,7 +511,7 @@ namespace Sentinel.Core
                     var meta = file + ".meta";
                     if (File.Exists(meta))
                     {
-                        try { original = TryReadMetaPath(meta); } catch { }
+                        try { original = TryReadMetaPath(meta); } catch (Exception ex) { BestEffort.Debug(ex, "QuarantineManager.ListQuarantined()"); }
                     }
 
                     ParseQuarantineMetadata(name, out _, out var display);
@@ -512,7 +519,7 @@ namespace Sentinel.Core
                     results.Add((file, original, display));
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "QuarantineManager.ListQuarantined()"); }
             return results;
         }
 

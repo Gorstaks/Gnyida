@@ -165,11 +165,11 @@ namespace Sentinel.Core
                         p.Kill();
                         p.WaitForExit(3000);
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "InstallBootstrap.TryKillProcess()"); }
                     finally { p.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "InstallBootstrap.TryKillProcess()"); }
         }
 
         /// <summary>Stop service, delete SCM registration, remove Run + SafeBoot keys.</summary>
@@ -207,6 +207,7 @@ namespace Sentinel.Core
                 catch (InvalidOperationException ex) when (ex.InnerException is System.ComponentModel.Win32Exception native && native.NativeErrorCode == 1060)
                 {
                     // The service is already unregistered.
+                    BestEffort.Debug(ex, "InstallBootstrap.RequireFirewallServicesStopped()");
                 }
             }
         }
@@ -340,7 +341,7 @@ namespace Sentinel.Core
                     WindowStyle = ProcessWindowStyle.Hidden
                 });
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "InstallBootstrap.TryLaunchAgent()"); }
         }
 
         /// <summary>
@@ -364,7 +365,7 @@ namespace Sentinel.Core
                 using var proc = Process.Start(psi);
                 proc?.WaitForExit(5000);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "InstallBootstrap.TryRunShowAllTrayIcons()"); }
         }
 
         public static void TryDeleteService()
@@ -389,7 +390,7 @@ namespace Sentinel.Core
                     @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", writable: true);
                 key?.DeleteValue(AgentRunValueName, throwOnMissingValue: false);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "InstallBootstrap.TryDeleteAgentRunKey()"); }
         }
 
         public static void TryDeleteSafeBootKeys()
@@ -401,7 +402,7 @@ namespace Sentinel.Core
                 Registry.LocalMachine.DeleteSubKeyTree(
                     $@"SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{ServiceName}", throwOnMissingSubKey: false);
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "InstallBootstrap.TryDeleteSafeBootKeys()"); }
         }
 
         public static void EnsureWatchdogService(string serviceExePath)

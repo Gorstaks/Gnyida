@@ -59,9 +59,10 @@ namespace Sentinel.Core
                         return imagePath;
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // Storage namespace may be unavailable (down-level / restricted) - fall through.
+                BestEffort.Debug(ex, "IsoOriginResolver.ResolveBackingImagePath()");
             }
 
             return null;
@@ -90,8 +91,8 @@ namespace Sentinel.Core
                         pids.Add(proc.Id);
                     }
                 }
-                catch { }
-                finally { try { proc.Dispose(); } catch { } }
+                catch (Exception ex) { BestEffort.Debug(ex, "IsoOriginResolver.EnumerateProcessesRunningFromDrive()"); }
+                finally { try { proc.Dispose(); } catch (Exception ex) { BestEffort.Debug(ex, "IsoOriginResolver.EnumerateProcessesRunningFromDrive()"); } }
             }
             return pids;
         }
@@ -140,7 +141,7 @@ namespace Sentinel.Core
                         return true;
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "IsoOriginResolver.DiskImageIsMountedAtLetter()"); }
             return false;
         }
 

@@ -317,11 +317,11 @@ namespace Sentinel.Core
                                     list.Add(displayName!);
                                 }
                             }
-                            catch { }
+                            catch (Exception ex) { _logger.LogDebug(ex, "[CveShieldHardener] GetInstalledApplications failed"); }
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[CveShieldHardener] GetInstalledApplications failed"); }
             }
 
             try
@@ -340,11 +340,11 @@ namespace Sentinel.Core
                                 list.Add(displayName!);
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[CveShieldHardener] GetInstalledApplications failed"); }
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[CveShieldHardener] GetInstalledApplications failed"); }
 
             return list;
         }
@@ -358,7 +358,7 @@ namespace Sentinel.Core
                 {
                     list.Add(proc.ProcessName);
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[CveShieldHardener] GetRunningProcesses failed"); }
             }
             return list;
         }
@@ -374,7 +374,7 @@ namespace Sentinel.Core
                     list.Add(listener.Port);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[CveShieldHardener] GetListeningPorts failed"); }
             return list;
         }
 

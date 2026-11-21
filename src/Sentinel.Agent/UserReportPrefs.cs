@@ -58,9 +58,9 @@ namespace Sentinel.Agent
                 var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(path, json);
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Best-effort preference persistence - never break the UI.
+                Sentinel.Core.BestEffort.Debug(ex, "UserReportPrefs.Save()");
             }
         }
     }

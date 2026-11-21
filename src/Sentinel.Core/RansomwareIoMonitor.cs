@@ -100,7 +100,7 @@ namespace Sentinel.Core
                         legitimate = true;
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[RansomwareIoMonitor] RecordRename failed"); }
 
                 _verifiedWhitelistPids[processId] = legitimate;
                 if (legitimate) return;

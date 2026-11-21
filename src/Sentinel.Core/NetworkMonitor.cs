@@ -303,9 +303,9 @@ namespace Sentinel.Core
                                 using var p = Process.GetProcessById(owningPid);
                                 processName = p.ProcessName;
                             }
-                            catch
-                            {
+                            catch (Exception ex) {
                                 // Ignore
+                                _logger.LogDebug(ex, "[NetworkMonitor] ProcessConnection failed");
                             }
                         }
 

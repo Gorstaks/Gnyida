@@ -232,7 +232,10 @@ namespace Sentinel.Core
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[ScriptHardeningMonitor] CheckHistoryIntegrityAsync failed");
+                }
             }
 
             // Check if PSReadLine HistorySaveStyle is set to SaveNothing
@@ -243,7 +246,10 @@ namespace Sentinel.Core
                 var saveStyle = key?.GetValue("HistorySavePath")?.ToString();
                 // Also check the module setting via profile analysis
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckHistoryIntegrityAsync failed (PSReadLine registry read)");
+            }
         }
 
         // 
@@ -350,7 +356,7 @@ namespace Sentinel.Core
 
                 _scriptBlockLoggingVerified = true;
             }
-            catch { }
+            catch (Exception ex) { _logger.LogWarning(ex, "[ScriptHardeningMonitor] CheckScriptBlockLoggingPolicyAsync failed"); }
         }
 
         // 
@@ -396,11 +402,11 @@ namespace Sentinel.Core
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckPowerShellDowngradeAsync failed"); }
                     finally { proc.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckPowerShellDowngradeAsync failed"); }
         }
 
         // 
@@ -473,11 +479,11 @@ namespace Sentinel.Core
                             }
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckExecutionPolicyBypassAsync failed"); }
                     finally { proc.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckExecutionPolicyBypassAsync failed"); }
         }
 
         // 
@@ -557,7 +563,7 @@ namespace Sentinel.Core
                         }
                     });
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckProfilePersistenceAsync failed"); }
             }
         }
 
@@ -600,12 +606,12 @@ namespace Sentinel.Core
                                 SignalType = SignalType.SuspiciousProcess,
                             });
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckScriptInterpreterNetworkAsync failed"); }
                         finally { proc.Dispose(); }
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckScriptInterpreterNetworkAsync failed"); }
         }
 
         // 
@@ -702,11 +708,11 @@ namespace Sentinel.Core
                             }
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckEncodedCommandAnomalyAsync failed"); }
                     finally { proc.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckEncodedCommandAnomalyAsync failed"); }
         }
 
         // 
@@ -727,7 +733,7 @@ namespace Sentinel.Core
                         @"SOFTWARE\Policies\Microsoft\Windows\SrpV2\Exe");
                     wdacActive = key?.SubKeyCount > 0;
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckConstrainedLanguageBypassAsync failed"); }
 
                 if (!wdacActive) return; // CLM not configured, nothing to bypass
 
@@ -766,11 +772,11 @@ namespace Sentinel.Core
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckConstrainedLanguageBypassAsync failed"); }
                     finally { proc.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckConstrainedLanguageBypassAsync failed"); }
         }
 
         // 
@@ -807,7 +813,7 @@ namespace Sentinel.Core
                                 _recentAlerts[alertKey] = DateTime.UtcNow;
 
                                 int pid = 0;
-                                try { pid = Convert.ToInt32(record.Properties?[0]?.Value ?? 0); } catch { }
+                                try { pid = Convert.ToInt32(record.Properties?[0]?.Value ?? 0); } catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckAdvancedScriptBlockPatternsAsync failed"); }
 
                                 await _detectionEngine.EmitAsync(new DetectionEvent
                                 {
@@ -838,7 +844,7 @@ namespace Sentinel.Core
                                 _recentAlerts[alertKey] = DateTime.UtcNow;
 
                                 int pid = 0;
-                                try { pid = Convert.ToInt32(record.Properties?[0]?.Value ?? 0); } catch { }
+                                try { pid = Convert.ToInt32(record.Properties?[0]?.Value ?? 0); } catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckAdvancedScriptBlockPatternsAsync failed"); }
 
                                 await _detectionEngine.EmitAsync(new DetectionEvent
                                 {
@@ -869,7 +875,7 @@ namespace Sentinel.Core
                                 _recentAlerts[alertKey] = DateTime.UtcNow;
 
                                 int pid = 0;
-                                try { pid = Convert.ToInt32(record.Properties?[0]?.Value ?? 0); } catch { }
+                                try { pid = Convert.ToInt32(record.Properties?[0]?.Value ?? 0); } catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckAdvancedScriptBlockPatternsAsync failed"); }
 
                                 await _detectionEngine.EmitAsync(new DetectionEvent
                                 {
@@ -898,7 +904,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch (EventLogNotFoundException) { }
+            catch (EventLogNotFoundException ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] CheckAdvancedScriptBlockPatternsAsync failed"); }
             catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] ScriptBlock pattern check error"); }
         }
 
@@ -977,7 +983,7 @@ namespace Sentinel.Core
                     var hash = ConvertHex.ToHexString(System.Security.Cryptography.Sha256Net48.HashData(fs));
                     _knownProfileHashes.Add($"{path}:{hash}");
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[ScriptHardeningMonitor] BaselineProfiles failed"); }
             }
         }
 
@@ -990,7 +996,7 @@ namespace Sentinel.Core
                 foreach (var obj in searcher.Get())
                     return obj["CommandLine"]?.ToString() ?? "";
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ScriptHardeningMonitor.GetCommandLineSafe()"); }
             return "";
         }
 
@@ -1003,7 +1009,7 @@ namespace Sentinel.Core
                 foreach (var obj in searcher.Get())
                     return obj["ExecutablePath"]?.ToString() ?? "";
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ScriptHardeningMonitor.GetProcessImagePathSafe()"); }
             return "";
         }
     }

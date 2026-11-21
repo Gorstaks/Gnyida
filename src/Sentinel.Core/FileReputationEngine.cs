@@ -200,7 +200,7 @@ namespace Sentinel.Core
                         if (archive.Inspected || archive.InspectionAborted)
                             result.ArchiveContent = archive;
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[FileReputationEngine] AnalyzeStaticProperties #1 failed"); }
                 }
 
                 using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
@@ -208,7 +208,7 @@ namespace Sentinel.Core
                 using var reader = new BinaryReader(fs);
 
                 try { result.HasEmbeddedScriptPayload = HasEmbeddedScriptPayload(fs); }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[FileReputationEngine] AnalyzeStaticProperties #2 failed"); }
 
                 if (fs.Length < 64) { result.IsPe = false; return result; }
                 fs.Seek(0, SeekOrigin.Begin);
@@ -218,7 +218,7 @@ namespace Sentinel.Core
                 result.HasReportedRatMarkers = RatArtifactInspector.Inspect(fs);
 
                 try { result.IsMzZipPolyglot = HasZipEndOfCentralDirectory(fs); }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[FileReputationEngine] AnalyzeStaticProperties #3 failed"); }
 
                 fs.Seek(0x3C, SeekOrigin.Begin);
                 int peOffset = reader.ReadInt32();
@@ -253,7 +253,7 @@ namespace Sentinel.Core
                             result.IsMetadataOnlyModule = true;
                     }
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[FileReputationEngine] AnalyzeStaticProperties #4 failed"); }
 
                 fs.Seek(0, SeekOrigin.Begin);
                 int sampleSize = (int)Math.Min(65536, fs.Length);
@@ -305,7 +305,7 @@ namespace Sentinel.Core
                     reader.ReadBytes(32);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "FileReputationEngine.CheckSuspiciousSections"); }
             return false;
         }
 
@@ -587,7 +587,7 @@ namespace Sentinel.Core
                 var data = $"{result.CompositeScore}|{(int)result.Verdict}|{result.EvaluatedAt.Ticks}";
                 _cacheStore.Save("filerepo-offline-v1", hash, data);
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[FileReputationEngine] PersistResult failed"); }
         }
 
         public FileReputationResult? LoadCachedResult(string hash)

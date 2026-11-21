@@ -133,8 +133,8 @@ namespace Sentinel.Core
             _reportDir = config.ReportDirectory
                 ?? Path.Combine(programData, "Sentinel", "IncidentReports");
 
-            try { Directory.CreateDirectory(_backupDir); } catch { }
-            try { Directory.CreateDirectory(_reportDir); } catch { }
+            try { Directory.CreateDirectory(_backupDir); } catch (Exception ex) { BestEffort.Debug(ex, "ApplicationIntegrityMonitor.ApplicationIntegrityMonitor()"); }
+            try { Directory.CreateDirectory(_reportDir); } catch (Exception ex) { BestEffort.Debug(ex, "ApplicationIntegrityMonitor.ApplicationIntegrityMonitor()"); }
         }
 
         protected override async Task ExecuteAsync(CancellationToken ct)
@@ -144,7 +144,7 @@ namespace Sentinel.Core
                 _logger.LogInformation("[ApplicationIntegrityMonitor] Disabled or no apps configured. Sleeping indefinitely.");
                 // STABILITY v1.4.8: Do NOT return - a completed BackgroundService task
                 // triggers host shutdown in .NET 6+. Sleep until cancellation instead.
-                try { await Task.Delay(Timeout.Infinite, ct); } catch (OperationCanceledException) { }
+                try { await Task.Delay(Timeout.Infinite, ct); } catch (OperationCanceledException ex) { _logger.LogDebug(ex, "[ApplicationIntegrityMonitor] ExecuteAsync failed"); }
                 return;
             }
 
@@ -195,7 +195,7 @@ namespace Sentinel.Core
             }
 
             // Cleanup watchers
-            foreach (var w in _watchers) { try { w.Dispose(); } catch { } }
+            foreach (var w in _watchers) { try { w.Dispose(); } catch (Exception ex2) { _logger.LogDebug(ex2, "[ApplicationIntegrityMonitor] ExecuteAsync failed"); } }
         }
 
         private void SetupWatchers()
@@ -536,7 +536,7 @@ namespace Sentinel.Core
                     SaveImpostorCertificate(reportDir, executablePath);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ApplicationIntegrityMonitor] AppendImpostorDetails failed"); }
             report.AppendLine();
             await Task.CompletedTask;
         }
@@ -580,7 +580,7 @@ namespace Sentinel.Core
                                 modules.Add($"{mod.Name}\t{mod.Path}\t{mod.Size}");
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ApplicationIntegrityMonitor] AppendOffenderDetails failed"); }
 
                     if (modules.Count > 0)
                         await FileNet48.WriteAllLinesAsync(Path.Combine(reportDir, "offender_modules.txt"), modules);
@@ -851,16 +851,38 @@ namespace Sentinel.Core
                     try
                     {
                         var imagePath = SecurityValidation.GetProcessImagePath(proc.Id);
-                        if (string.Equals(imagePath, executablePath))
+                        // Windows paths are case-insensitive: an ordinal compare missed a running
+                        // impostor whose resolved path differed only in casing.
+                        if (IsSameImagePath(imagePath, executablePath))
                         {
                             HardeningModule.SafeKillProcessTree(proc.Id);
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        BestEffort.Warn(ex, "ApplicationIntegrityMonitor.KillRunningImpostor(pid " + proc.Id + ")");
+                    }
                     finally { proc.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                BestEffort.Warn(ex, "ApplicationIntegrityMonitor.KillRunningImpostor(enumerate)");
+            }
+        }
+
+        internal static bool IsSameImagePath(string? a, string? b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            try
+            {
+                return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception ex)
+            {
+                BestEffort.Debug(ex, "ApplicationIntegrityMonitor.IsSameImagePath");
+                return false;
+            }
         }
 
         /// <summary>
@@ -897,7 +919,7 @@ namespace Sentinel.Core
                             hasTargetDir = cmdLine.Contains(dir) ||
                                           cmdLine.Contains(filePath);
                         }
-                        catch { }
+                        catch (Exception ex) { BestEffort.Debug(ex, "ApplicationIntegrityMonitor.FindModifyingProcess()"); }
 
                         if (isInstaller || hasTargetDir)
                         {
@@ -908,7 +930,7 @@ namespace Sentinel.Core
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { BestEffort.Debug(ex, "ApplicationIntegrityMonitor.FindModifyingProcess()"); }
                     finally { proc.Dispose(); }
                 }
 
@@ -918,7 +940,7 @@ namespace Sentinel.Core
                     return candidates.OrderByDescending(c => c.startTime).First().pid;
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ApplicationIntegrityMonitor.FindModifyingProcess()"); }
             return 0;
         }
 
@@ -933,7 +955,7 @@ namespace Sentinel.Core
                     return obj["CommandLine"]?.ToString() ?? "";
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ApplicationIntegrityMonitor.GetProcessCommandLine()"); }
             return "";
         }
 
@@ -989,7 +1011,7 @@ namespace Sentinel.Core
                     return true;
                 });
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ApplicationIntegrityMonitor.GetActiveConnections()"); }
             return results;
         }
         private static void SaveImpostorCertificate(string reportDir, string filePath)
@@ -1003,7 +1025,7 @@ namespace Sentinel.Core
                 var certBytes = cert2.Export(X509ContentType.Cert);
                 File.WriteAllBytes(Path.Combine(reportDir, "impostor_certificate.cer"), certBytes);
             }
-            catch { } // Not signed - that's evidence too
+            catch (Exception ex) { BestEffort.Debug(ex, "ApplicationIntegrityMonitor.SaveImpostorCertificate()"); } // Not signed - that's evidence too
         }
 
         private static string BuildCuckooEvidenceString(AppBaseline baseline, string executablePath,

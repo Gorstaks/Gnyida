@@ -122,7 +122,7 @@ namespace Sentinel.Core
                     await InspectContainerSecurity(containerId, image, ct);
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[SandboxEscapeMonitor] MonitorDockerContainers failed"); }
         }
 
         private async Task InspectContainerSecurity(string containerId, string image, CancellationToken ct)
@@ -210,7 +210,7 @@ namespace Sentinel.Core
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[SandboxEscapeMonitor] InspectContainerSecurity failed"); }
         }
 
         private async Task MonitorWindowsSandbox(CancellationToken ct)
@@ -279,10 +279,10 @@ namespace Sentinel.Core
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[SandboxEscapeMonitor] MonitorWindowsSandbox #1 failed"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[SandboxEscapeMonitor] MonitorWindowsSandbox #2 failed"); }
         }
 
         private async Task DetectContainerEscapeSignals(CancellationToken ct)
@@ -333,7 +333,7 @@ namespace Sentinel.Core
                         }
                     });
                 }
-                catch { }
+                catch (Exception ex) { _logger.LogDebug(ex, "[SandboxEscapeMonitor] DetectContainerEscapeSignals failed"); }
                 finally { proc.Dispose(); }
             }
         }

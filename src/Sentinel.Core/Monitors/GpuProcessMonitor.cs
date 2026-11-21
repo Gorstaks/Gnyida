@@ -245,7 +245,7 @@ namespace Sentinel.Core
                     }
                     catch
                     {
-                        try { proc.Dispose(); } catch { }
+                        try { proc.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[GpuProcessMonitor] FindBrowserGpuHelperPids failed"); }
                     }
                 }
             }
@@ -398,7 +398,7 @@ namespace Sentinel.Core
                                 suspiciousModules.Add(moduleName);
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[GpuProcessMonitor] CheckForSuspiciousDllsAsync failed"); }
                     }
                 }
                 catch (System.ComponentModel.Win32Exception)
@@ -443,9 +443,9 @@ namespace Sentinel.Core
                     MarkAlerted(gpuPid);
                 }
             }
-            catch (ArgumentException)
-            {
+            catch (ArgumentException ex) {
                 // Process exited between enumeration and inspection - normal
+                _logger.LogDebug(ex, "[GpuProcessMonitor] CheckForSuspiciousDllsAsync failed");
             }
             catch (Exception ex)
             {
@@ -667,7 +667,7 @@ namespace Sentinel.Core
                 var version = key?.GetValue("NvTweakVersion")?.ToString();
                 if (!string.IsNullOrEmpty(version)) return NormalizeNvidiaVersion(version!);
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[GpuProcessMonitor] GetNvidiaDriverVersion failed"); }
 
             // Fallback: query display adapters. Win32_VideoController reports the 4-part
             // Windows driver version (e.g. "31.0.15.5222"); normalize to the branded form.
@@ -728,7 +728,7 @@ namespace Sentinel.Core
                 var version = key?.GetValue("DriverVersion")?.ToString();
                 if (!string.IsNullOrEmpty(version)) return version;
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[GpuProcessMonitor] GetAmdDriverVersion failed"); }
 
             return GetDriverVersionFromDisplayAdapters("amd");
         }
@@ -754,7 +754,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[GpuProcessMonitor] GetDriverVersionFromDisplayAdapters failed"); }
 
             return null;
         }
@@ -899,7 +899,7 @@ namespace Sentinel.Core
                     return obj["CommandLine"]?.ToString() ?? "";
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "GpuProcessMonitor.GetCommandLine()"); }
             return "";
         }
 

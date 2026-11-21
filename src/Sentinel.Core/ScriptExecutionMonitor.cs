@@ -181,7 +181,7 @@ namespace Sentinel.Core
                             pid = Convert.ToInt32(record.Properties?[0]?.Value ?? 0);
                             processName = GetProcessNameSafe(pid);
                         }
-                        catch { }
+                        catch (Exception ex) { _logger.LogDebug(ex, "[ScriptExecutionMonitor] CheckScriptBlockLogging failed"); }
 
                         await _detectionEngine.EmitAsync(new DetectionEvent
                         {
@@ -200,7 +200,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch (EventLogNotFoundException) { } // Log doesn't exist on this system
+            catch (EventLogNotFoundException ex) { _logger.LogDebug(ex, "[ScriptExecutionMonitor] CheckScriptBlockLogging failed"); } // Log doesn't exist on this system
             catch (Exception ex) { _logger.LogDebug(ex, "[ScriptExecutionMonitor] ScriptBlockLogging check error"); }
         }
 
@@ -258,7 +258,7 @@ namespace Sentinel.Core
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScriptExecutionMonitor] CheckParentChildAnomalies failed"); }
                     finally { proc.Dispose(); }
                 }
             }
@@ -366,7 +366,7 @@ namespace Sentinel.Core
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScriptExecutionMonitor] CheckAmsiIntegrity failed"); }
                     finally { proc.Dispose(); }
                 }
             }
@@ -416,7 +416,7 @@ namespace Sentinel.Core
                             ProcessId = proc.Id
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScriptExecutionMonitor] CheckSamHiveExtraction failed"); }
                     finally { proc.Dispose(); }
                 }
             }
@@ -468,7 +468,7 @@ namespace Sentinel.Core
                                 int read = fs.Read(buffer, 0, buffer.Length);
                                 content = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
                             }
-                            catch { }
+                            catch (Exception ex) { _logger.LogDebug(ex, "[ScriptExecutionMonitor] CheckScriptFileDrops failed"); }
 
                             var contentPatterns = MatchMaliciousPatterns(content);
 
@@ -495,7 +495,7 @@ namespace Sentinel.Core
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ScriptExecutionMonitor] CheckScriptFileDrops failed"); }
                 }
             }
             catch (Exception ex) { _logger.LogDebug(ex, "[ScriptExecutionMonitor] ScriptDrop check error"); }
@@ -551,7 +551,7 @@ namespace Sentinel.Core
                     return obj["CommandLine"]?.ToString() ?? "";
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ScriptExecutionMonitor.GetProcessCommandLine()"); }
             return "";
         }
 
@@ -566,7 +566,7 @@ namespace Sentinel.Core
                     return Convert.ToInt32(obj["ParentProcessId"]);
                 }
             }
-            catch { }
+            catch (Exception ex) { BestEffort.Debug(ex, "ScriptExecutionMonitor.GetParentProcessId()"); }
             return -1;
         }
     }

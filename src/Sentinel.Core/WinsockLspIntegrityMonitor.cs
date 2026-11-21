@@ -342,9 +342,9 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch
-            {
+            catch (Exception ex) {
                 // Malformed blob - skip.
+                BestEffort.Debug(ex, "WinsockLspIntegrityMonitor.ExtractPathFromPackedCatalogItem()");
             }
 
             return null;

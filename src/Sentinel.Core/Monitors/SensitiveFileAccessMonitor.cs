@@ -115,7 +115,7 @@ namespace Sentinel.Core
             // FileSystemWatcher is event-driven; nothing to poll. Keep the task alive until stop
             // so the group treats the monitor as running, and tear watchers down on cancellation.
             try { await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false); }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+            catch (OperationCanceledException ex) when (stoppingToken.IsCancellationRequested) { _logger.LogDebug(ex, "[SensitiveFileAccessMonitor] ExecuteAsync failed"); }
             finally { DisposeWatchers(); }
         }
 
@@ -140,7 +140,7 @@ namespace Sentinel.Core
                     results.Add(dir);
                 }
             }
-            catch { /* enumeration best-effort */ }
+            catch (Exception ex) { /* enumeration best-effort */ BestEffort.Debug(ex, "SensitiveFileAccessMonitor.EnumerateUserProfiles()"); }
             return results;
         }
 
@@ -274,7 +274,7 @@ namespace Sentinel.Core
             if (!ShouldEmit(pid, "staging")) return;
 
             long size = 0;
-            try { size = new FileInfo(archivePath).Length; } catch { }
+            try { size = new FileInfo(archivePath).Length; } catch (Exception ex) { _logger.LogDebug(ex, "[SensitiveFileAccessMonitor] RaiseArchiveStaging failed"); }
 
             _ = _detectionEngine.EmitAsync(new DetectionEvent
             {
@@ -315,7 +315,7 @@ namespace Sentinel.Core
                         return true;
                 }
             }
-            catch { }
+            catch (Exception ex) { _logger.LogDebug(ex, "[SensitiveFileAccessMonitor] IsTrustedOwner failed"); }
 
             return false;
         }
@@ -405,7 +405,7 @@ namespace Sentinel.Core
                     }
                 }
             }
-            catch { /* process may have exited between event and scan */ }
+            catch (Exception ex) { /* process may have exited between event and scan */ BestEffort.Debug(ex, "SensitiveFileAccessMonitor.GetProcessUsingFile()"); }
             finally
             {
                 RmEndSession(sessionHandle);
@@ -418,7 +418,7 @@ namespace Sentinel.Core
         {
             foreach (var w in _watchers)
             {
-                try { w.EnableRaisingEvents = false; w.Dispose(); } catch { }
+                try { w.EnableRaisingEvents = false; w.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "[SensitiveFileAccessMonitor] DisposeWatchers failed"); }
             }
             _watchers.Clear();
         }

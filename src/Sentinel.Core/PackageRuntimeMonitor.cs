@@ -151,7 +151,7 @@ namespace Sentinel.Core
                 if (parts.Length > 12) return;
                 _configPoisonEvents.Enqueue(e.FullPath);
             }
-            catch { /* ignore watcher errors */ }
+            catch (Exception ex) { /* ignore watcher errors */ _logger.LogDebug(ex, "[PackageRuntimeMonitor] OnDevConfigEvent failed"); }
         }
 
         private void DrainConfigPoison()
@@ -222,7 +222,7 @@ namespace Sentinel.Core
                     var parent = _ancestryCache.GetParent(pid);
                     parentName = parent.name ?? "";
                     ppid = parent.parentId;
-                    try { path = SecurityValidation.GetProcessImagePath(p.Id); } catch { /* deny */ }
+                    try { path = SecurityValidation.GetProcessImagePath(p.Id); } catch (Exception ex) { /* deny */ _logger.LogDebug(ex, "[PackageRuntimeMonitor] ScanProcesses #1 failed"); }
                 }
                 catch { continue; }
 
@@ -286,7 +286,7 @@ namespace Sentinel.Core
 
             foreach (var p in procs)
             {
-                try { p.Dispose(); } catch { /* ignore */ }
+                try { p.Dispose(); } catch (Exception ex) { /* ignore */ _logger.LogDebug(ex, "[PackageRuntimeMonitor] ScanProcesses #2 failed"); }
             }
         }
     }

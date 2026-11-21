@@ -280,7 +280,7 @@ namespace Sentinel.Core
                         using (m) modules.Add((m.ModuleName ?? "", m.FileName ?? "", m.BaseAddress.ToInt64(), m.ModuleMemorySize));
                     }
                 }
-                catch (Exception) { /* exited, or a cross-bitness target: use what was listed */ }
+                catch (Exception ex) { /* exited, or a cross-bitness target: use what was listed */ BestEffort.Debug(ex, "ImageIntegrityMonitor.CheckModules"); }
 
                 DateTime startUtc = startLocal.ToUniversalTime();
                 foreach (var module in modules)
