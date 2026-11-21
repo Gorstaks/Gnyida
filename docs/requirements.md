@@ -142,7 +142,7 @@ The system must detect the following indicators (log only):
 | T2-13 | Cross-filesystem execution (`CrossFilesystemExecutionMonitor`): unsigned binary loaded from network shares (SMB/UNC), WSL (`\\wsl$\`), container mounts, or mapped network drives - LogOnly observe fuel with confidence 0.35-0.65 (legitimate for development/shared builds; attacker ceiling: staging on remote system is visible once payload executes locally). Never a solo kill trigger; pairs with C2/injection/exfil for composite chains |
 | T2-14 | Stdin-staged PowerShell (`StdinStagedPowerShellRule`, 3.7.4): PowerShell whose command line runs code read from stdin/`$input` or ends in `-Command -`/`-File -` - LogOnly; a verified Sentinel management child is coalesced, never suppressed |
 | T2-15 | Known-malware executable inside an archive (3.7.4): exact SHA-256 of bounded inner PE entries via `HashReputationService` - LogOnly, archive untouched |
-| T2-16 | Redirect/privacy observations (3.7.4): brand look-alike DNS (`LookalikeDomainDetector`), browser home/search/proxy policy and default http/https handler changes (`BrowserRedirectGuard`), camera/mic use outside admin-only install roots (`CaptureDeviceUseMonitor`), new LAN device (`LanDeviceInventoryMonitor`) - all LogOnly |
+| T2-16 | Redirect/privacy observations (3.7.4): brand look-alike DNS (`LookalikeDomainDetector`), browser home/search/proxy policy and default http/https handler changes (`BrowserRedirectGuard`), camera/mic use and (3.9.2) Windows-recorded screen capture outside admin-only install roots, with outbound-connection correlation (`CaptureDeviceUseMonitor`), new LAN device (`LanDeviceInventoryMonitor`) - all LogOnly |
 
 ### FR-4: Composite Detections
 

@@ -292,7 +292,7 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 | `PublicIpMonitor` | Checks public IP via Cloudflare/ipify/icanhazip; detects geo/ASN shift | 5min |
 | `WifiSecurityMonitor` | Polls Wi-Fi state via netsh; detects deauth flood, open network, encryption downgrade | 15s |
 | `LanDeviceInventoryMonitor` | **3.7.4.** Reports a new device in the ARP table (Tier2 / LogOnly) | 2m |
-| `CaptureDeviceUseMonitor` | **3.7.4.** Reports camera/microphone use by an app outside Program Files/System32 (Tier2 / LogOnly) | 20s |
+| `CaptureDeviceUseMonitor` | **3.7.4.** Reports camera/microphone use by an app outside Program Files/System32 (Tier2 / LogOnly). **3.9.2:** also screen capture recorded by Windows (`graphicsCaptureProgrammatic`, `graphicsCaptureWithoutBorder`), correlated with the capturing process's established outbound TCP connections and its signature (Tier2 / LogOnly, weak observe seed). Desktop Duplication and GDI capture leave no consent-store record and are not covered | 20s |
 | `ScheduledScanService` | **3.7.4.** Runs `ScanEngine` daily; no response action | 24h |
 | `BrowserRedirectGuard` | **3.7.4.** Reports Chrome/Edge home, search, proxy policy and default http/https handler changes (Tier2 / LogOnly) | 30s |
 | `LookalikeDomainDetector` | **3.7.4.** Brand look-alike check called from `DnsQueryMonitor` (Tier2 / LogOnly) | per query |
