@@ -109,6 +109,7 @@ namespace Sentinel.Core
             _session = session;
             session.RegisterHandler(UnifiedEtwSession.Providers.KernelProcess, OnKernelProcessEvent);
             session.RegisterHandler(UnifiedEtwSession.Providers.KernelFile, OnKernelFileEvent);
+            session.SetFileReadAdmission(_credentialReads);
             session.RegisterHandler(UnifiedEtwSession.Providers.KernelRegistry, OnKernelRegistryEvent);
             session.RegisterHandler(UnifiedEtwSession.Providers.DnsClient, OnDnsClientEvent);
             session.RegisterHandler(UnifiedEtwSession.Providers.ThreatIntelligence, OnThreatIntelEvent);

@@ -1,4 +1,10 @@
 # Changelog
+## [3.8.8] - 2026-11-21
+### Fixed - "Protection features: 1 feature stopped working" from ETW file-lane drops
+- After 3.8.5 enlarged the Kernel-File lane, one machine still dropped 324 events inside Sentinel (Windows lost 0) out of 70 million, all in the file lane. The cause was volume, not lane size: every Kernel-File Read (ID 15) on the system was copied and queued, though the only consumer, `CredentialReadTracker`, can match a read only when its FileKey was already named as a credential store.
+- `UnifiedEtwSession` now reads the FileKey at its fixed offset on the ETW callback and queues a Read only when `CredentialReadTracker.MayMatchRead` is true: the key is a known sensitive name, or a NameCreate/NameDelete for it is queued but not yet observed (the FIFO lane delivers the name first, so no read is lost to the race). Name events are queued as before. Detection is unchanged. Skipped reads are reported as `FileReadsNotQueued` in ETW health, not as loss.
+- This is the one payload read on the ETW callback (`EtwCollectionPolicy` comment updated). A burst of name events larger than the lane is still dropped and reported.
+- Tests in `CredentialReadTelemetryTests`: only matchable reads are admitted, a queued-but-unobserved name admits its read, non-sensitive, dropped and deleted names release admission, and the key readers reject what `Observe` rejects.
 ## [3.8.7] - 2026-11-20
 ### Changed - Threat-Intelligence access denial no longer shown as degraded collection
 - Windows denies the Microsoft-Windows-Threat-Intelligence provider (Win32 5) to any consumer that is not a protected antimalware process. Without that signing identity the denial is permanent, so `EtwCollectionPolicy.Degradation` no longer reports it. Other provider failures, filter failures, handler stalls and event loss are still reported.

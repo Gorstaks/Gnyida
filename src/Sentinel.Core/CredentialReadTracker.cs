@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -13,6 +14,55 @@ namespace Sentinel.Core
         private readonly Dictionary<ulong, (string path, DateTime seen)> _names = new();
         private readonly Dictionary<(int pid, ulong key), DateTime> _recent = new();
         private const int Capacity = 4096;
+
+        // Admission state read on the ETW callback thread. Kernel-File Read (15) fires for every read on the
+        // system; only reads of a key already named as a credential store can ever match, so the rest are not
+        // queued. _sensitiveKeys mirrors _names. _pendingNames counts NameCreate/NameDelete events queued but
+        // not yet observed, so a read that arrives before its name is processed is still admitted; the file lane
+        // is FIFO, so Observe sees that name first, exactly as before admission existed.
+        private readonly ConcurrentDictionary<ulong, byte> _sensitiveKeys = new();
+        private readonly ConcurrentDictionary<ulong, int> _pendingNames = new();
+
+        /// <summary>FileKey of a NameCreate/NameDelete v0 payload, under the same checks Observe applies.</summary>
+        internal static bool TryReadNameKey(IntPtr data, int length, ushort id, byte version, int width, out ulong key)
+        {
+            key = 0;
+            if ((id != 10 && id != 11) || version != 0 || (width != 4 && width != 8) ||
+                data == IntPtr.Zero || length < width + 2) return false;
+            key = ReadPointer(data, 0, width);
+            return true;
+        }
+
+        /// <summary>FileKey of a Read v0/v1 payload, under the same checks Observe applies.</summary>
+        internal static bool TryReadReadKey(IntPtr data, int length, byte version, int width, int pid, out ulong key)
+        {
+            key = 0;
+            if (version > 1 || pid <= 4 || (width != 4 && width != 8) || data == IntPtr.Zero) return false;
+            int offset = ReadKeyOffset(version, width);
+            if (length < offset + width + (version == 0 ? 8 : 16)) return false;
+            key = ReadPointer(data, offset, width);
+            return true;
+        }
+
+        private static int ReadKeyOffset(byte version, int width) => 8 + (version == 0 ? 3 : 2) * width;
+
+        /// <summary>True when a read of this key could resolve to a credential store.</summary>
+        internal bool MayMatchRead(ulong key) => _sensitiveKeys.ContainsKey(key) || _pendingNames.ContainsKey(key);
+
+        /// <summary>Call before queueing a name event; pair with Observe or, if the event was not queued, ReleasePending.</summary>
+        internal void NotePending(ulong key) => _pendingNames.AddOrUpdate(key, 1, (_, n) => n + 1);
+
+        internal void ReleasePending(ulong key)
+        {
+            for (int attempt = 0; attempt < 8; attempt++)
+            {
+                if (!_pendingNames.TryGetValue(key, out int n)) return;
+                bool done = n <= 1
+                    ? ((ICollection<KeyValuePair<ulong, int>>)_pendingNames).Remove(new KeyValuePair<ulong, int>(key, n))
+                    : _pendingNames.TryUpdate(key, n - 1, n);
+                if (done) return;
+            }
+        }
 
         // Indicator data lives in Indicators/indicators.txt (compressed resource); see IndicatorCatalog.
         // All values are lower-case and matched ordinally against the lower-cased path, as before.
@@ -53,34 +103,20 @@ namespace Sentinel.Core
             if ((width != 4 && width != 8) || evt.UserData == IntPtr.Zero) return null;
             lock (_gate)
             {
-                if ((evt.EventId == 10 || evt.EventId == 11) && evt.Version == 0)
+                if (TryReadNameKey(evt.UserData, evt.UserDataLength, evt.EventId, evt.Version, width, out ulong key))
                 {
-                    if (evt.UserDataLength < width + 2) return null;
-                    ulong key = ReadPointer(evt.UserData, 0, width);
-                    // Invalidate even an uninteresting replacement name (FileKey reuse).
-                    _names.Remove(key);
-                    if (evt.EventId == 11 || key == 0) return null;
-                    int bytes = evt.UserDataLength - width;
-                    if ((bytes & 1) != 0 || bytes > 2048) return null;
-                    string name = Marshal.PtrToStringUni(IntPtr.Add(evt.UserData, width), bytes / 2) ?? "";
-                    int end = name.IndexOf('\0');
-                    if (end < 0) return null;
-                    name = name.Substring(0, end);
-                    if (!IsSensitivePath(name)) return null;
-                    if (_names.Count >= Capacity) _names.Clear();
-                    _names[key] = (name, evt.Timestamp);
-                    return null;
+                    try { return ObserveName(evt, width, key); }
+                    // The mapping is settled (set or removed) before the pending mark goes.
+                    finally { ReleasePending(key); }
                 }
-                if (evt.EventId != 15 || evt.Version > 1 || evt.ProcessId <= 4) return null;
-                int offset = 8 + (evt.Version == 0 ? 3 : 2) * width;
-                int minimum = offset + width + (evt.Version == 0 ? 8 : 16);
-                if (evt.UserDataLength < minimum) return null;
-                ulong fileKey = ReadPointer(evt.UserData, offset, width);
+                if (evt.EventId != 15 ||
+                    !TryReadReadKey(evt.UserData, evt.UserDataLength, evt.Version, width, evt.ProcessId, out ulong fileKey))
+                    return null;
                 if (!_names.TryGetValue(fileKey, out var entry)) return null;
                 var age = evt.Timestamp - entry.seen;
                 if (age < TimeSpan.Zero || age > TimeSpan.FromMinutes(2))
                 {
-                    _names.Remove(fileKey);
+                    RemoveName(fileKey);
                     return null;
                 }
                 var identity = (evt.ProcessId, fileKey);
@@ -90,6 +126,31 @@ namespace Sentinel.Core
                 _recent[identity] = evt.Timestamp;
                 return entry.path;
             }
+        }
+
+        // Caller holds _gate.
+        private string? ObserveName(EtwRawEvent evt, int width, ulong key)
+        {
+            // Invalidate even an uninteresting replacement name (FileKey reuse).
+            RemoveName(key);
+            if (evt.EventId == 11 || key == 0) return null;
+            int bytes = evt.UserDataLength - width;
+            if ((bytes & 1) != 0 || bytes > 2048) return null;
+            string name = Marshal.PtrToStringUni(IntPtr.Add(evt.UserData, width), bytes / 2) ?? "";
+            int end = name.IndexOf('\0');
+            if (end < 0) return null;
+            name = name.Substring(0, end);
+            if (!IsSensitivePath(name)) return null;
+            if (_names.Count >= Capacity) { _names.Clear(); _sensitiveKeys.Clear(); }
+            _names[key] = (name, evt.Timestamp);
+            _sensitiveKeys[key] = 0;
+            return null;
+        }
+
+        private void RemoveName(ulong key)
+        {
+            _names.Remove(key);
+            _sensitiveKeys.TryRemove(key, out _);
         }
 
         private static ulong ReadPointer(IntPtr data, int offset, int width) => width == 8

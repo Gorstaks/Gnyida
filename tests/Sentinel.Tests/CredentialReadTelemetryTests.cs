@@ -62,6 +62,78 @@ namespace Sentinel.Tests
                 Now.AddSeconds(21)));
         }
 
+        private static bool NameKey(byte[] bytes, ushort id, int width, out ulong key)
+        {
+            var memory = Marshal.AllocHGlobal(bytes.Length);
+            try
+            {
+                Marshal.Copy(bytes, 0, memory, bytes.Length);
+                return CredentialReadTracker.TryReadNameKey(memory, bytes.Length, id, 0, width, out key);
+            }
+            finally { Marshal.FreeHGlobal(memory); }
+        }
+
+        private static bool ReadKey(byte[] bytes, byte version, int width, int pid, out ulong key)
+        {
+            var memory = Marshal.AllocHGlobal(bytes.Length);
+            try
+            {
+                Marshal.Copy(bytes, 0, memory, bytes.Length);
+                return CredentialReadTracker.TryReadReadKey(memory, bytes.Length, version, width, pid, out key);
+            }
+            finally { Marshal.FreeHGlobal(memory); }
+        }
+
+        [Theory]
+        [InlineData(4, 0)] [InlineData(4, 1)] [InlineData(8, 0)] [InlineData(8, 1)]
+        public void Admission_QueuesOnlyReadsThatCouldMatch(int width, byte version)
+        {
+            var tracker = new CredentialReadTracker();
+            Assert.True(ReadKey(ReadPayload(width, version, key: 123), version, width, 4242, out var readKey));
+            Assert.Equal(123UL, readKey);
+            Assert.False(tracker.MayMatchRead(readKey));
+
+            Assert.True(NameKey(NamePayload(width, Store, key: 123), 10, width, out var nameKey));
+            tracker.NotePending(nameKey);
+            // The name is queued but not yet observed: its read must still be queued behind it.
+            Assert.True(tracker.MayMatchRead(readKey));
+            WithEvent(NamePayload(width, Store, key: 123), 10, 0, width, tracker.Observe);
+            Assert.True(tracker.MayMatchRead(readKey));
+            Assert.Equal(Store, WithEvent(ReadPayload(width, version, key: 123), 15, version, width, tracker.Observe));
+
+            Assert.False(tracker.MayMatchRead(999));
+        }
+
+        [Fact]
+        public void Admission_ReleasesNonSensitiveDroppedAndRemovedNames()
+        {
+            var tracker = new CredentialReadTracker();
+            tracker.NotePending(7);
+            WithEvent(NamePayload(8, @"C:\Users\alice\cache\ordinary.tmp", key: 7), 10, 0, 8, tracker.Observe);
+            Assert.False(tracker.MayMatchRead(7));
+
+            tracker.NotePending(8);
+            tracker.ReleasePending(8); // name event could not be queued
+            Assert.False(tracker.MayMatchRead(8));
+
+            tracker.NotePending(9);
+            WithEvent(NamePayload(8, Store, key: 9), 10, 0, 8, tracker.Observe);
+            Assert.True(tracker.MayMatchRead(9));
+            tracker.NotePending(9);
+            WithEvent(NamePayload(8, Store, key: 9), 11, 0, 8, tracker.Observe);
+            Assert.False(tracker.MayMatchRead(9));
+        }
+
+        [Fact]
+        public void Admission_KeyReadersRejectWhatObserveRejects()
+        {
+            Assert.False(NameKey(NamePayload(8, Store), 12, 8, out _));
+            Assert.False(NameKey(new byte[9], 10, 8, out _));
+            Assert.False(ReadKey(ReadPayload(8, 1), 2, 8, 4242, out _));
+            Assert.False(ReadKey(ReadPayload(8, 1), 1, 8, 4, out _));
+            Assert.False(ReadKey(new byte[12], 1, 8, 4242, out _));
+        }
+
         [Theory]
         [InlineData(11, Store)]
         [InlineData(10, @"C:\Users\alice\cache\ordinary.tmp")]

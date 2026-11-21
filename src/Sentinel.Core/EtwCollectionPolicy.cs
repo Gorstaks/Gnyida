@@ -7,7 +7,8 @@ namespace Sentinel.Core
     internal static class EtwCollectionPolicy
     {
         // Same policy for native event-ID filters and the managed callback fallback.
-        // Header-only: never parse payloads or resolve processes on ProcessTrace.
+        // Header-only: never parse payloads or resolve processes on ProcessTrace. The one exception is
+        // Kernel-File admission (UnifiedEtwSession / CredentialReadTracker): a fixed-offset FileKey read.
         internal static bool Consumes(Guid provider, ushort id)
         {
             if (provider == UnifiedEtwSession.Providers.KernelProcess) return id == 1 || id == 2 || id == 5;

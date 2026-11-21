@@ -254,6 +254,16 @@ namespace Sentinel.Core
             _handlers[providerGuid] = handler;
         }
 
+        private CredentialReadTracker? _fileReadAdmission;
+        private long _fileReadsNotQueued;
+
+        /// <summary>
+        /// Kernel-File Read events are queued only when this tracker could match them. Without it every
+        /// system-wide read filled the file lane during builds and scans, and the overflow was counted as loss.
+        /// </summary>
+        internal void SetFileReadAdmission(CredentialReadTracker tracker) =>
+            _fileReadAdmission = tracker ?? throw new ArgumentNullException(nameof(tracker));
+
         public Task StartAsync(CancellationToken ct)
         {
             try
@@ -467,6 +477,8 @@ namespace Sentinel.Core
 
         private void OnEventRecord(ref EVENT_RECORD eventRecord)
         {
+            CredentialReadTracker? pendingFiles = null;
+            ulong pendingKey = 0;
             try
             {
                 Interlocked.Increment(ref _eventsProcessed);
@@ -489,6 +501,31 @@ namespace Sentinel.Core
                     return;
                 }
 
+                int pointerSize = (eventRecord.EventHeader.Flags & 0x20) != 0 ? 4 :
+                    (eventRecord.EventHeader.Flags & 0x40) != 0 ? 8 : IntPtr.Size;
+                if (providerId == Providers.KernelFile && _fileReadAdmission is { } files)
+                {
+                    // One fixed-offset pointer read and a concurrent lookup; no string parsing or process
+                    // resolution on ProcessTrace.
+                    var descriptor = eventRecord.EventHeader.EventDescriptor;
+                    if (descriptor.Id == 15)
+                    {
+                        if (!CredentialReadTracker.TryReadReadKey(eventRecord.UserData, eventRecord.UserDataLength,
+                                descriptor.Version, pointerSize, (int)eventRecord.EventHeader.ProcessId, out ulong readKey) ||
+                            !files.MayMatchRead(readKey))
+                        {
+                            Interlocked.Increment(ref _fileReadsNotQueued);
+                            return;
+                        }
+                    }
+                    else if (CredentialReadTracker.TryReadNameKey(eventRecord.UserData, eventRecord.UserDataLength,
+                                 descriptor.Id, descriptor.Version, pointerSize, out pendingKey))
+                    {
+                        files.NotePending(pendingKey);
+                        pendingFiles = files;
+                    }
+                }
+
                 var rawEvent = new EtwRawEvent
                 {
                     ProviderId = providerId,
@@ -502,17 +539,22 @@ namespace Sentinel.Core
                     Timestamp = DateTime.FromFileTimeUtc(eventRecord.EventHeader.TimeStamp),
                     UserData = eventRecord.UserData,
                     UserDataLength = eventRecord.UserDataLength,
-                    PointerSize = (eventRecord.EventHeader.Flags & 0x20) != 0 ? 4 :
-                        (eventRecord.EventHeader.Flags & 0x40) != 0 ? 8 : IntPtr.Size,
+                    PointerSize = pointerSize,
                     StackFrames = ExtractStackTrace(ref eventRecord)
                 };
 
-                if (_dispatcher == null || !_dispatcher.TryDispatch(rawEvent, handler)) Interlocked.Increment(ref _eventsDropped);
+                if (_dispatcher != null && _dispatcher.TryDispatch(rawEvent, handler)) pendingFiles = null;
+                else Interlocked.Increment(ref _eventsDropped);
             }
             catch
             {
                 // Never throw from ETW callback - swallow all exceptions
                 Interlocked.Increment(ref _eventsDropped);
+            }
+            finally
+            {
+                // A name event that was not queued will never reach Observe.
+                pendingFiles?.ReleasePending(pendingKey);
             }
         }
 
@@ -644,6 +686,7 @@ namespace Sentinel.Core
                 EventsProcessed = EventsProcessed, DispatchDrops = EventsDropped,
                 EventsFiltered = Interlocked.Read(ref _eventsFiltered),
                 RegistryHintsCoalesced = Interlocked.Read(ref _registryHintsCoalesced),
+                FileReadsNotQueued = Interlocked.Read(ref _fileReadsNotQueued),
                 DispatchLaneDrops = _dispatcher?.DropSnapshot() ?? new()
             };
             foreach (var provider in _providerStatus) health.ProviderStatus[provider.Key.ToString()] = provider.Value;

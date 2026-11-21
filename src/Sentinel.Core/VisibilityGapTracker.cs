@@ -43,6 +43,8 @@ namespace Sentinel.Core
         public long DispatchDrops { get; set; }
         public long EventsFiltered { get; set; }
         public long RegistryHintsCoalesced { get; set; }
+        /// <summary>Kernel-File reads of files never named as a credential store; nothing could consume them.</summary>
+        public long FileReadsNotQueued { get; set; }
         public System.Collections.Generic.Dictionary<string, long> DispatchLaneDrops { get; set; } = new();
         public int DispatchQueueDepth { get; set; }
         public double DispatchHandlerBusyMs { get; set; }

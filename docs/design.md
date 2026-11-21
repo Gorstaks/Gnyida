@@ -1121,6 +1121,13 @@ inaccessible or unobserved payloads remain outside this rule. The suspect-PID tr
 scan/cooldown intervals and Kernel-File read coverage still limit detection. Legitimate
 manual-mapping software accessing credentials needs Windows false-positive validation.
 
+Kernel-File read admission (3.8.8). Read (ID 15) fires for every file read on the system, and
+`CredentialReadTracker` is its only consumer. `UnifiedEtwSession` reads the fixed-offset FileKey on
+the ETW callback and queues a Read only when that key is a known credential-store name, or when a
+NameCreate/NameDelete for the key is queued but not yet observed (the file lane is FIFO, so the tracker
+sees the name first). Other reads are counted as `FileReadsNotQueued`, not as dispatch loss. Matching is
+unchanged; reads of names the tracker never saw could not match before either.
+
 Host-wide upload spikes are compared with the previous baseline before learning the
 current sample. Spikes do not train the baseline. These observations remain Tier2,
 have no process attribution, and cannot authorize a response. Warmup and quiet
