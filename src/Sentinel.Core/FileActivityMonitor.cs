@@ -93,6 +93,15 @@ namespace Sentinel.Core
             }
         }
 
+        // %SystemDrive% is "C:" with no separator. Path.Combine("C:", "Users") yields the
+        // drive-relative "C:Users", which resolves against the service's working directory
+        // (System32), so the profile root was never found and only the SYSTEM profile was watched.
+        internal static string UsersRoot(string? systemDrive)
+        {
+            var drive = string.IsNullOrWhiteSpace(systemDrive) ? "C:" : systemDrive!.Trim().TrimEnd('\\');
+            return drive + @"\Users";
+        }
+
         private List<string> GetPathsToWatch(SentinelConfig config)
         {
             var paths = new List<string>();
@@ -110,7 +119,7 @@ namespace Sentinel.Core
             else
             {
                 // Default: get all actual user profile paths under C:\Users
-                var usersDir = Path.Combine(Environment.GetEnvironmentVariable("SystemDrive") ?? "C:", "Users");
+                var usersDir = UsersRoot(Environment.GetEnvironmentVariable("SystemDrive"));
                 if (Directory.Exists(usersDir))
                 {
                     try

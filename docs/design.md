@@ -925,7 +925,8 @@ Applied once at service start (best-effort, non-fatal failures):
 2. **IPSec GSecurity (v1.8.3):**
    - **Default:** attack-only ports (Telnet, rsh/rlogin/rexec, TFTP, RPCBind, classic RAT ports 666/1337/4444/31337/...). **Not** SSH/RDP/SMB/SOCKS/Docker/DB.
    - **`RestrictivePortHardening: true`:** also blocks the broader service set (SSH, RDP, SMB, WinRM, DBs, discovery, ...).
-3. Safe Mode registration + inbound RPC ephemeral block (lateral movement)
+   - **3.9.0:** the always-on inbound set also covers services Windows PCs commonly expose once an app or firewall prompt adds an allow rule: web servers (80, 443, 8080, 8443), printing (515, 631, 9100), media streaming (554, 10243), PPTP server (1723), Hyper-V VMConnect (2179), network discovery (3702/udp, 5357, 5358), Connected Devices (5050/udp), Delivery Optimization LAN peers (7680), direct VNC/TeamViewer/AnyDesk (5800, 5901, 5938, 7070), Windows Admin Center (6516) and WinRM compat (47001). These are inbound only; outbound use, replies and loopback are untouched.
+3. Safe Mode registration + inbound RPC dynamic block (lateral movement). **3.9.0:** the RPC dynamic range 49664-49699 is a compiled `PortBlockSpec` range (`Sentinel-PortBlock-6-1-49664-49699`), blocked from every remote address and verified/repaired with the other owned port rules. The v1.4.2 `Sentinel-Block-Remote-RPC-Ephemeral` rule (LocalSubnet only, never repaired) is removed only after the compiled range is verified in place.
 4. **Service disable (v1.8.3):** always Telnet + Remote Registry; RDP/SSH/WinRM/TeamViewer/UPnP only if restrictive
 5. Registry security (LSA, TLS 1.3, SEHOP, Spectre/Meltdown, AlwaysInstallElevated, firewall profiles). Remote WMI/WinRM registry clamps only if restrictive
 6. DEP AlwaysOn (`bcdedit /set nx AlwaysOn`)

@@ -37,6 +37,7 @@ namespace Sentinel.Core
         private readonly DetectionEngine _detectionEngine;
         private readonly ProcessAncestryCache _ancestryCache;
         private readonly ContextBus? _contextBus;
+        private readonly ServiceProcessMap? _serviceMap;
         private readonly ILogger<TokenTheftMonitor> _logger;
 
         /// <summary>Key: "pid|ruleShort" -> last alert UTC. v1.8.0: 60-minute window (was 5).</summary>
@@ -106,12 +107,37 @@ namespace Sentinel.Core
             DetectionEngine detectionEngine,
             ProcessAncestryCache ancestryCache,
             ILogger<TokenTheftMonitor> logger,
-            ContextBus? contextBus = null)
+            ContextBus? contextBus = null,
+            ServiceProcessMap? serviceMap = null)
         {
             _detectionEngine = detectionEngine;
             _ancestryCache = ancestryCache;
             _logger = logger;
             _contextBus = contextBus;
+            _serviceMap = serviceMap;
+        }
+
+        /// <summary>
+        /// A process the Service Control Manager reports as a running service holds a SYSTEM token
+        /// by design (Defender's WinDefend / MDCoreSvc run from ProgramData\...\Platform, outside
+        /// System32 and Program Files). Neither the name nor the folder grants trust here. All three
+        /// anchors are required, and none is controllable without administrator rights: the PID is a
+        /// running SCM service (registering one needs admin), the image is Microsoft-signed, and the
+        /// image file and its folder are not writable by non-admins.
+        /// </summary>
+        internal static bool IsVerifiedServiceProcess(bool isRunningService, string? imagePath,
+            Func<string, bool> isMicrosoftSigned, Func<string, bool> isProtectedLocation)
+        {
+            if (!isRunningService || string.IsNullOrWhiteSpace(imagePath)) return false;
+            if (IsSuspiciousPath(imagePath!)) return false;
+            return isProtectedLocation(imagePath!) && isMicrosoftSigned(imagePath!);
+        }
+
+        private bool IsRunningServicePid(int pid)
+        {
+            if (_serviceMap == null) return false;
+            _serviceMap.Refresh(TimeSpan.FromSeconds(30));
+            return _serviceMap.TryGetServicesForPid(pid, out _);
         }
 
         protected override async Task ExecuteAsync(CancellationToken ct)
@@ -184,6 +210,11 @@ namespace Sentinel.Core
                         // servicing tree AND a valid Microsoft catalog signature), so a renamed impostor
                         // in a user-writable path is NOT exempted here.
                         if (WindowsServicingTrust.IsGenuineServicingActor(imagePath))
+                            continue;
+
+                        if (IsVerifiedServiceProcess(IsRunningServicePid(pid), imagePath,
+                                path => WindowsServicingTrust.IsMicrosoftSigned(path, _logger),
+                                path => WritableLocationAcl.Evaluate(path).Ok))
                             continue;
 
                         // v1.8.0: inaccessible image path on an OS-like name -> ignore (Memory Compression, etc.)

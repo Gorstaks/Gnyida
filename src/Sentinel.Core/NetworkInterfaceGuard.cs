@@ -165,7 +165,7 @@ namespace Sentinel.Core
                 {
                     int index = Convert.ToInt32(obj["InterfaceIndex"]);
                     string name = obj["Name"]?.ToString() ?? "";
-                    int status = Convert.ToInt32(obj["InterfaceStatus"]);
+                    int status = ReadInt(obj, "InterfaceOperationalStatus");
 
                     _baselinePhysicalInterfaceIndices.Add(index);
                     _logger.LogInformation("[NetworkInterfaceGuard] Baselined physical network adapter: '{Name}' (Index {Index}, Status {Status})", name, index, status);
@@ -427,6 +427,16 @@ namespace Sentinel.Core
             }
         }
 
+        // MSFT_NetAdapter properties vary by Windows build (InterfaceStatus is absent on some), and
+        // ManagementBaseObject throws "Not found" for a missing property. Missing reads as -1.
+        internal static int ReadInt(ManagementBaseObject obj, string property)
+        {
+            foreach (PropertyData data in obj.Properties)
+                if (string.Equals(data.Name, property, StringComparison.OrdinalIgnoreCase))
+                    return data.Value == null ? -1 : Convert.ToInt32(data.Value, System.Globalization.CultureInfo.InvariantCulture);
+            return -1;
+        }
+
         private async Task CheckAndRestoreDisabledAdaptersAsync(CancellationToken ct)
         {
             try
@@ -440,9 +450,9 @@ namespace Sentinel.Core
                 {
                     int index = Convert.ToInt32(obj["InterfaceIndex"]);
                     string name = obj["Name"]?.ToString() ?? "";
-                    int adminStatus = Convert.ToInt32(obj["AdminStatus"]);
+                    int adminStatus = ReadInt(obj, "InterfaceAdminStatus");
 
-                    if (_baselinePhysicalInterfaceIndices.Contains(index) && adminStatus == 2) // 2 = Down/Disabled
+                    if (_baselinePhysicalInterfaceIndices.Contains(index) && adminStatus == 2) // InterfaceAdminStatus 2 = Down (disabled)
                     {
                         await _detectionEngine.EmitAsync(new DetectionEvent
                         {

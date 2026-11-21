@@ -9,11 +9,19 @@ namespace Sentinel.Core
     internal sealed class PortBlockSpec
     {
         internal int Port { get; }
+        /// <summary>Last port of an inclusive range; equal to <see cref="Port"/> for a single port.</summary>
+        internal int LastPort { get; }
         internal int Protocol { get; }
         internal int Direction { get; }
-        internal string Name => "Sentinel-PortBlock-" + Protocol + "-" + Direction + "-" + Port;
-        internal PortBlockSpec(int port, int protocol, int direction)
-        { Port = port; Protocol = protocol; Direction = direction; }
+        /// <summary>The Windows Firewall port expression: "445" or "49664-49699".</summary>
+        internal string PortText => LastPort > Port ? Port + "-" + LastPort : Port.ToString();
+        internal string Name => "Sentinel-PortBlock-" + Protocol + "-" + Direction + "-" + PortText;
+        internal PortBlockSpec(int port, int protocol, int direction) : this(port, port, protocol, direction) { }
+        internal PortBlockSpec(int port, int lastPort, int protocol, int direction)
+        {
+            if (port < 1 || lastPort < port || lastPort > 65535) throw new ArgumentOutOfRangeException(nameof(lastPort));
+            Port = port; LastPort = lastPort; Protocol = protocol; Direction = direction;
+        }
     }
 
     internal sealed class PortBlockInspection
@@ -83,8 +91,8 @@ namespace Sentinel.Core
                             // Do not depend on setters accepting empty BSTRs; verify defaults below.
                             rule.LocalAddresses = "*"; rule.RemoteAddresses = "*";
                             rule.InterfaceTypes = "All"; rule.EdgeTraversal = false;
-                            rule.LocalPorts = spec.Direction == 1 ? spec.Port.ToString() : "*";
-                            rule.RemotePorts = spec.Direction == 2 ? spec.Port.ToString() : "*";
+                            rule.LocalPorts = spec.Direction == 1 ? spec.PortText : "*";
+                            rule.RemotePorts = spec.Direction == 2 ? spec.PortText : "*";
                             rule.Enabled = true;
                             stage = "install owned rule " + spec.Name;
                             if (!existed) rules.Add(rule);
@@ -156,8 +164,8 @@ namespace Sentinel.Core
             int profiles, string? localPorts, string? remotePorts, string? application, string? service,
             string? localAddresses, string? remoteAddresses, string? interfaceTypes, bool unscopedInterfaces = true) =>
             unscopedInterfaces && enabled && action == 0 && protocol == spec.Protocol && direction == spec.Direction && (profiles & 7) == 7 &&
-            localPorts == (spec.Direction == 1 ? spec.Port.ToString() : "*") &&
-            remotePorts == (spec.Direction == 2 ? spec.Port.ToString() : "*") &&
+            localPorts == (spec.Direction == 1 ? spec.PortText : "*") &&
+            remotePorts == (spec.Direction == 2 ? spec.PortText : "*") &&
             string.IsNullOrEmpty(application) && string.IsNullOrEmpty(service) &&
             localAddresses == "*" && remoteAddresses == "*" && string.Equals(interfaceTypes, "All", StringComparison.OrdinalIgnoreCase);
 

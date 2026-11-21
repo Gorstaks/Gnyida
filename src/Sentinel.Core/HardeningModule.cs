@@ -472,7 +472,43 @@ namespace Sentinel.Core
             new PortDef { Port = 11211, Name = "Memcached", Protocol = "TCPUDP" },
             new PortDef { Port = 27017, Name = "MongoDB", Protocol = "TCP" },
             new PortDef { Port = 50070, Name = "Hadoop_HDFS", Protocol = "TCP" },
+            // v3.9.0: services Windows PCs commonly expose once an app or a firewall prompt adds an
+            // allow rule. Inbound only: block rules override allow rules, outbound use is untouched,
+            // and loopback (localhost dev servers) is not filtered by Windows Firewall.
+            new PortDef { Port = 80, Name = "HTTP_Server", Protocol = "TCP" },          // IIS / LAN web and dev servers
+            new PortDef { Port = 443, Name = "HTTPS_Server", Protocol = "TCP" },
+            new PortDef { Port = 8080, Name = "HTTP_Alt_Server", Protocol = "TCP" },
+            new PortDef { Port = 8443, Name = "HTTPS_Alt_Server", Protocol = "TCP" },
+            new PortDef { Port = 515, Name = "LPD_Print", Protocol = "TCP" },            // LPD Print Service
+            new PortDef { Port = 631, Name = "IPP_Print", Protocol = "TCP" },
+            new PortDef { Port = 9100, Name = "RAW_Print", Protocol = "TCP" },
+            new PortDef { Port = 554, Name = "RTSP_Streaming", Protocol = "TCP" },        // media streaming
+            new PortDef { Port = 10243, Name = "WMP_Sharing", Protocol = "TCP" },
+            new PortDef { Port = 1723, Name = "PPTP_Server", Protocol = "TCP" },          // VPN *server*; clients connect outbound
+            new PortDef { Port = 2179, Name = "HyperV_VMConnect", Protocol = "TCP" },
+            new PortDef { Port = 3702, Name = "WS_Discovery", Protocol = "UDP" },         // network discovery
+            new PortDef { Port = 5357, Name = "WSD_HTTP", Protocol = "TCP" },
+            new PortDef { Port = 5358, Name = "WSD_HTTPS", Protocol = "TCP" },
+            new PortDef { Port = 5050, Name = "CDP_Discovery", Protocol = "UDP" },        // Connected Devices Platform
+            new PortDef { Port = 7680, Name = "DeliveryOptimization_P2P", Protocol = "TCP" }, // LAN peers serving update data
+            new PortDef { Port = 5800, Name = "VNC_HTTP", Protocol = "TCP" },
+            new PortDef { Port = 5901, Name = "VNC_Display1", Protocol = "TCP" },
+            new PortDef { Port = 5938, Name = "TeamViewer_Direct", Protocol = "TCP" },    // direct LAN control; relay mode unaffected
+            new PortDef { Port = 7070, Name = "AnyDesk_Direct", Protocol = "TCP" },
+            new PortDef { Port = 6516, Name = "WindowsAdminCenter", Protocol = "TCP" },
+            new PortDef { Port = 47001, Name = "WinRM_Compat", Protocol = "TCP" },
         };
+
+        /// <summary>
+        /// RPC dynamic endpoints Windows binds for lsass, services, wininit, EventLog, Task Scheduler
+        /// and the Spooler. The endpoint mapper (135) is blocked, but these ports can be hit directly.
+        /// Blocked inbound from every remote address. Loopback is not filtered by Windows Firewall, so
+        /// local RPC keeps working; replies to outbound connections are not new inbound connections.
+        /// </summary>
+        internal const int RpcDynamicFirstPort = 49664, RpcDynamicLastPort = 49699;
+
+        /// <summary>v1.4.2 rule, LocalSubnet-only and never repaired. Replaced by the compiled RPC range.</summary>
+        internal const string LegacyRpcEphemeralRuleName = "Sentinel-Block-Remote-RPC-Ephemeral";
 
         /// <summary>Ports currently enforced by IPSec (always the combined attack + restrictive set).</summary>
         private static PortDef[] GetActivePortDefinitions()
@@ -503,6 +539,7 @@ namespace Sentinel.Core
                     // malware-port labels that can also be legitimate game/client ports.
                     if (port.Port is 137 or 138 or 139 or 445) rules.Add(new PortBlockSpec(port.Port, protocol, 2));
                 }
+            rules.Add(new PortBlockSpec(RpcDynamicFirstPort, RpcDynamicLastPort, 6, 1));
             return rules;
         }
 
@@ -562,60 +599,22 @@ namespace Sentinel.Core
         }
 
         /// <summary>
-        /// v1.4.2: Blocks inbound access to RPC dynamic endpoint ports (49664-49675)
-        /// from non-localhost sources via Windows Firewall.
-        /// v2.5.5: Hardening is always-on - always enforced.
-        /// Self-healing: checks for rule existence on every call.
+        /// The RPC dynamic range (<see cref="RpcDynamicFirstPort"/>-<see cref="RpcDynamicLastPort"/>) is now
+        /// a compiled port block, so it is verified and repaired with every other owned port rule.
+        /// This removes the v1.4.2 LocalSubnet-only rule, but only after the compiled rule is verified
+        /// in place, so the ports are never left unblocked during the upgrade.
         /// </summary>
         public static void BlockRemoteRpcEphemeralPorts()
         {
-            try
+            var rpc = new PortBlockSpec(RpcDynamicFirstPort, RpcDynamicLastPort, 6, 1);
+            var verified = WindowsPortBlockPolicy.Inspect(new[] { rpc }, apply: true);
+            if (!verified.Detail.Contains("Owned port-rule mismatches=0;"))
             {
-                const string ruleName = "Sentinel-Block-Remote-RPC-Ephemeral";
-
-                // Check if rule already exists
-                var policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
-                if (policyType == null) return;
-                dynamic? policy = Activator.CreateInstance(policyType);
-                if (policy == null) return;
-
-                bool exists = false;
-                foreach (dynamic rule in policy.Rules)
-                {
-                    if ((string)rule.Name == ruleName) { exists = true; break; }
-                }
-
-                if (!exists)
-                {
-                    var ruleType = Type.GetTypeFromProgID("HNetCfg.FWRule");
-                    if (ruleType == null) return;
-                    dynamic? newRule = Activator.CreateInstance(ruleType);
-                    if (newRule == null) return;
-
-                    newRule.Name = ruleName;
-                    newRule.Description = "Sentinel: Blocks remote access to RPC dynamic endpoint ports. " +
-                                          "Prevents lateral movement via DCOM/WMI/Task Scheduler RPC.";
-                    newRule.Protocol = 6; // TCP
-                    newRule.LocalPorts = "49664-49675";
-                    newRule.Direction = 1; // Inbound
-                    newRule.Action = 0; // Block
-                    newRule.Enabled = true;
-                    newRule.Profiles = 0x7FFFFFFF; // All profiles
-                    // Allow localhost (loopback) - only block external
-                    newRule.RemoteAddresses = "LocalSubnet,DNS,DHCP,WINS,DefaultGateway";
-                    // Actually we need to BLOCK from everywhere except local - invert logic:
-                    // Block all remote, which is the default when no RemoteAddresses filter is set
-                    newRule.RemoteAddresses = "*";
-                    // Exclude local loopback by setting LocalAddresses (can't exclude in block rule)
-                    // The simpler approach: block from "LocalSubnet" which covers LAN attacks
-                    newRule.RemoteAddresses = "LocalSubnet";
-
-                    policy.Rules.Add(newRule);
-                }
+                Debug.WriteLine("[PortHardening] RPC range not verified; legacy rule kept: " + verified.Detail);
+                return;
             }
-            catch { }
+            RemoveFirewallRuleByName(LegacyRpcEphemeralRuleName);
         }
-
         private static void ApplyIPSecPolicy()
         {
             try

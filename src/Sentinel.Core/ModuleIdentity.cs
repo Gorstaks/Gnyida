@@ -180,10 +180,29 @@ namespace Sentinel.Core
                 IsAuthenticodeTrusted(mod))
                 return Allow("signed-programfiles");
 
+            // Per-user OneDrive installs its shell extensions (FileSyncShell64.dll, FileCoAuthLib64.dll)
+            // under %LocalAppData%\Microsoft\OneDrive\<version>\ and Windows loads them into explorer
+            // and other shell hosts. That tree is user-writable, so the folder grants nothing: the
+            // anchors are a Microsoft signer AND a verified Authenticode chain, and hijack-target
+            // names stay denied. A plant there (unsigned, or signed by anyone else) is still denied below.
+            if (IsPerUserOneDriveTree(mod) &&
+                !DllUnloadEngine.IsSideloadTargetFileName(mod) &&
+                MicrosoftSigned(mod, isMicrosoftSigned) &&
+                IsAuthenticodeTrusted(mod))
+                return Allow("microsoft-signed-onedrive-peruser");
+
             if (IsUserWritableDrop(mod))
                 return Deny("user-writable-drop");
 
             return Deny("foreign-path");
+        }
+
+        internal static bool IsPerUserOneDriveTree(string? path)
+        {
+            var p = Normalize(path);
+            if (p.Length == 0) return false;
+            if (ContainsDir(p, @"\temp\") || ContainsDir(p, @"\downloads\") || ContainsDir(p, @"\desktop\")) return false;
+            return ContainsDir(p, @"\appdata\local\microsoft\onedrive\");
         }
 
         public static bool IsAllowed(

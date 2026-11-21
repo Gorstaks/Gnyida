@@ -263,9 +263,24 @@ namespace Sentinel.Core
             return _monitors.Values
                 .Where(m => m.State == MonitorState.Failed || m.State == MonitorState.Unavailable || m.Progress.State == "Failed" || m.Progress.State == "Stale" ||
                            (m.State == MonitorState.Running && (now - m.LastHeartbeat > HeartbeatTimeout ||
-                               m.Progress.State == "Unknown" && now - m.RegisteredAt > TimeSpan.FromSeconds(30))) ||
-                           m.State == MonitorState.Starting && now - m.RegisteredAt > TimeSpan.FromSeconds(30))
+                               m.Progress.State == "Unknown" && FirstReportOverdue(m, now))) ||
+                           m.State == MonitorState.Starting && now - m.RegisteredAt > StartupGrace)
                 .ToList();
+        }
+
+        // Monitor groups start in staggered waves (the last group waits 30 s, then 0.5 s per
+        // monitor), so a monitor still waiting for its group is not a failure during this window.
+        // A monitor that has not started after it is reported as needing attention.
+        internal static readonly TimeSpan StartupGrace = TimeSpan.FromMinutes(3);
+        private static readonly TimeSpan MinimumFirstReportGrace = TimeSpan.FromSeconds(60);
+
+        // A progress-reporting sensor gets until its own declared maximum silence (at least 60 s),
+        // counted from when it actually started, to report its first successful cycle.
+        internal static bool FirstReportOverdue(MonitorStatus m, DateTimeOffset now)
+        {
+            var since = m.StartedAt ?? m.RegisteredAt;
+            var grace = TimeSpan.FromSeconds(Math.Max(MinimumFirstReportGrace.TotalSeconds, m.Progress.MaximumSilenceSeconds));
+            return now - since > grace;
         }
 
         public MonitorRegistryStats GetStats()
