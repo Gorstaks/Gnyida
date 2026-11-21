@@ -85,13 +85,13 @@ namespace Sentinel.Tests
         }
 
         [Fact]
-        public void ProtectedProviderDenialDoesNotMaskIndependentEventLoss()
+        public void ProtectedProviderDenialIsNotReportedButIndependentEventLossIs()
         {
             var health = Health();
             var detail = EtwCollectionPolicy.Degradation(health, true)!;
-            Assert.Contains("Threat-Intelligence provider access denied", detail);
+            Assert.DoesNotContain("Threat-Intelligence", detail);
             Assert.Contains("New ETW events/buffers or dispatch loss", detail);
-            Assert.Contains("SYSTEM alone", detail);
+            Assert.DoesNotContain("SYSTEM alone", detail);
             Assert.DoesNotContain("New ETW events", EtwCollectionPolicy.Degradation(health, false)!);
         }
 
