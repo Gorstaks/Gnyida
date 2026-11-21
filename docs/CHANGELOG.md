@@ -1,4 +1,7 @@
 # Changelog
+## [3.8.7] - 2026-11-20
+### Changed - Threat-Intelligence access denial no longer shown as degraded collection
+- Windows denies the Microsoft-Windows-Threat-Intelligence provider (Win32 5) to any consumer that is not a protected antimalware process. Without that signing identity the denial is permanent, so `EtwCollectionPolicy.Degradation` no longer reports it. Other provider failures, filter failures, handler stalls and event loss are still reported.
 ## [3.8.6] - 2026-11-20
 ### Fixed - Discord/Telegram stealers run from outside Temp and Downloads
 - A stealer that posts to a Discord or Telegram webhook was only recognised as C2 when its process was a script host or ran from `Temp` / `Downloads` (`ClassifyWebhook`). The "MrBeast" Ren'Py loader runs as `<GameName>.exe` from wherever it was unpacked (Desktop, Documents, `AppData\Roaming`), so the C2 leg of the credential-harvest chain never appeared and the credential-store read stayed Tier2.

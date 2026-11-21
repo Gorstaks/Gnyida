@@ -42,10 +42,13 @@ namespace Sentinel.Core
             var reasons = new List<string>();
             if (!health.QuerySucceeded) reasons.Add("ETW session query unavailable");
             if (health.ProviderStatus.Count != 10) reasons.Add("Incomplete ETW provider status inventory");
-            foreach (var provider in health.ProviderStatus.Where(p => p.Value != 0).OrderBy(p => p.Key))
-                reasons.Add(provider.Key == UnifiedEtwSession.Providers.ThreatIntelligence.ToString() && provider.Value == 5
-                    ? "Threat-Intelligence provider access denied by Windows; protected-provider access is not granted by SYSTEM alone. Other sensors are not equivalent coverage."
-                    : "ETW provider " + provider.Key + ": Win32 " + provider.Value);
+            // Threat-Intelligence access denied (Win32 5) is an expected platform restriction
+            // without a protected antimalware signing identity, so it is not reported as degradation.
+            foreach (var provider in health.ProviderStatus
+                .Where(p => p.Value != 0
+                    && !(p.Key == UnifiedEtwSession.Providers.ThreatIntelligence.ToString() && p.Value == 5))
+                .OrderBy(p => p.Key))
+                reasons.Add("ETW provider " + provider.Key + ": Win32 " + provider.Value);
             if (health.ProviderFilterStatus.Any(p => p.Value != 0))
                 reasons.Add("Native event-ID filtering unavailable for one or more providers; unfiltered fallback is in use where enable succeeded");
             if (health.DispatchHandlerBusyMs > 5000) reasons.Add("ETW analysis handler has not completed for more than five seconds; worker liveness does not establish progress");
