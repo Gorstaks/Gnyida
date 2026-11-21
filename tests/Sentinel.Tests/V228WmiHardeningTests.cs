@@ -9,6 +9,8 @@ namespace Sentinel.Tests
     /// v2.2.8 - WMI subscription triple, hostile consumer classification,
     /// policy-rewrite terminal family, wmiadap host identity.
     /// </summary>
+    // Fingerprints the live HKLM\SOFTWARE\Policies hive; see PolicyHiveCollection.
+    [Collection(PolicyHiveCollection.Name)]
     public class V228WmiHardeningTests
     {
         [Fact]

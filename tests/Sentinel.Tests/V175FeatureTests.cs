@@ -4,6 +4,8 @@ using Sentinel.Core;
 
 namespace Sentinel.Tests
 {
+    // Writes real HKLM\SOFTWARE\Policies keys when elevated (CI runners are); see PolicyHiveCollection.
+    [Collection(PolicyHiveCollection.Name)]
     public class V175FeatureTests
     {
         [Theory]
