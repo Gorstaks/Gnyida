@@ -159,7 +159,7 @@ namespace Sentinel.Core
             {
                 var scope = new ManagementScope(@"root\StandardCimv2");
                 scope.Connect();
-                var query = new ObjectQuery("SELECT InterfaceIndex, Name, Virtual, InterfaceStatus FROM MSFT_NetAdapter WHERE Virtual = false");
+                var query = new ObjectQuery("SELECT * FROM MSFT_NetAdapter WHERE Virtual = false");
                 using var searcher = new ManagementObjectSearcher(scope, query);
                 foreach (ManagementObject obj in searcher.Get())
                 {
@@ -210,7 +210,7 @@ namespace Sentinel.Core
             {
                 var scope = new ManagementScope(@"root\StandardCimv2");
                 scope.Connect();
-                var query = new ObjectQuery("SELECT InterfaceIndex, Name, Virtual, InterfaceType, InterfaceDescription FROM MSFT_NetAdapter");
+                var query = new ObjectQuery("SELECT * FROM MSFT_NetAdapter");
                 using var searcher = new ManagementObjectSearcher(scope, query);
                 foreach (ManagementObject obj in searcher.Get())
                 {
@@ -433,7 +433,7 @@ namespace Sentinel.Core
             {
                 var scope = new ManagementScope(@"root\StandardCimv2");
                 scope.Connect();
-                var query = new ObjectQuery("SELECT InterfaceIndex, Name, AdminStatus FROM MSFT_NetAdapter WHERE Virtual = false");
+                var query = new ObjectQuery("SELECT * FROM MSFT_NetAdapter WHERE Virtual = false");
                 using var searcher = new ManagementObjectSearcher(scope, query);
                 
                 foreach (ManagementObject obj in searcher.Get())

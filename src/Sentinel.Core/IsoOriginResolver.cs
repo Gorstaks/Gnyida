@@ -49,7 +49,7 @@ namespace Sentinel.Core
 
                 // Enumerate mounted disk images and correlate each to its volume's drive letter.
                 using var searcher = new ManagementObjectSearcher(
-                    scope, new ObjectQuery("SELECT ImagePath, DevicePath, StorageType FROM MSFT_DiskImage"));
+                    scope, new ObjectQuery("SELECT * FROM MSFT_DiskImage"));
                 foreach (ManagementObject image in searcher.Get())
                 {
                     var imagePath = image["ImagePath"]?.ToString();

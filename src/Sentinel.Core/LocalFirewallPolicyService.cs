@@ -44,8 +44,8 @@ namespace Sentinel.Core
         protected override Task ExecuteAsync(CancellationToken ct) => Task.Run(() => RunAsync(ct), ct);
         private async Task RunAsync(CancellationToken ct)
         {
-            using var local = Watch(@"SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy");
-            using var group = Watch(@"SOFTWARE\\Policies\\Microsoft\\WindowsFirewall");
+            using var local = Watch(@"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy");
+            using var group = Watch(@"SOFTWARE\Policies\Microsoft\WindowsFirewall");
             while (!ct.IsCancellationRequested)
             {
                 try
@@ -85,13 +85,38 @@ namespace Sentinel.Core
             }
         }
 
+        // RegistryTreeChangeEvent cannot watch a key that does not exist (the Group Policy firewall
+        // key is absent on machines without firewall policy). Watch the nearest existing ancestor:
+        // a tree change on the ancestor also fires when the policy key is created.
+        internal static string NearestExistingKey(string path)
+        {
+            string current = path;
+            while (current.Length > 0)
+            {
+                try
+                {
+                    using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(current, false);
+                    if (key != null) return current;
+                }
+                catch (Exception ex) when (ex is System.Security.SecurityException || ex is UnauthorizedAccessException || ex is ArgumentException)
+                {
+                    // An unreadable key cannot be proven to exist; fall through to its parent.
+                }
+                int cut = current.LastIndexOf('\\');
+                if (cut <= 0) break;
+                current = current.Substring(0, cut);
+            }
+            return path;
+        }
+
         private ManagementEventWatcher? Watch(string path)
         {
             ManagementEventWatcher? watcher = null;
             try
             {
+                string watched = NearestExistingKey(path);
                 watcher = new ManagementEventWatcher(new ManagementScope(@"\\.\root\default"), new WqlEventQuery(
-                    "SELECT * FROM RegistryTreeChangeEvent WHERE Hive='HKEY_LOCAL_MACHINE' AND RootPath='" + path + "'"));
+                    "SELECT * FROM RegistryTreeChangeEvent WHERE Hive='HKEY_LOCAL_MACHINE' AND RootPath='" + watched.Replace("\\", "\\\\") + "'"));
                 watcher.EventArrived += (_, __) => { try { _changed.Release(); } catch (SemaphoreFullException) { } };
                 watcher.Start();
                 return watcher;

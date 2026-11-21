@@ -365,8 +365,13 @@ namespace Sentinel.Core
     /// FALSE). When the flag is false the monitor returns immediately. Registered in the Service
     /// SystemIntegrity group only. Modeled on <see cref="LnkUncGuard"/>.
     /// </summary>
-    public sealed class AggressiveUnsignedDllSweepMonitor : BackgroundService
+    public sealed class AggressiveUnsignedDllSweepMonitor : BackgroundService, IMonitorStartupTask
     {
+        // Reported when the sweep is off by configuration, so the monitor group records a
+        // deliberate policy (Completed) instead of an unavailable sensor.
+        public string CompletionDescription =>
+            "Aggressive unsigned-module sweep is off by policy (EnableAggressiveUnsignedDllSweep=false). Unsigned is not proof of malice, so no module is quarantined on sight; process images that execute are still inspected by other monitors.";
+
         private readonly DetectionEngine _detectionEngine;
         private readonly QuarantineManager _quarantine;
         private readonly ILogger<AggressiveUnsignedDllSweepMonitor> _logger;

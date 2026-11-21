@@ -405,7 +405,10 @@ namespace Sentinel.Core
                     }
                 }
                 _providerStatus[providerId] = result;
-                if (result != 0) _logger.LogWarning("[UnifiedEtwSession] Provider {Provider} unavailable: Win32 {Error}", providerId, result);
+                if (result == 5 && providerId == Providers.ThreatIntelligence)
+                    _logger.LogInformation("[UnifiedEtwSession] Threat-Intelligence provider needs a protected (PPL) antimalware identity; not enabled for this unprotected service (Win32 5). Other providers are unaffected.");
+                else if (result != 0)
+                    _logger.LogWarning("[UnifiedEtwSession] Provider {Provider} unavailable: Win32 {Error}", providerId, result);
             }
             finally
             {

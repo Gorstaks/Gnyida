@@ -283,8 +283,11 @@ namespace Sentinel.Core
                 Standby = _monitors.Count(m => m.Value.State == MonitorState.Standby),
                 Unhealthy = GetUnhealthyMonitors().Count,
                 CollectionHealthy = _monitors.Count(m => m.Value.Progress.State == "Healthy"),
+                // Only a sensor that declares progress and has not yet reported counts as unverified.
+                // "Unsupported" sensors expose no progress contract; their task liveness is tracked
+                // separately (heartbeat/Failed/Stale), so they must not hold the verdict at "limited".
                 CollectionUnverified = _monitors.Count(m => m.Value.State == MonitorState.Running &&
-                    (m.Value.Progress.State == "Unknown" || m.Value.Progress.State == "Unsupported"))
+                    m.Value.Progress.State == "Unknown")
             };
         }
 
