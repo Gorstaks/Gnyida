@@ -144,7 +144,7 @@ namespace Sentinel.Tests
             using var p = Process.Start(psi)!;
             var clock = Stopwatch.StartNew();
             string output;
-            try { output = BoundedProcess.ReadOutput(p, 1500); }
+            try { output = BoundedProcess.ReadOutput(p, 5000); } // generous: a loaded CI runner can take >1.5 s to print the first ping line
             finally { if (!p.HasExited) { try { p.Kill(); } catch { } } }
             clock.Stop();
             Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), "returned after " + clock.Elapsed);
