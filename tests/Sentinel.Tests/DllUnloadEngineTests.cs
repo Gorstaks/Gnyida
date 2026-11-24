@@ -290,5 +290,111 @@ namespace Sentinel.Tests
             Assert.Equal(2, result.QuarantinedDlls.Count);
             Assert.Contains("version.dll", result.QuarantinedDlls);
         }
+
+        // 
+        // Per-process module cache is bound to process identity (PID + creation time)
+        // 
+        [Fact]
+        public void ResolvePidCache_SameProcess_ReturnsSameCache()
+        {
+            var map = new System.Collections.Concurrent.ConcurrentDictionary<int, DllUnloadEngine.PidModuleCache>();
+            var first = DllUnloadEngine.ResolvePidCache(map, 4242, 1000);
+            first.Paths.Add(@"C:\Evil\helper.dll");
+
+            var again = DllUnloadEngine.ResolvePidCache(map, 4242, 1000);
+
+            Assert.Same(first, again);
+            Assert.Contains(@"C:\Evil\helper.dll", again.Paths);
+        }
+
+        [Fact]
+        public void ResolvePidCache_ReusedPid_DoesNotInheritPreviousProcessState()
+        {
+            var map = new System.Collections.Concurrent.ConcurrentDictionary<int, DllUnloadEngine.PidModuleCache>();
+            var old = DllUnloadEngine.ResolvePidCache(map, 4242, 1000);
+            old.Paths.Add(@"C:\Evil\helper.dll");
+            old.StartupModules.Add(@"C:\Evil\helper.dll");
+            old.DiskPlantsChecked = true;
+            old.LateLoadFlagged = true;
+
+            // Same PID, different process (new creation time).
+            var reused = DllUnloadEngine.ResolvePidCache(map, 4242, 2000);
+
+            Assert.NotSame(old, reused);
+            Assert.Equal(2000, reused.CreationTime);
+            Assert.Empty(reused.Paths);              // module will be identity-checked again
+            Assert.Empty(reused.StartupModules);
+            Assert.False(reused.DiskPlantsChecked); // disk-plant check runs for the new process
+            Assert.False(reused.LateLoadFlagged);
+            Assert.Same(reused, map[4242]);
+        }
+
+        [Fact]
+        public void ResolvePidCache_ConcurrentCallers_AgreeOnOneCachePerProcess()
+        {
+            var map = new System.Collections.Concurrent.ConcurrentDictionary<int, DllUnloadEngine.PidModuleCache>();
+            var results = new DllUnloadEngine.PidModuleCache[64];
+            System.Threading.Tasks.Parallel.For(0, results.Length,
+                i => results[i] = DllUnloadEngine.ResolvePidCache(map, 7, 555));
+
+            Assert.All(results, r => Assert.Same(map[7], r));
+        }
+
+        // 
+        // Pruning keeps live processes and drops exited / reused ones
+        // 
+        [Fact]
+        public void IsCacheStale_LiveProcess_IsKeptEvenWhenIdle()
+        {
+            var cache = new DllUnloadEngine.PidModuleCache(1000) { LastSeenUtc = System.DateTime.UtcNow.AddHours(-2) };
+            Assert.False(DllUnloadEngine.IsCacheStale(cache, 1000, System.DateTime.UtcNow.AddMinutes(-3)));
+        }
+
+        [Theory]
+        [InlineData(0L)]    // process exited (creation time unreadable)
+        [InlineData(2000L)] // PID now belongs to another process
+        public void IsCacheStale_ExitedOrReusedProcess_IsDropped(long currentCreationTime)
+        {
+            var cache = new DllUnloadEngine.PidModuleCache(1000) { LastSeenUtc = System.DateTime.UtcNow };
+            Assert.True(DllUnloadEngine.IsCacheStale(cache, currentCreationTime, System.DateTime.UtcNow.AddMinutes(-3)));
+        }
+
+        [Fact]
+        public void IsCacheStale_UnknownCreationTime_FallsBackToIdleRule()
+        {
+            var cutoff = System.DateTime.UtcNow.AddMinutes(-3);
+            var fresh = new DllUnloadEngine.PidModuleCache(0) { LastSeenUtc = System.DateTime.UtcNow };
+            var idle = new DllUnloadEngine.PidModuleCache(0) { LastSeenUtc = System.DateTime.UtcNow.AddMinutes(-10) };
+
+            Assert.False(DllUnloadEngine.IsCacheStale(fresh, 0, cutoff));
+            Assert.True(DllUnloadEngine.IsCacheStale(idle, 0, cutoff));
+        }
+
+        // 
+        // IsProtectedPath - case-insensitive, no "\Sentinel" substring trust
+        // 
+        [Fact]
+        public void IsProtectedPath_IsCaseInsensitive_ForWindowsDirectory()
+        {
+            var win = System.Environment.GetFolderPath(System.Environment.SpecialFolder.Windows);
+            Assert.True(DllUnloadEngine.IsProtectedPath(win.ToUpperInvariant() + @"\SYSTEM32\MSIEXEC.EXE"));
+            Assert.True(DllUnloadEngine.IsProtectedPath(win.ToLowerInvariant() + @"\system32\msiexec.exe"));
+        }
+
+        [Theory]
+        [InlineData(@"C:\Users\Admin\Downloads\Sentinel\Sentinel.Service.exe")]
+        [InlineData(@"D:\Gorstak\Sentinel\bin\Sentinel.Agent.exe")]
+        [InlineData(@"C:\Users\Admin\AppData\Local\Temp\msiexec.exe")]
+        [InlineData(@"C:\WindowsFake\System32\lsass.exe")]
+        public void IsProtectedPath_ReturnsFalse_ForLookalikes(string path)
+        {
+            Assert.False(DllUnloadEngine.IsProtectedPath(path));
+        }
+
+        [Fact]
+        public void FailedQuarantineBackoff_IsBounded()
+        {
+            Assert.InRange(DllUnloadEngine.FailedQuarantineBackoff, System.TimeSpan.FromMinutes(1), System.TimeSpan.FromHours(1));
+        }
     }
 }

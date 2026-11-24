@@ -40,6 +40,7 @@ namespace Sentinel.Core
         private readonly object _rateLock = new();
 
         private const int MaxRemediationsPerMinute = 20;
+        internal static readonly TimeSpan FailedQuarantineBackoff = TimeSpan.FromMinutes(10);
 
         /// <summary>
         /// Hosts where termination is a boot-loop or self-kill. Identity still
@@ -152,7 +153,7 @@ namespace Sentinel.Core
                 if (string.Equals(modulePath, imagePath, StringComparison.OrdinalIgnoreCase))
                     return Task.CompletedTask;
 
-                var cache = _pidModules.GetOrAdd(processId, _ => new PidModuleCache());
+                var cache = ResolvePidCache(_pidModules, processId, TryGetCreationTime(processId));
                 cache.LastSeenUtc = DateTime.UtcNow;
 
                 bool inStartup = cache.InStartupWindow;
@@ -189,10 +190,17 @@ namespace Sentinel.Core
 
                 if (IsReviewOnlyIdentity(verdict))
                     return EmitIdentityReviewAsync(processId, processName ?? "", modulePath!);
-                return ScanProcessAsync(processId, processName ?? "", allowRemediateOnProvenLoad: true, forceRemediate: true);
+                // The ImageLoad event is the proof of load. Pass the module in directly: the
+                // per-PID cache already marks it seen, and EnumModules can miss it (process not
+                // inspectable, module already unmapped). Not forceRemediate - that would let a
+                // disk plant next to the exe kill the host without a proven load (0.5.3).
+                return ScanProcessAsync(processId, processName ?? "", allowRemediateOnProvenLoad: true,
+                    forceRemediate: false, observedHostileModule: modulePath);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "[DllUnloadEngine] ImageLoad identity check failed for PID {Pid} module {Module}",
+                    processId, modulePath);
                 return Task.CompletedTask;
             }
         }
@@ -332,6 +340,15 @@ namespace Sentinel.Core
                 var alertKey = $"plant:{dllPath.ToLowerInvariant()}";
                 if (_alertHistory.ContainsKey(alertKey) && result.Success)
                     return result;
+
+                // A refused quarantine (e.g. a trusted-publisher signed copy that QuarantineManager
+                // never removes) used to be retried on every file event for the same path - six
+                // identical refusals per file in the 3.9.2 logs. Retry after a backoff instead.
+                var failKey = $"plantfail:{dllPath.ToLowerInvariant()}";
+                if (_remediationHistory.TryGetValue(failKey, out var lastFail) &&
+                    DateTimeOffset.UtcNow - lastFail < FailedQuarantineBackoff)
+                    return result;
+
                 _alertHistory[alertKey] = DateTimeOffset.UtcNow;
 
                 if (!TryConsumeRateLimit())
@@ -342,6 +359,8 @@ namespace Sentinel.Core
                 result.RecordFileOutcome(dllPath, fileOutcome);
                 if (fileOutcome == DllFileOutcome.Quarantined)
                     await EmitHijackPlantQuarantinedAsync(dllPath, fileName, dir, writerPid, writerName);
+                if (fileOutcome == DllFileOutcome.Failed)
+                    _remediationHistory[failKey] = DateTimeOffset.UtcNow;
                 if (fileOutcome == DllFileOutcome.Failed || fileOutcome == DllFileOutcome.Deferred)
                     _alertHistory.TryRemove(alertKey, out _);
             }
@@ -434,11 +453,16 @@ namespace Sentinel.Core
         /// <param name="forceRemediate">
         /// When true (Tier1 response path), remediate disk plants for this PID even if not yet enumerated as loaded.
         /// </param>
+        /// <param name="observedHostileModule">
+        /// A module that an ImageLoad event already proved is mapped and that failed identity.
+        /// Counts as a proven load even when EnumModules does not return it.
+        /// </param>
         private async Task<DllUnloadResult> ScanProcessAsync(
             int processId,
             string processName,
             bool allowRemediateOnProvenLoad,
-            bool forceRemediate = false)
+            bool forceRemediate = false,
+            string? observedHostileModule = null)
         {
             var result = new DllUnloadResult { ProcessId = processId, ProcessName = processName ?? "" };
             if (processId <= 4) return result;
@@ -469,7 +493,7 @@ namespace Sentinel.Core
                 if (ModuleIdentity.IsOsServicingPath(procDir) || ModuleIdentity.IsOsServicingPath(imagePath))
                     return result;
 
-                var cache = _pidModules.GetOrAdd(processId, _ => new PidModuleCache());
+                var cache = ResolvePidCache(_pidModules, processId, originalCreationTime);
                 cache.LastSeenUtc = DateTime.UtcNow;
 
                 var hostileDisk = new List<string>();
@@ -507,6 +531,12 @@ namespace Sentinel.Core
 
                         hostileLoaded.Add((mod.Path, mod.Base, mod.Size));
                     }
+                }
+
+                if (!string.IsNullOrEmpty(observedHostileModule) &&
+                    !hostileLoaded.Any(h => string.Equals(h.Path, observedHostileModule, StringComparison.OrdinalIgnoreCase)))
+                {
+                    hostileLoaded.Add((observedHostileModule!, IntPtr.Zero, 0));
                 }
 
                 // Proven malicious behavior: process loaded hostile DLL(s)
@@ -607,7 +637,8 @@ namespace Sentinel.Core
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "[DllUnloadEngine] ScanProcess failed for PID {Pid}", processId);
+                // Warning, not Debug: a failed scan must not look like a clean one in normal logs.
+                _logger.LogWarning(ex, "[DllUnloadEngine] ScanProcess failed for PID {Pid}", processId);
                 return result;
             }
         }
@@ -640,7 +671,7 @@ namespace Sentinel.Core
                       "servicing impersonation. Quarantine the file; never delete the COM class."
                     : "Search-order hijack: a local dbghelp/version/winmm copy is loaded " +
                       "before System32, including a real Microsoft-signed copy. Quarantining " +
-                      "the file (not the host) is the prevention; FreeLibrary is cleanup if already mapped.",
+                      "the file (not the host) is the prevention; a host that already mapped it is contained.",
                 Confidence = 0.90,
                 Tier = DetectionTier.Tier1Behavioral,
                 AuthorizedResponse = ResponseAction.LogOnly,
@@ -812,14 +843,37 @@ namespace Sentinel.Core
             }
         }
 
+        private static readonly TimeSpan PruneInterval = TimeSpan.FromSeconds(30);
+        private DateTime _lastPruneUtc = DateTime.MinValue;
+
+        /// <summary>
+        /// Drops caches whose process has exited or whose PID now belongs to another process.
+        /// A live process keeps its cache however long it is idle. Dropping it on idle time
+        /// (the old 3-minute rule) re-created it on the next load with a fresh startup window,
+        /// so late loads were treated as startup modules and every module was re-verified.
+        /// Entries with an unknown creation time fall back to the 3-minute idle rule.
+        /// </summary>
         internal void PruneStalePidCaches()
         {
-            var cutoff = DateTime.UtcNow.AddMinutes(-3);
+            var now = DateTime.UtcNow;
+            if (now - _lastPruneUtc < PruneInterval) return;
+            _lastPruneUtc = now;
+
+            var idleCutoff = now.AddMinutes(-3);
             foreach (var kv in _pidModules)
             {
-                if (kv.Value.LastSeenUtc < cutoff)
-                    _pidModules.TryRemove(kv.Key, out _);
+                // Remove only this exact entry: a concurrent ResolvePidCache may have replaced it.
+                if (IsCacheStale(kv.Value, TryGetCreationTime(kv.Key), idleCutoff))
+                    ((ICollection<KeyValuePair<int, PidModuleCache>>)_pidModules).Remove(kv);
             }
+        }
+
+        internal static bool IsCacheStale(PidModuleCache cache, long currentCreationTime, DateTime idleCutoffUtc)
+        {
+            if (cache.CreationTime == 0)
+                return cache.LastSeenUtc < idleCutoffUtc;
+            // 0 = process gone (open failed); any other mismatch = PID reused.
+            return currentCreationTime != cache.CreationTime;
         }
 
         public void Dispose()
@@ -834,8 +888,43 @@ namespace Sentinel.Core
 
         private const int MaxPathsPerPid = 8192;
 
-        private sealed class PidModuleCache
+        /// <summary>
+        /// Returns the module cache for this process instance. Windows reuses PIDs quickly and
+        /// entries live up to 3 minutes (<see cref="PruneStalePidCaches"/>), so a cache keyed by
+        /// PID alone let a new process inherit the previous owner's state: modules already marked
+        /// seen were never identity-checked, the disk-plant check was skipped, and the startup
+        /// window had already elapsed. The entry is bound to the process creation time and is
+        /// replaced when the PID now belongs to a different process.
+        /// A creation time of 0 means "unknown" and only matches another unknown read.
+        /// </summary>
+        internal static PidModuleCache ResolvePidCache(
+            ConcurrentDictionary<int, PidModuleCache> map, int processId, long creationTime)
         {
+            while (true)
+            {
+                var existing = map.GetOrAdd(processId, _ => new PidModuleCache(creationTime));
+                if (existing.CreationTime == creationTime)
+                    return existing;
+                var fresh = new PidModuleCache(creationTime);
+                if (map.TryUpdate(processId, fresh, existing))
+                    return fresh;
+                // Another thread replaced the entry first; re-read and compare again.
+            }
+        }
+
+        private static long TryGetCreationTime(int processId)
+        {
+            try { return WindowsProcessTreeOperations.GetCreationTime(processId); }
+            catch { return 0; }
+        }
+
+        internal sealed class PidModuleCache
+        {
+            public PidModuleCache(long creationTime) => CreationTime = creationTime;
+
+            /// <summary>Process creation time (FILETIME) of the instance this cache belongs to.</summary>
+            public readonly long CreationTime;
+
             public readonly HashSet<string> Paths = new(StringComparer.OrdinalIgnoreCase);
             public DateTime LastSeenUtc;
             public bool DiskPlantsChecked;
@@ -876,15 +965,27 @@ namespace Sentinel.Core
                    lower.StartsWith((win + @"\servicing").ToLowerInvariant(), StringComparison.Ordinal);
         }
 
-        private static bool IsProtectedPath(string? path)
+        /// <summary>
+        /// Install locations where a <see cref="ProtectedProcessNames"/> host is genuine.
+        /// Case-insensitive and drive-independent: the old ordinal "C:\Windows\" check missed
+        /// other casings and system drives, and "\Sentinel" anywhere in a path (for example a
+        /// user folder) counted as protected.
+        /// </summary>
+        internal static bool IsProtectedPath(string? path)
         {
             if (string.IsNullOrEmpty(path)) return false;
-            return path!.StartsWith(@"C:\Windows\", StringComparison.Ordinal) ||
-                   path.StartsWith(@"C:\Program Files", StringComparison.Ordinal) ||
-                   path.Contains(@"\AppData\Local\Google\") ||
-                   path.Contains(@"\AppData\Local\Microsoft\") ||
-                   path.Contains(@"\AppData\Local\Programs\") ||
-                   path.Contains(@"\Sentinel");
+            static bool Under(string p, string? root) =>
+                !string.IsNullOrEmpty(root) &&
+                p.StartsWith(root!.TrimEnd('\\') + @"\", StringComparison.OrdinalIgnoreCase);
+
+            return Under(path!, Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ||
+                   Under(path!, Environment.GetEnvironmentVariable("ProgramFiles")) ||
+                   Under(path!, Environment.GetEnvironmentVariable("ProgramFiles(x86)")) ||
+                   Under(path!, Environment.GetEnvironmentVariable("ProgramW6432")) ||
+                   path!.IndexOf(@"\AppData\Local\Google\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   path.IndexOf(@"\AppData\Local\Microsoft\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   path.IndexOf(@"\AppData\Local\Programs\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   SelfPathGuard.IsSentinelSelfBinary(path);
         }
     }
 
