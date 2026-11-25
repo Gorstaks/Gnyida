@@ -4,7 +4,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>3.9.3</Version>
+    <Version>3.9.4</Version>
     <Company>Gnyida Security</Company>
     <Product>Gnyida Endpoint Detection and Response</Product>
     <Description>Userland endpoint detection and response (EDR) core engine for Windows</Description>

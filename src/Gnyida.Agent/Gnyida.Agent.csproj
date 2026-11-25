@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>3.9.3</Version>
+    <Version>3.9.4</Version>
     <Company>Gnyida Security</Company>
     <Product>Gnyida Endpoint Detection and Response</Product>
     <Description>Gnyida EDR User-Session Agent and Web Dashboard</Description>
