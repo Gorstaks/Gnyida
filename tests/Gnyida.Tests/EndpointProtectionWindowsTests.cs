@@ -27,6 +27,30 @@ namespace Gnyida.Tests
     [Collection("ResponsePolicy")]
     public class EndpointProtectionWindowsTests
     {
+        // Reading Process.MainModule right after Start races the loader: the module list may not be
+        // populated yet and FileName throws NullReferenceException. Retry briefly until it is.
+        // The real image path must be used (its casing differs from GetFolderPath(System)).
+        private static string WaitForImagePath(Process process)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (true)
+            {
+                try
+                {
+                    process.Refresh();
+                    var fileName = process.MainModule?.FileName;
+                    if (!string.IsNullOrEmpty(fileName)) return fileName!;
+                }
+                catch (Exception ex) when (ex is NullReferenceException || ex is System.ComponentModel.Win32Exception)
+                {
+                    if (DateTime.UtcNow >= deadline) throw;
+                }
+                if (DateTime.UtcNow >= deadline)
+                    throw new InvalidOperationException("Sleeper image path was not available within 5 seconds.");
+                System.Threading.Thread.Sleep(25);
+            }
+        }
+
         private static Process StartOwnedSleeper() => Process.Start(new ProcessStartInfo
         {
             FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
@@ -51,7 +75,7 @@ namespace Gnyida.Tests
                 Assert.True(created > 0);
                 // Synthetic inert evidence tests correlation -> policy -> native response.
                 // No credentials are accessed and no payload is injected/executed.
-                var payload = EtwThreatIntelMonitor.CreatePayloadObservation(victim.Id, "owned-sleeper", victim.MainModule!.FileName,
+                var payload = EtwThreatIntelMonitor.CreatePayloadObservation(victim.Id, "owned-sleeper", WaitForImagePath(victim),
                     created, new[] { new UnbackedPeScanner.Payload(0x10000, 0x11000, 0x20) }, DateTime.UtcNow);
                 var read = new DetectionEvent
                 {
