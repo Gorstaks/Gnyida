@@ -1,7 +1,7 @@
 # State Baseline & Reconciliation (Drift Detection) - Requirements
 
 **Roadmap link:** `docs/ROADMAP.md` -> visibility / real-world-threat themes. Adds a **state-driven**
-detection axis to complement Sentinel's existing **event-driven** monitors.
+detection axis to complement Gnyida's existing **event-driven** monitors.
 
 **Threat model link:** `docs/THREAT_MODEL.md` -> new section "Silent / user-directed harm with no
 system-level malicious behavior". Honest ceiling stated below.
@@ -13,7 +13,7 @@ Reference docs (authoritative): `#[[file:../../../docs/requirements.md]]`,
 
 ## Problem statement
 
-Every existing Sentinel terminal family (credential theft, C2, ransomware, injection-then-exfil)
+Every existing Gnyida terminal family (credential theft, C2, ransomware, injection-then-exfil)
 is defined around harm to the **system or its secrets**, and kill authority requires qualifying terminal behavior. This leaves a real blind spot:
 
 > A payload that harms the **user** rather than the system - e.g. a DLL that merely emits an
@@ -64,7 +64,7 @@ surfacing if it cannot be attributed to a trusted cause.
 
 ### R1 - Baseline the loaded-module inventory of long-lived processes
 
-**User story:** As a victim, I want Sentinel to remember which modules a stable system/shell process
+**User story:** As a victim, I want Gnyida to remember which modules a stable system/shell process
 normally loads, so a new unexplained module in that process is noticeable.
 
 Acceptance criteria (EARS):
@@ -88,7 +88,7 @@ baseline is not re-flagged as "new" every boot.
 
 Acceptance criteria (EARS):
 
-- The baseline SHALL be persisted under `%ProgramData%\Sentinel` using the reboot-durable
+- The baseline SHALL be persisted under `%ProgramData%\Gnyida` using the reboot-durable
   `System.Text.Json` file pattern (like `kev_cache.json`), NOT the boot-bound `SecureCacheStore`.
 - The baseline directory/file SHALL be created with SYSTEM+Admins-only ACL (mirror
   `EnsureRestrictedProgramDataDir`).

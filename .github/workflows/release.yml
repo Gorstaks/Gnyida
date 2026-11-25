@@ -87,18 +87,18 @@ jobs:
       - name: Verify security template compatibility
         if: steps.exists.outputs.skip == 'false'
         shell: pwsh
-        run: ./tests/Sentinel.Tests/SecurityTemplate.Tests.ps1
+        run: ./tests/Gnyida.Tests/SecurityTemplate.Tests.ps1
 
       - name: Build solution and verify Windows tests before packaging
         if: steps.exists.outputs.skip == 'false'
         shell: pwsh
         run: |
-          dotnet build Sentinel.sln -c Release -warnaserror
+          dotnet build Gnyida.sln -c Release -warnaserror
           if ($LASTEXITCODE -ne 0) { throw "Release build failed" }
           # Check import boundaries and log-derived safety regressions before the longer suite.
-          dotnet test tests/Sentinel.Tests/Sentinel.Tests.csproj -c Release --no-build --blame-hang --blame-hang-timeout 3m --blame-hang-dump-type none --logger "trx;LogFileName=safety-tests.trx" --results-directory TestResults/Safety --filter "FullyQualifiedName~DnsRepairServiceTests|FullyQualifiedName~DnsRepairAuthorizationTests|FullyQualifiedName~NativeResolverCompletenessTests|FullyQualifiedName~NativeProcessExitVerifierTests|FullyQualifiedName~ProcessTreeWindowsTests|FullyQualifiedName~MonitorGroupTests|FullyQualifiedName~JsonlEventLoggerTests|FullyQualifiedName~RootStoreGuardTests|FullyQualifiedName~NamedPipeMonitorTests|FullyQualifiedName~CveApplicabilityRegressionTests"
+          dotnet test tests/Gnyida.Tests/Gnyida.Tests.csproj -c Release --no-build --blame-hang --blame-hang-timeout 3m --blame-hang-dump-type none --logger "trx;LogFileName=safety-tests.trx" --results-directory TestResults/Safety --filter "FullyQualifiedName~DnsRepairServiceTests|FullyQualifiedName~DnsRepairAuthorizationTests|FullyQualifiedName~NativeResolverCompletenessTests|FullyQualifiedName~NativeProcessExitVerifierTests|FullyQualifiedName~ProcessTreeWindowsTests|FullyQualifiedName~MonitorGroupTests|FullyQualifiedName~JsonlEventLoggerTests|FullyQualifiedName~RootStoreGuardTests|FullyQualifiedName~NamedPipeMonitorTests|FullyQualifiedName~CveApplicabilityRegressionTests"
           if ($LASTEXITCODE -ne 0) { throw "Release safety regression checks failed; release blocked" }
-          dotnet test tests/Sentinel.Tests/Sentinel.Tests.csproj -c Release --no-build --blame-hang --blame-hang-timeout 3m --blame-hang-dump-type none --logger "trx;LogFileName=release-tests.trx" --results-directory TestResults
+          dotnet test tests/Gnyida.Tests/Gnyida.Tests.csproj -c Release --no-build --blame-hang --blame-hang-timeout 3m --blame-hang-dump-type none --logger "trx;LogFileName=release-tests.trx" --results-directory TestResults
           if ($LASTEXITCODE -ne 0) { throw "Windows regression tests failed; release blocked" }
           [xml]$trx = Get-Content TestResults/release-tests.trx -Raw
           if ([int]$trx.TestRun.ResultSummary.Counters.executed -lt 1) { throw "No Windows tests executed; release blocked" }
@@ -112,9 +112,9 @@ jobs:
         if: steps.exists.outputs.skip == 'false'
         shell: pwsh
         run: |
-          dotnet publish tools/Sentinel.ExploitShield/Sentinel.ExploitShield.csproj -c Release -warnaserror -o "$env:RUNNER_TEMP/exploitshield-payload"
+          dotnet publish tools/Gnyida.ExploitShield/Gnyida.ExploitShield.csproj -c Release -warnaserror -o "$env:RUNNER_TEMP/exploitshield-payload"
           if ($LASTEXITCODE -ne 0) { throw 'ExploitShield publication failed' }
-          dotnet build tools/Sentinel.ExploitShieldSmoke/Sentinel.ExploitShieldSmoke.csproj -c Release -warnaserror
+          dotnet build tools/Gnyida.ExploitShieldSmoke/Gnyida.ExploitShieldSmoke.csproj -c Release -warnaserror
           if ($LASTEXITCODE -ne 0) { throw 'Native task fixture build failed' }
           & powershell.exe -NoProfile -File tools/validation/WindowsExploitShieldSmoke.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Native ExploitShield smoke failed; release blocked' }
@@ -127,8 +127,8 @@ jobs:
         if: steps.exists.outputs.skip == 'false'
         shell: pwsh
         run: |
-          $diag = Resolve-Path tools/Sentinel.Diagnostics/bin/Release/net48-windows/Sentinel.Diagnostics.exe
-          $dir = Join-Path $env:RUNNER_TEMP "sentinel-diagnostics-$([guid]::NewGuid().ToString('N'))"
+          $diag = Resolve-Path tools/Gnyida.Diagnostics/bin/Release/net48-windows/Gnyida.Diagnostics.exe
+          $dir = Join-Path $env:RUNNER_TEMP "gnyida-diagnostics-$([guid]::NewGuid().ToString('N'))"
           New-Item -ItemType Directory $dir | Out-Null
           $events = @(
             @{ RuleName='LSASS Credential Dump'; Confidence=0.95; ProcessId=9001; ProcessName='fixture.exe'; Timestamp='2020-01-01T00:00:00Z' },
@@ -164,7 +164,7 @@ jobs:
         run: ./tools/validation/SummarizeWindowsTests.ps1
 
       # build.ps1 requires the Inno Setup compiler (ISCC.exe). The verified path is handed to
-      # build.ps1 through SENTINEL_ISCC so it cannot fall back to a different compiler.
+      # build.ps1 through GNYIDA_ISCC so it cannot fall back to a different compiler.
       - name: Install Inno Setup
         if: steps.exists.outputs.skip == 'false'
         shell: pwsh
@@ -188,7 +188,7 @@ jobs:
           $isccSig = Get-AuthenticodeSignature -FilePath $iscc
           if ($isccSig.Status -ne 'Valid') { throw "ISCC.exe signature is $($isccSig.Status)" }
           Write-Host "ISCC.exe signed by: $($isccSig.SignerCertificate.Subject)"
-          "SENTINEL_ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "GNYIDA_ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       # Reuse the exact local build path: stamps every csproj + setup.iss from version.txt,
       # publishes Service + Agent (net48, framework-dependent), compiles the installer with
@@ -200,12 +200,12 @@ jobs:
         if: steps.exists.outputs.skip == 'false'
         shell: pwsh
         env:
-          SENTINEL_SIGN_CERT_THUMBPRINT: ${{ secrets.SENTINEL_SIGN_CERT_THUMBPRINT }}
-          SENTINEL_SIGN_DLIB: ${{ secrets.SENTINEL_SIGN_DLIB }}
-          SENTINEL_SIGN_METADATA: ${{ secrets.SENTINEL_SIGN_METADATA }}
+          GNYIDA_SIGN_CERT_THUMBPRINT: ${{ secrets.GNYIDA_SIGN_CERT_THUMBPRINT }}
+          GNYIDA_SIGN_DLIB: ${{ secrets.GNYIDA_SIGN_DLIB }}
+          GNYIDA_SIGN_METADATA: ${{ secrets.GNYIDA_SIGN_METADATA }}
         run: |
-          if ($env:SENTINEL_SIGN_CERT_THUMBPRINT -or ($env:SENTINEL_SIGN_DLIB -and $env:SENTINEL_SIGN_METADATA)) {
-            $env:SENTINEL_REQUIRE_SIGNING = '1'
+          if ($env:GNYIDA_SIGN_CERT_THUMBPRINT -or ($env:GNYIDA_SIGN_DLIB -and $env:GNYIDA_SIGN_METADATA)) {
+            $env:GNYIDA_REQUIRE_SIGNING = '1'
           }
           ./installer/build.ps1
 
@@ -215,7 +215,7 @@ jobs:
         shell: pwsh
         run: |
           $v = "${{ steps.ver.outputs.version }}"
-          $path = "releases/$v/SentinelSetup-$v.exe"
+          $path = "releases/$v/GnyidaSetup-$v.exe"
           if (-not (Test-Path $path)) { throw "Installer not found at $path" }
           $sizeMb = [math]::Round((Get-Item $path).Length / 1MB, 2)
           Write-Host "Installer: $path ($sizeMb MB)"
@@ -229,7 +229,7 @@ jobs:
         shell: pwsh
         run: |
           $v = "${{ steps.ver.outputs.version }}"
-          $fallback = "Sentinel $v. See docs/CHANGELOG.md for details."
+          $fallback = "Gnyida $v. See docs/CHANGELOG.md for details."
           $out = "release-notes.md"
           $changelog = "docs/CHANGELOG.md"
           if (-not (Test-Path $changelog)) {
@@ -253,11 +253,11 @@ jobs:
               if ([string]::IsNullOrWhiteSpace($text)) {
                 Set-Content -Path $out -Value $fallback -Encoding UTF8
               } else {
-                Set-Content -Path $out -Value "## Sentinel $v`n`n$text" -Encoding UTF8
+                Set-Content -Path $out -Value "## Gnyida $v`n`n$text" -Encoding UTF8
               }
             }
           }
-          $installer = "releases/$v/SentinelSetup-$v.exe"
+          $installer = "releases/$v/GnyidaSetup-$v.exe"
           if ((Get-AuthenticodeSignature -FilePath $installer).Status -ne 'Valid') {
             Add-Content -Path $out -Encoding UTF8 -Value "`n> **Unsigned build.** This installer has no Authenticode signature. Verify it against SHA256SUMS.txt from this release before running it."
           }
@@ -268,11 +268,11 @@ jobs:
         shell: pwsh
         run: |
           $v = "${{ steps.ver.outputs.version }}"
-          Copy-Item worker/src/index.js "releases/$v/SentinelWorker-$v.js"
-          dotnet publish tools/Sentinel.Diagnostics/Sentinel.Diagnostics.csproj -c Release -f net48-windows -r win-x64 --self-contained false -o "releases/$v/diagnostics"
+          Copy-Item worker/src/index.js "releases/$v/GnyidaWorker-$v.js"
+          dotnet publish tools/Gnyida.Diagnostics/Gnyida.Diagnostics.csproj -c Release -f net48-windows -r win-x64 --self-contained false -o "releases/$v/diagnostics"
           if ($LASTEXITCODE -ne 0) { throw "Diagnostic publication failed" }
-          Compress-Archive -Path "releases/$v/diagnostics/*" -DestinationPath "releases/$v/SentinelDiagnostics-$v.zip"
-          $files = @("releases/$v/SentinelSetup-$v.exe", "releases/$v/SentinelWorker-$v.js", "releases/$v/SentinelDiagnostics-$v.zip")
+          Compress-Archive -Path "releases/$v/diagnostics/*" -DestinationPath "releases/$v/GnyidaDiagnostics-$v.zip"
+          $files = @("releases/$v/GnyidaSetup-$v.exe", "releases/$v/GnyidaWorker-$v.js", "releases/$v/GnyidaDiagnostics-$v.zip")
           $lines = foreach ($file in $files) {
             $hash = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLowerInvariant()
             "$hash  $(Split-Path $file -Leaf)"
@@ -285,7 +285,7 @@ jobs:
         timeout-minutes: 15
         run: |
           $v = "${{ steps.ver.outputs.version }}"
-          ./tools/validation/WindowsDefenderScan.ps1 -InputPaths @("releases/$v/SentinelSetup-$v.exe", 'publish/service', 'publish/agent', 'publish/autorotate', 'publish/exploitshield')
+          ./tools/validation/WindowsDefenderScan.ps1 -InputPaths @("releases/$v/GnyidaSetup-$v.exe", 'publish/service', 'publish/agent', 'publish/autorotate', 'publish/exploitshield')
 
       - name: Upload release Defender evidence
         if: always()
@@ -302,8 +302,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $v = "${{ steps.ver.outputs.version }}"
-          gh release create "v$v" "${{ steps.artifact.outputs.path }}" "releases/$v/SentinelWorker-$v.js" "releases/$v/SentinelDiagnostics-$v.zip" "releases/$v/SHA256SUMS.txt" `
-            --title "Sentinel $v" `
+          gh release create "v$v" "${{ steps.artifact.outputs.path }}" "releases/$v/GnyidaWorker-$v.js" "releases/$v/GnyidaDiagnostics-$v.zip" "releases/$v/SHA256SUMS.txt" `
+            --title "Gnyida $v" `
             --notes-file release-notes.md `
             --target ${{ github.event.workflow_run.head_sha || github.sha }}
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
@@ -316,7 +316,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $v = "${{ steps.ver.outputs.version }}"
-          $published = Join-Path $env:RUNNER_TEMP ('sentinel-published-' + [Guid]::NewGuid().ToString('N'))
-          gh release download "v$v" --dir $published --pattern "SentinelSetup-$v.exe" --pattern "SentinelWorker-$v.js" --pattern "SentinelDiagnostics-$v.zip" --pattern "SHA256SUMS.txt"
+          $published = Join-Path $env:RUNNER_TEMP ('gnyida-published-' + [Guid]::NewGuid().ToString('N'))
+          gh release download "v$v" --dir $published --pattern "GnyidaSetup-$v.exe" --pattern "GnyidaWorker-$v.js" --pattern "GnyidaDiagnostics-$v.zip" --pattern "SHA256SUMS.txt"
           if ($LASTEXITCODE -ne 0) { throw 'Published release download failed' }
           ./tools/validation/VerifyReleaseArtifacts.ps1 -Version $v -ReferenceDirectory "releases/$v" -PublishedDirectory $published

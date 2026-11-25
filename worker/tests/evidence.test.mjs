@@ -18,8 +18,8 @@ function signed(body, path = '/report/evidence') {
   const signature = createHmac('sha256', secret).update(`${timestamp}.${nonce}.${path}.${raw}`).digest('hex');
   return new Request('https://worker.invalid' + path, {
     method: 'POST', body: raw, headers: {
-      'X-Sentinel-Timestamp': timestamp, 'X-Sentinel-Nonce': nonce,
-      'X-Sentinel-Signature': signature, 'Content-Type': 'application/json'
+      'X-Gnyida-Timestamp': timestamp, 'X-Gnyida-Nonce': nonce,
+      'X-Gnyida-Signature': signature, 'Content-Type': 'application/json'
     }
   });
 }
@@ -34,7 +34,7 @@ test('health works without credentials; report fails closed without secret', asy
 test('evidence storage acknowledges only a successful write and strips private fields', async () => {
   const writes = [];
   const response = await worker.fetch(signed(summary()), {
-    SENTINEL_SHARED_SECRET: secret,
+    GNYIDA_SHARED_SECRET: secret,
     EVIDENCE_STORE: { put: async (...args) => writes.push(args) }
   });
   assert.equal(response.status, 200);
@@ -48,10 +48,10 @@ test('evidence storage acknowledges only a successful write and strips private f
 });
 
 test('missing and failed storage return 503 rather than a success receipt', async () => {
-  const missing = await worker.fetch(signed(summary()), { SENTINEL_SHARED_SECRET: secret });
+  const missing = await worker.fetch(signed(summary()), { GNYIDA_SHARED_SECRET: secret });
   assert.equal(missing.status, 503);
   const failed = await worker.fetch(signed(summary()), {
-    SENTINEL_SHARED_SECRET: secret, EVIDENCE_STORE: { put: async () => { throw new Error('offline'); } }
+    GNYIDA_SHARED_SECRET: secret, EVIDENCE_STORE: { put: async () => { throw new Error('offline'); } }
   });
   assert.equal(failed.status, 503);
   assert.equal((await failed.json()).receipt, undefined);
@@ -60,9 +60,9 @@ test('missing and failed storage return 503 rather than a success receipt', asyn
 test('invalid HMAC never reaches storage or consumes the authenticated rate budget', async () => {
   let writes = 0, rateCalls = 0;
   const request = signed(summary());
-  request.headers.set('X-Sentinel-Signature', '0'.repeat(64));
+  request.headers.set('X-Gnyida-Signature', '0'.repeat(64));
   const response = await worker.fetch(request, {
-    SENTINEL_SHARED_SECRET: secret,
+    GNYIDA_SHARED_SECRET: secret,
     EVIDENCE_STORE: { put: async () => writes++ },
     RATE_LIMITER: { limit: async () => { rateCalls++; return { success: true }; } }
   });
@@ -75,7 +75,7 @@ test('nonce replay cannot write a second anchor', async () => {
   let writes = 0;
   const request = signed(summary());
   const duplicate = request.clone();
-  const env = { SENTINEL_SHARED_SECRET: secret, EVIDENCE_STORE: { put: async () => writes++ } };
+  const env = { GNYIDA_SHARED_SECRET: secret, EVIDENCE_STORE: { put: async () => writes++ } };
   assert.equal((await worker.fetch(request, env)).status, 200);
   assert.equal((await worker.fetch(duplicate, env)).status, 401);
   assert.equal(writes, 1);
@@ -83,7 +83,7 @@ test('nonce replay cannot write a second anchor', async () => {
 
 test('invalid checkpoint and missing manifest hash are rejected before persistence', async () => {
   let writes = 0;
-  const env = { SENTINEL_SHARED_SECRET: secret, EVIDENCE_STORE: { put: async () => writes++ } };
+  const env = { GNYIDA_SHARED_SECRET: secret, EVIDENCE_STORE: { put: async () => writes++ } };
   for (const change of [{ LedgerSequence: -1 }, { LedgerSequence: 2 ** 54 },
     { LedgerHash: 'invalid' }, { LedgerFile: '../audit-chain-2026-10-15.jsonl' }, { ManifestSha256: '' }]) {
     assert.equal((await worker.fetch(signed({ ...summary(), ...change }), env)).status, 400);
@@ -94,13 +94,13 @@ test('invalid checkpoint and missing manifest hash are rejected before persisten
 test('body size is bounded independently of Content-Length', async () => {
   const request = signed('x'.repeat(65537));
   request.headers.set('Content-Length', '1');
-  const response = await worker.fetch(request, { SENTINEL_SHARED_SECRET: secret });
+  const response = await worker.fetch(request, { GNYIDA_SHARED_SECRET: secret });
   assert.equal(response.status, 413);
 });
 
 test('legacy endpoint validation still rejects an invalid hash', async () => {
   const response = await worker.fetch(signed({ type: 'hash', value: 'invalid' }, '/report/hash'), {
-    SENTINEL_SHARED_SECRET: secret
+    GNYIDA_SHARED_SECRET: secret
   });
   assert.equal(response.status, 400);
 });

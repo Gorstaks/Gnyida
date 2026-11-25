@@ -34,14 +34,14 @@ function Normalize-Servers($value) {
 }
 $beforeV4 = Read-Static $v4Key
 $beforeV6 = Read-Static $v6Key
-$backup = Join-Path $env:RUNNER_TEMP ('SentinelDnsEmergency-' + [guid]::NewGuid().ToString('N') + '.json')
+$backup = Join-Path $env:RUNNER_TEMP ('GnyidaDnsEmergency-' + [guid]::NewGuid().ToString('N') + '.json')
 @{ AdapterId=$id; InterfaceIndex=$adapter.ifIndex; Ipv4=$beforeV4; Ipv6=$beforeV6 } | ConvertTo-Json | Set-Content $backup
-$previousAdapter = $env:SENTINEL_DNS_SMOKE_ADAPTER_ID
-$env:SENTINEL_DNS_SMOKE_ADAPTER_ID = $id
+$previousAdapter = $env:GNYIDA_DNS_SMOKE_ADAPTER_ID
+$env:GNYIDA_DNS_SMOKE_ADAPTER_ID = $id
 $process = $null
 $success = $false
 try {
-    $start = [Diagnostics.ProcessStartInfo]::new('dotnet', 'test tests/Sentinel.Tests/Sentinel.Tests.csproj -c Release --no-build --filter FullyQualifiedName~DnsRepairWindowsSmokeTests --logger "trx;LogFileName=dns-smoke.trx" --results-directory TestResults')
+    $start = [Diagnostics.ProcessStartInfo]::new('dotnet', 'test tests/Gnyida.Tests/Gnyida.Tests.csproj -c Release --no-build --filter FullyQualifiedName~DnsRepairWindowsSmokeTests --logger "trx;LogFileName=dns-smoke.trx" --results-directory TestResults')
     $start.WorkingDirectory = $repo
     $start.UseShellExecute = $false
     $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
@@ -67,7 +67,7 @@ try {
     if ([int]$trx.TestRun.ResultSummary.Counters.passed -ne 1) { throw 'Live DNS test did not execute and pass.' }
     $success = $true
 } finally {
-    $env:SENTINEL_DNS_SMOKE_ADAPTER_ID = $previousAdapter
+    $env:GNYIDA_DNS_SMOKE_ADAPTER_ID = $previousAdapter
     if ($process) { $process.Dispose() }
     # Independent recovery mechanism: never rely on the implementation under test to
     # restore runner connectivity after a native failure or a killed test host.

@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-// The dashboard is a plain embedded page (src/Sentinel.Agent/Dashboard/dashboard.html); exercise the authored code.
-const htmlSource = fs.readFileSync(path.join(__dirname, '../src/Sentinel.Agent/Dashboard/dashboard.html'), 'utf8');
+// The dashboard is a plain embedded page (src/Gnyida.Agent/Dashboard/dashboard.html); exercise the authored code.
+const htmlSource = fs.readFileSync(path.join(__dirname, '../src/Gnyida.Agent/Dashboard/dashboard.html'), 'utf8');
 function varSource(name) {
   const match = htmlSource.match(new RegExp('var ' + name + ' = \\{[\\s\\S]*?\\n\\};'));
   assert.ok(match, 'Missing dashboard table ' + name);
@@ -354,7 +354,7 @@ test('Overview cannot expand a native unsupported details element into the full 
   assert.match(htmlSource, /id="sensor-details" style="display:none"/);
   // CSS grid was banned only because of the IE11 WebBrowser fallback. That fallback is gone: without WebView2 the
   // window explains what to install instead of rendering this page in IE11.
-  const form = fs.readFileSync(path.join(__dirname, '../src/Sentinel.Agent/AgentDashboardForm.cs'), 'utf8');
+  const form = fs.readFileSync(path.join(__dirname, '../src/Gnyida.Agent/AgentDashboardForm.cs'), 'utf8');
   assert.doesNotMatch(form, /new WebBrowser\b/);
 });
 

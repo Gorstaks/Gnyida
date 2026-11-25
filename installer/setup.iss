@@ -1,28 +1,28 @@
 [Setup]
-AppName=Sentinel
+AppName=Gnyida
 AppVersion=3.9.3
 AppPublisher=Gorstak
 AppPublisherURL=https://gorstak.eu
 AppCopyright=Copyright (C) 2026 Gorstak
 VersionInfoVersion=3.9.3.0
 VersionInfoCompany=Gorstak
-VersionInfoDescription=Sentinel Endpoint Detection and Response Setup
+VersionInfoDescription=Gnyida Endpoint Detection and Response Setup
 VersionInfoCopyright=Copyright (C) 2026 Gorstak
-VersionInfoProductName=Sentinel EDR
+VersionInfoProductName=Gnyida EDR
 VersionInfoProductVersion=3.9.3.0
-VersionInfoOriginalFileName=SentinelSetup-3.9.3.exe
+VersionInfoOriginalFileName=GnyidaSetup-3.9.3.exe
 SourceDir=.
-DefaultDirName={autopf}\Sentinel
-DefaultGroupName=Sentinel
-SetupIconFile=assets\Sentinel.ico
+DefaultDirName={autopf}\Gnyida
+DefaultGroupName=Gnyida
+SetupIconFile=assets\Gnyida.ico
 LicenseFile=assets\disclaimer.txt
-UninstallDisplayIcon={app}\Sentinel.ico
+UninstallDisplayIcon={app}\Gnyida.ico
 Compression=lzma/max
 SolidCompression=no
 OutputDir=.
-OutputBaseFilename=SentinelSetup-3.9.3
+OutputBaseFilename=GnyidaSetup-3.9.3
 PrivilegesRequired=admin
-SetupMutex=Global\SentinelSetupMutex
+SetupMutex=Global\GnyidaSetupMutex
 UsePreviousAppDir=yes
 ; 3.7.1: the service runs as LocalSystem from {app}. The install directory is fixed to a protected
 ; Program Files location (no directory page); PrepareToInstall also rejects a previously chosen custom path.
@@ -31,21 +31,21 @@ CloseApplications=no
 RestartApplications=no
 
 [Languages]
-; Sentinel's own installer text lives in ..\localization\<language>\installer.isl, next to Inno Setup's standard messages.
+; Gnyida's own installer text lives in ..\localization\<language>\installer.isl, next to Inno Setup's standard messages.
 Name: "en"; MessagesFile: "compiler:Default.isl,..\localization\en\installer.isl"
 [Files]
-Source: "assets\Sentinel.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "assets\Gnyida.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "assets\disclaimer.txt"; DestDir: "{app}"; DestName: "DISCLAIMER.txt"; Flags: ignoreversion
 ; uninsrestartdelete: if a file is still locked at uninstall, Windows removes it at the next restart
 ; instead of leaving the executable behind.
 Source: "..\publish\service\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs uninsrestartdelete
 Source: "..\publish\agent\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs uninsrestartdelete
-Source: "..\publish\autorotate\SentinelAutoRotate.exe"; DestDir: "{app}"; Flags: ignoreversion uninsrestartdelete
+Source: "..\publish\autorotate\GnyidaAutoRotate.exe"; DestDir: "{app}"; Flags: ignoreversion uninsrestartdelete
 Source: "..\publish\exploitshield\*"; DestDir: "{app}\ExploitShield"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 
 [InstallDelete]
-; GVPN is a separate project now. Remove the copy older Sentinel releases bundled in {app}\GVPN
+; GVPN is a separate project now. Remove the copy older Gnyida releases bundled in {app}\GVPN
 ; (MigrateBundledGvpn stops it and removes its task/rules first) and its Start menu shortcut.
 Type: filesandordirs; Name: "{app}\GVPN"
 Type: files; Name: "{group}\GVPN.lnk"
@@ -55,18 +55,18 @@ Type: files; Name: "{group}\GVPN.lnk"
 Name: "autorotate"; Description: "{cm:AutoRotateTask}"; GroupDescription: "{cm:AutoRotateGroup}"; Flags: unchecked
 
 [Icons]
-Name: "{group}\Sentinel Agent"; Filename: "{app}\Sentinel.Agent.exe"; IconFilename: "{app}\Sentinel.ico"
+Name: "{group}\Gnyida Agent"; Filename: "{app}\Gnyida.Agent.exe"; IconFilename: "{app}\Gnyida.ico"
 
 [Run]
-Filename: "{app}\Sentinel.Service.exe"; Parameters: "--install"; Flags: runhidden waituntilterminated; StatusMsg: "{cm:StatusStarting}"
+Filename: "{app}\Gnyida.Service.exe"; Parameters: "--install"; Flags: runhidden waituntilterminated; StatusMsg: "{cm:StatusStarting}"
 Filename: "{sys}\cmd.exe"; Parameters: "/c del /f /q ""{app}\*.old"" 2>nul & exit /b 0"; Flags: runhidden waituntilterminated
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
-Type: filesandordirs; Name: "{commonpf32}\Sentinel"
+Type: filesandordirs; Name: "{commonpf32}\Gnyida"
 
 [Code]
-// Sentinel's own message by name (localization\<language>\installer.isl). %n becomes a line break and %1 the argument.
+// Gnyida's own message by name (localization\<language>\installer.isl). %n becomes a line break and %1 the argument.
 function Msg(const Name: String): String;
 begin
   Result := CustomMessage(Name);
@@ -81,7 +81,7 @@ const
   GvpnTaskName = 'GVPN';
 
 // ---------------------------------------------------------------------------------------------
-// GVPN migration. Sentinel releases up to 3.6.7 bundled GVPN in {app}\GVPN. GVPN is now a
+// GVPN migration. Gnyida releases up to 3.6.7 bundled GVPN in {app}\GVPN. GVPN is now a
 // separate project with its own installer, and it uses the SAME task name, firewall rule names
 // and adapter name as the bundled copy. So every step below acts only on what belongs to the
 // bundled copy (identified by its path under {app}\GVPN) and leaves a standalone GVPN alone.
@@ -201,7 +201,7 @@ begin
     Rules[1] := 'GVPN Allow OpenVPN';
     Rules[2] := 'GVPN Allow Loopback';
     Rules[3] := 'GVPN Allow DNS';
-    Rules[4] := 'GVPN Allow Sentinel';
+    Rules[4] := 'GVPN Allow Gnyida';
     for i := 0 to GetArrayLength(Rules) - 1 do
       Exec(Netsh, 'advfirewall firewall delete rule name="' + Rules[i] + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Log('GVPN migration: kill-switch firewall rules removed.');
@@ -215,7 +215,7 @@ begin
   if CurStep = ssPostInstall then
   begin
     ResultCode := -1;
-    if not Exec(ExpandConstant('{app}\ExploitShield\Sentinel.ExploitShield.exe'), '--install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    if not Exec(ExpandConstant('{app}\ExploitShield\Gnyida.ExploitShield.exe'), '--install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
       RaiseException(Msg('ExploitShieldStartFailed'));
     if ResultCode <> 0 then
       RaiseException(Msg('ExploitShieldScheduleFailed'));
@@ -223,8 +223,8 @@ begin
     if WizardIsTaskSelected('autorotate') then
     begin
       ResultCode := -1;
-      if (not Exec(ExpandConstant('{app}\SentinelAutoRotate.exe'), '--install --force', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
-        MsgBox(Msg1('AutoRotateNotEnabled', ExpandConstant('{commonappdata}\Sentinel\AutoRotate\events.log')), mbError, MB_OK);
+      if (not Exec(ExpandConstant('{app}\GnyidaAutoRotate.exe'), '--install --force', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
+        MsgBox(Msg1('AutoRotateNotEnabled', ExpandConstant('{commonappdata}\Gnyida\AutoRotate\events.log')), mbError, MB_OK);
     end;
   end;
 end;
@@ -352,36 +352,36 @@ begin
   end;
 end;
 
-// One pass: force-kills the Sentinel service and agent images. Returns True when a process
+// One pass: force-kills the Gnyida service and agent images. Returns True when a process
 // was found and killed, False when taskkill reports no matching process (exit 128).
-function KillSentinelImagesOnce(): Boolean;
+function KillGnyidaImagesOnce(): Boolean;
 var
   ResultCode: Integer;
   Taskkill: String;
 begin
   Result := False;
   Taskkill := SysNative('taskkill.exe');
-  Exec(Taskkill, '/F /IM "Sentinel.Service.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Taskkill, '/F /IM "Gnyida.Service.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   if ResultCode <> 128 then Result := True;
-  Exec(Taskkill, '/F /IM "Sentinel.Agent.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Taskkill, '/F /IM "Gnyida.Agent.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   if ResultCode <> 128 then Result := True;
-  Exec(Taskkill, '/F /IM "SentinelAutoRotate.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Taskkill, '/F /IM "GnyidaAutoRotate.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   if ResultCode <> 128 then Result := True;
 end;
 
-// Stops every Sentinel service and agent process before files are copied. The service can
+// Stops every Gnyida service and agent process before files are copied. The service can
 // restart the agent while it shuts down, so this repeats until a pass finds nothing. Users
 // upgrading should never have to end processes by hand, so if the processes cannot be
 // stopped, setup stops with a message instead of failing on a locked file.
-procedure WaitForSentinelExit();
+procedure WaitForGnyidaExit();
 var
   Attempt: Integer;
 begin
   for Attempt := 1 to 30 do
   begin
-    if not KillSentinelImagesOnce() then
+    if not KillGnyidaImagesOnce() then
     begin
-      Log('Sentinel: no service or agent process remains before upgrade.');
+      Log('Gnyida: no service or agent process remains before upgrade.');
       Exit;
     end;
     Sleep(1000);
@@ -394,31 +394,31 @@ var
   ResultCode: Integer;
   Svc, Sc: String;
 begin
-  if FileExists(ExpandConstant('{app}\ExploitShield\Sentinel.ExploitShield.exe')) then
+  if FileExists(ExpandConstant('{app}\ExploitShield\Gnyida.ExploitShield.exe')) then
   begin
     ResultCode := -1;
-    if not Exec(ExpandConstant('{app}\ExploitShield\Sentinel.ExploitShield.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    if not Exec(ExpandConstant('{app}\ExploitShield\Gnyida.ExploitShield.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
       RaiseException(Msg('UpgradeExploitShieldStopFailed'));
     if ResultCode <> 0 then
       RaiseException(Msg('UpgradeExploitShieldScheduleFailed'));
   end;
-  Svc := ExpandConstant('{app}\Sentinel.Service.exe');
+  Svc := ExpandConstant('{app}\Gnyida.Service.exe');
   if FileExists(Svc) then
   begin
     Exec(Svc, '--prepare-upgrade', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Sleep(800);
   end;
 
-  // Stop the watchdog FIRST via the SCM, otherwise SentinelGuard restarts
-  // Sentinel.Service mid-upgrade and re-locks the DLLs (the regression that
+  // Stop the watchdog FIRST via the SCM, otherwise GnyidaGuard restarts
+  // Gnyida.Service mid-upgrade and re-locks the DLLs (the regression that
   // brought back "DeleteFile code 5"). Then stop the main service. Give the
   // SCM time to actually transition to STOPPED before we taskkill/rename.
   Sc := SysNative('sc.exe');
-  Exec(Sc, 'stop SentinelGuard', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec(Sc, 'stop Sentinel', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Sc, 'stop GnyidaGuard', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Sc, 'stop Gnyida', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(2000);
 
-  WaitForSentinelExit();
+  WaitForGnyidaExit();
 
   // Upgrade from a release that bundled GVPN: stop and unregister that copy before
   // [InstallDelete] removes {app}\GVPN.
@@ -427,13 +427,13 @@ begin
   if IsProtectedInstallDir(ExpandConstant('{app}')) then
     ResetInstallDirAcls(ExpandConstant('{app}'))
   else
-    Log('Sentinel: skipping recursive ACL reset on unprotected directory ' + ExpandConstant('{app}'));
-  ResetInstallDirAcls(ExpandConstant('{commonpf}\Sentinel'));
-  ResetInstallDirAcls(ExpandConstant('{commonpf32}\Sentinel'));
-  ResetInstallDirAcls(ExpandConstant('{autopf}\Sentinel'));
+    Log('Gnyida: skipping recursive ACL reset on unprotected directory ' + ExpandConstant('{app}'));
+  ResetInstallDirAcls(ExpandConstant('{commonpf}\Gnyida'));
+  ResetInstallDirAcls(ExpandConstant('{commonpf32}\Gnyida'));
+  ResetInstallDirAcls(ExpandConstant('{autopf}\Gnyida'));
 
   // Rename every loaded EXE/DLL aside so Inno can write the new payload even if
-  // a handle is still mapped. Covers Sentinel.Core.dll and the
+  // a handle is still mapped. Covers Gnyida.Core.dll and the
   // Microsoft.Extensions.*.dll set that tripped the failed upgrade.
   RenameLockedBinariesAside(ExpandConstant('{app}'));
 end;
@@ -451,20 +451,20 @@ begin
     Exit;
   end;
 
-  if RegValueExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'SentinelAgent') or
-     RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\Sentinel') or
+  if RegValueExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'GnyidaAgent') or
+     RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\Gnyida') or
      DirExists(ExpandConstant('{app}')) or
-     DirExists(ExpandConstant('{commonpf32}\Sentinel')) then
+     DirExists(ExpandConstant('{commonpf32}\Gnyida')) then
   begin
     StopExistingService();
   end;
 end;
 
-// Force-kills every Sentinel process and waits until none is left. taskkill exits with 128
+// Force-kills every Gnyida process and waits until none is left. taskkill exits with 128
 // when no matching process exists, so a pass with only 128 results means all are gone.
 // Repeats because a process can come back between passes. Anything still running after the
 // retries is removed at the next restart by the uninsrestartdelete file flag.
-procedure KillSentinelProcesses();
+procedure KillGnyidaProcesses();
 var
   ResultCode, Attempt: Integer;
   Taskkill: String;
@@ -474,31 +474,31 @@ begin
   for Attempt := 1 to 10 do
   begin
     AnyRunning := False;
-    Exec(Taskkill, '/F /IM "Sentinel.Service.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(Taskkill, '/F /IM "Gnyida.Service.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     if ResultCode <> 128 then AnyRunning := True;
-    Exec(Taskkill, '/F /IM "Sentinel.Agent.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(Taskkill, '/F /IM "Gnyida.Agent.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     if ResultCode <> 128 then AnyRunning := True;
-    Exec(Taskkill, '/F /IM "SentinelAutoRotate.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(Taskkill, '/F /IM "GnyidaAutoRotate.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     if ResultCode <> 128 then AnyRunning := True;
     if not AnyRunning then
     begin
-      Log('Sentinel: all Sentinel processes have exited.');
+      Log('Gnyida: all Gnyida processes have exited.');
       Exit;
     end;
     Sleep(500);
   end;
-  Log('Sentinel: some Sentinel processes did not exit; locked files are removed at restart.');
+  Log('Gnyida: some Gnyida processes did not exit; locked files are removed at restart.');
 end;
 
 // Native, DLL-independent equivalent of InstallBootstrap.RunUninstallCleanup().
 //
-// The managed --uninstall-cleanup path lives in Sentinel.Core.dll. When an AV
+// The managed --uninstall-cleanup path lives in Gnyida.Core.dll. When an AV
 // engine quarantines that DLL (recurring Wacatac.B!ml false positive on
-// Sentinel.Core.dll), Sentinel.Service.exe cannot load its core assembly and
+// Gnyida.Core.dll), Gnyida.Service.exe cannot load its core assembly and
 // --uninstall-cleanup exits non-zero WITHOUT doing any cleanup. This fallback
 // reproduces the same teardown using only native Windows tools so a quarantined
 // core DLL can never strand the install: stop watchdog+service, restore the
-// firewall rollback journal, delete Sentinel's own self-isolation rules in both
+// firewall rollback journal, delete Gnyida's own self-isolation rules in both
 // policy stores, delete the service registrations, and remove the Run + SafeBoot
 // keys. Every step is best-effort - a missing journal means the firewall was
 // never modified, and absent services/keys are simply skipped.
@@ -509,29 +509,29 @@ var
   Rules: array of String;
   i: Integer;
 begin
-  Log('Sentinel: running native uninstall fallback cleanup (managed --uninstall-cleanup unavailable or failed).');
+  Log('Gnyida: running native uninstall fallback cleanup (managed --uninstall-cleanup unavailable or failed).');
 
   Sc := SysNative('sc.exe');
   Netsh := SysNative('netsh.exe');
 
   // 1. Stop the watchdog first (it restarts the service), then the service.
-  Exec(Sc, 'stop SentinelGuard', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec(Sc, 'stop Sentinel', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Sc, 'stop GnyidaGuard', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Sc, 'stop Gnyida', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(2000);
 
   // 2. Delete the SCM registrations before killing anything. A killed registered service
   // counts as a crash, and ApplyCrashRestart configures SCM to restart it after 2 s. The
   // restarted service would relaunch the Agent and lock the files Setup must remove.
-  Exec(Sc, 'delete SentinelGuard', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec(Sc, 'delete Sentinel', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Sc, 'delete GnyidaGuard', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Sc, 'delete Gnyida', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
   // 3. Force-kill survivors and wait until they exit so handles release before file removal.
-  KillSentinelProcesses();
+  KillGnyidaProcesses();
 
-  // 4. Restore the firewall policy from Sentinel's own rollback journal. The
-  // journal records only rules/profiles Sentinel changed, so this touches
+  // 4. Restore the firewall policy from Gnyida's own rollback journal. The
+  // journal records only rules/profiles Gnyida changed, so this touches
   // nothing else. If the journal is absent, the firewall was never modified.
-  Journal := ExpandConstant('{commonappdata}\Sentinel\FirewallPolicy\rollback.json');
+  Journal := ExpandConstant('{commonappdata}\Gnyida\FirewallPolicy\rollback.json');
   if FileExists(Journal) then
   begin
     PowerShellPath := ExpandConstant('{sysnative}\WindowsPowerShell\v1.0\powershell.exe');
@@ -553,41 +553,41 @@ begin
     if not Exec(PowerShellPath,
       '-NoLogo -NoProfile -NonInteractive -Command "' + PsRestore + '"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-      Log('Sentinel: firewall journal restore could not be launched; continuing teardown.')
+      Log('Gnyida: firewall journal restore could not be launched; continuing teardown.')
     else if ResultCode <> 0 then
-      Log('Sentinel: firewall journal restore exited ' + IntToStr(ResultCode) + '; continuing teardown.')
+      Log('Gnyida: firewall journal restore exited ' + IntToStr(ResultCode) + '; continuing teardown.')
     else
-      Log('Sentinel: firewall policy restored from rollback journal.');
+      Log('Gnyida: firewall policy restored from rollback journal.');
   end
   else
-    Log('Sentinel: no firewall rollback journal present; firewall was never modified.');
+    Log('Gnyida: no firewall rollback journal present; firewall was never modified.');
 
-  // 5. Remove Sentinel's own self-isolation rules (both PersistentStore and
+  // 5. Remove Gnyida's own self-isolation rules (both PersistentStore and
   // localhost) plus the named RPC block rule. These match SelfNetworkIsolation.
   SetArrayLength(Rules, 11);
-  Rules[0]  := 'Sentinel-Offline-Sentinel.Service.exe-IN';
-  Rules[1]  := 'Sentinel-Offline-Sentinel.Agent.exe-IN';
-  Rules[2]  := 'Sentinel-Offline-Sentinel.Service.exe-OUT';
-  Rules[3]  := 'Sentinel-Offline-Sentinel.Agent.exe-OUT';
-  Rules[4]  := 'Sentinel-Offline-Sentinel.Service.exe-OUT-Repair';
-  Rules[5]  := 'Sentinel-Offline-Sentinel.Agent.exe-OUT-Repair';
-  Rules[6]  := 'Sentinel-Offline-SentinelAutoRotate.exe-OUT';
-  Rules[7]  := 'Sentinel-Offline-SentinelAutoRotate.exe-OUT-Repair';
-  Rules[8]  := 'Sentinel-Offline-SentinelAutoRotate.exe-IN';
-  Rules[9]  := 'Sentinel-Offline-SentinelAutoRotate.exe-IN-Repair';
-  Rules[10] := 'Sentinel-Block-Remote-RPC-Ephemeral';
+  Rules[0]  := 'Gnyida-Offline-Gnyida.Service.exe-IN';
+  Rules[1]  := 'Gnyida-Offline-Gnyida.Agent.exe-IN';
+  Rules[2]  := 'Gnyida-Offline-Gnyida.Service.exe-OUT';
+  Rules[3]  := 'Gnyida-Offline-Gnyida.Agent.exe-OUT';
+  Rules[4]  := 'Gnyida-Offline-Gnyida.Service.exe-OUT-Repair';
+  Rules[5]  := 'Gnyida-Offline-Gnyida.Agent.exe-OUT-Repair';
+  Rules[6]  := 'Gnyida-Offline-GnyidaAutoRotate.exe-OUT';
+  Rules[7]  := 'Gnyida-Offline-GnyidaAutoRotate.exe-OUT-Repair';
+  Rules[8]  := 'Gnyida-Offline-GnyidaAutoRotate.exe-IN';
+  Rules[9]  := 'Gnyida-Offline-GnyidaAutoRotate.exe-IN-Repair';
+  Rules[10] := 'Gnyida-Block-Remote-RPC-Ephemeral';
   for i := 0 to GetArrayLength(Rules) - 1 do
     Exec(Netsh, 'advfirewall firewall delete rule name="' + Rules[i] + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
   // 6. Remove the agent autorun value and the SafeBoot keys.
-  RegDeleteValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'SentinelAgent');
-  RegDeleteKeyIncludingSubkeys(HKLM, 'SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\Sentinel');
-  RegDeleteKeyIncludingSubkeys(HKLM, 'SYSTEM\CurrentControlSet\Control\SafeBoot\Network\Sentinel');
+  RegDeleteValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'GnyidaAgent');
+  RegDeleteKeyIncludingSubkeys(HKLM, 'SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\Gnyida');
+  RegDeleteKeyIncludingSubkeys(HKLM, 'SYSTEM\CurrentControlSet\Control\SafeBoot\Network\Gnyida');
 
-  Log('Sentinel: native uninstall fallback cleanup complete.');
+  Log('Gnyida: native uninstall fallback cleanup complete.');
 end;
 
-// True when any SentinelAutoRotate task (current or from the earlier release) is still registered.
+// True when any GnyidaAutoRotate task (current or from the earlier release) is still registered.
 function AutoRotateTaskExists(): Boolean;
 var
   ResultCode: Integer;
@@ -595,10 +595,10 @@ var
 begin
   Result := False;
   Schtasks := SysNative('schtasks.exe');
-  if Exec(Schtasks, '/Query /TN "SentinelAutoRotate-Logon"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
-  if Exec(Schtasks, '/Query /TN "SentinelAutoRotate-Boot"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
-  if Exec(Schtasks, '/Query /TN "SentinelAutoRotate"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
-  if Exec(Schtasks, '/Query /TN "SentinelAutoRotateStartup"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
+  if Exec(Schtasks, '/Query /TN "GnyidaAutoRotate-Logon"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
+  if Exec(Schtasks, '/Query /TN "GnyidaAutoRotate-Boot"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
+  if Exec(Schtasks, '/Query /TN "GnyidaAutoRotate"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
+  if Exec(Schtasks, '/Query /TN "GnyidaAutoRotateStartup"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -609,22 +609,22 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
-    if FileExists(ExpandConstant('{app}\ExploitShield\Sentinel.ExploitShield.exe')) then
+    if FileExists(ExpandConstant('{app}\ExploitShield\Gnyida.ExploitShield.exe')) then
     begin
       ResultCode := -1;
-      if not Exec(ExpandConstant('{app}\ExploitShield\Sentinel.ExploitShield.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      if not Exec(ExpandConstant('{app}\ExploitShield\Gnyida.ExploitShield.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
         RaiseException(Msg('UninstallExploitShieldStopFailed'));
       if ResultCode <> 0 then
         RaiseException(Msg('UninstallExploitShieldScheduleFailed'));
     end;
-    // SentinelAutoRotate blanks the account password before its tasks are removed. Fail closed:
+    // GnyidaAutoRotate blanks the account password before its tasks are removed. Fail closed:
     // if the blank cannot be restored, cancel the uninstall so the account is not left on an
     // unknown password. The exe is still present at this point, so it can run its own cleanup.
-    if FileExists(ExpandConstant('{app}\SentinelAutoRotate.exe')) then
+    if FileExists(ExpandConstant('{app}\GnyidaAutoRotate.exe')) then
     begin
       ResultCode := -1;
-      if (not Exec(ExpandConstant('{app}\SentinelAutoRotate.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
-        RaiseException(Msg1('AutoRotateUninstallBlankFailed', ExpandConstant('{commonappdata}\Sentinel\AutoRotate\events.log')));
+      if (not Exec(ExpandConstant('{app}\GnyidaAutoRotate.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
+        RaiseException(Msg1('AutoRotateUninstallBlankFailed', ExpandConstant('{commonappdata}\Gnyida\AutoRotate\events.log')));
     end
     else if AutoRotateTaskExists() then
       RaiseException(Msg('AutoRotateUninstallExeMissing'));
@@ -633,13 +633,13 @@ begin
     // Without this the processes stay running and file deletion fails silently,
     // leaving both binaries on disk and the service registered.
     //
-    // The managed --uninstall-cleanup lives in Sentinel.Core.dll. If an AV engine
-    // has quarantined that DLL, Sentinel.Service.exe cannot load it and this call
+    // The managed --uninstall-cleanup lives in Gnyida.Core.dll. If an AV engine
+    // has quarantined that DLL, Gnyida.Service.exe cannot load it and this call
     // fails WITHOUT doing any cleanup. Previously that raised an exception and
     // aborted the whole uninstall, stranding every file on disk with no way out.
     // Now a launch failure or non-zero exit falls back to native cleanup
     // (UninstallFallbackCleanup) so the uninstall always completes.
-    Svc := ExpandConstant('{app}\Sentinel.Service.exe');
+    Svc := ExpandConstant('{app}\Gnyida.Service.exe');
     CleanupOk := False;
     if FileExists(Svc) then
     begin
@@ -650,24 +650,24 @@ begin
         Sleep(800);
       end
       else if ResultCode = -1 then
-        Log('Sentinel: --uninstall-cleanup could not be launched (core DLL likely quarantined); using native fallback.')
+        Log('Gnyida: --uninstall-cleanup could not be launched (core DLL likely quarantined); using native fallback.')
       else
-        Log('Sentinel: --uninstall-cleanup exited ' + IntToStr(ResultCode) + '; using native fallback.');
+        Log('Gnyida: --uninstall-cleanup exited ' + IntToStr(ResultCode) + '; using native fallback.');
     end;
 
     if not CleanupOk then
       UninstallFallbackCleanup();
 
-    KillSentinelProcesses();
+    KillGnyidaProcesses();
     // Only acts when a GVPN bundled by an older release is still under {app}\GVPN; a separate
     // GVPN install is never touched.
     MigrateBundledGvpn();
 
     // Legacy GSecurity IPsec policies may belong to the owner; a name is not ownership.
-    // Remove only Sentinel's separately named firewall rule.
-    Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall delete rule name="Sentinel-Block-Remote-RPC-Ephemeral"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // Remove only Gnyida's separately named firewall rule.
+    Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall delete rule name="Gnyida-Block-Remote-RPC-Ephemeral"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
     // Remove agent autorun key
-    RegDeleteValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'SentinelAgent');
+    RegDeleteValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'GnyidaAgent');
   end;
 end;

@@ -48,8 +48,8 @@ browser passwords. Inactive CG is contextual rather than a generic missing consu
 protection alert. Memory Integrity and LSASS runtime gaps remain separate observations.
 
 Defender service/antivirus/real-time status is queried only as optional integration context.
-Sentinel targets standalone operation; Defender's ASR and antivirus capabilities are not
-credited to Sentinel itself. Missing providers remain explicit, including on custom Windows
+Gnyida targets standalone operation; Defender's ASR and antivirus capabilities are not
+credited to Gnyida itself. Missing providers remain explicit, including on custom Windows
 installations. Runtime WMI queries have bounded enumeration timeouts. There are no remote
 queries or outbound probes in this audit.
 

@@ -1,7 +1,7 @@
 # Input Integrity — Verification Note
 
 Branch: `feature/input-integrity`
-Worktree: `e:\Gorstak\Sentinel\.worktrees\input-integrity`
+Worktree: `e:\Gorstak\Gnyida\.worktrees\input-integrity`
 Target framework: `net48-windows` (product), xUnit test project.
 
 This note records exactly what was run and the results so the reviewer does not need
@@ -11,7 +11,7 @@ to re-run anything.
 
 ## What changed
 
-1. **New monitor `InputIntegrityGuard`** — `src/Sentinel.Core/InputIntegrityGuard.cs`
+1. **New monitor `InputIntegrityGuard`** — `src/Gnyida.Core/InputIntegrityGuard.cs`
    (a `BackgroundService`, matching `ClickjackingGuard`). One monitor, three behavioral
    sub-detectors, **all emitted Tier2Indicator / LogOnly**:
    - (a) **Synthetic input injection** — low-level keyboard (`WH_KEYBOARD_LL`=13) + mouse
@@ -36,16 +36,16 @@ to re-run anything.
      crashes the host, no silent catches (all log >= Debug), no attacker-controllable trust,
      no destructive response.
 
-2. **Agent registration** — `src/Sentinel.Agent/Program.cs`
+2. **Agent registration** — `src/Gnyida.Agent/Program.cs`
    - Replaced `services.AddHostedService<PhantomKeystrokeGuard>()` with
      `services.AddHostedService<InputIntegrityGuard>()` (flat `AddHostedService`, matching the
      Agent's user-session convention).
    - Registered the previously-dead `services.AddHostedService<AcousticThreatMonitor>()`
      alongside its user-session peers. Its only ctor deps (`DetectionEngine`, `ILogger`) are
-     already in the Agent container and NAudio ships with `Sentinel.Core`, so it is
+     already in the Agent container and NAudio ships with `Gnyida.Core`, so it is
      satisfiable with no extra wiring. **Its detection logic was not changed.**
 
-3. **PhantomKeystrokeGuard removed** — `src/Sentinel.Core/UserSessionMonitors.cs`
+3. **PhantomKeystrokeGuard removed** — `src/Gnyida.Core/UserSessionMonitors.cs`
    - Deleted the `PhantomKeystrokeGuard` class. Its documented `WH_KEYBOARD_LL`/`LLKHF_INJECTED`
      behavior was never implemented; the real code only name-matched
      `sendinput`/`autoit`/`nircmd`/`inputsimulator` binaries in `\Temp\`/`\Downloads\` and
@@ -54,7 +54,7 @@ to re-run anything.
      `InputIntegrityGuard`. A short note was left at the former class site.
    - Removed its DI registration (see #2). Grep confirms no remaining product references.
 
-4. **Tests** — `tests/Sentinel.Tests/`
+4. **Tests** — `tests/Gnyida.Tests/`
    - Deleted obsolete `Monitors/PhantomKeystrokeGuardTests.cs`.
    - Added `Monitors/InputIntegrityGuardTests.cs`:
      - `AllSignals_AreTier2Indicator_NotTier1` (all four factory events) — proves Tier2, not Tier1.
@@ -86,25 +86,25 @@ to re-run anything.
 
 ### Build (Release, whole solution)
 ```
-dotnet build e:\Gorstak\Sentinel\.worktrees\input-integrity\Sentinel.sln -c Release
+dotnet build e:\Gorstak\Gnyida\.worktrees\input-integrity\Gnyida.sln -c Release
 ```
 Result: **Build succeeded. 0 Warning(s), 0 Error(s).**
-All projects built: Sentinel.Core, Sentinel.Agent, Sentinel.Service, Sentinel.Tests,
-Sentinel.AutoRotate, Sentinel.MlTrainer.
+All projects built: Gnyida.Core, Gnyida.Agent, Gnyida.Service, Gnyida.Tests,
+Gnyida.AutoRotate, Gnyida.MlTrainer.
 
 (Confirms the solution still builds with `PhantomKeystrokeGuard` removed — no dangling
 references.)
 
 ### Targeted tests (new + the fixed unrelated file)
 ```
-dotnet test tests\Sentinel.Tests\Sentinel.Tests.csproj -c Release --no-build \
+dotnet test tests\Gnyida.Tests\Gnyida.Tests.csproj -c Release --no-build \
   --filter "FullyQualifiedName~InputIntegrityGuard|FullyQualifiedName~ParentPidSpoof"
 ```
 Result: **Passed! Failed: 0, Passed: 35, Skipped: 0, Total: 35.**
 
 ### Full test suite
 ```
-dotnet test tests\Sentinel.Tests\Sentinel.Tests.csproj -c Release --no-build
+dotnet test tests\Gnyida.Tests\Gnyida.Tests.csproj -c Release --no-build
 ```
 Result: **Failed: 2, Passed: 2643, Skipped: 0, Total: 2645.**
 

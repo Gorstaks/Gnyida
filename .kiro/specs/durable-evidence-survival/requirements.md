@@ -17,16 +17,16 @@ and `#[[file:../../../docs/constraints.md]]`.
 
 Today, when a local admin (or malware running as SYSTEM/admin) attacks the host:
 
-- `AutoIncidentReporter` writes a sealed evidence pack to `%ProgramData%\Sentinel\IncidentReports`.
+- `AutoIncidentReporter` writes a sealed evidence pack to `%ProgramData%\Gnyida\IncidentReports`.
 - `AntiTamperGuard.CheckServiceRegistration` detects **deletion/disable** of the service and
   re-registers it.
 
 But two gaps remain that let an admin win *quietly*:
 
-1. **Clean SCM stop is not treated as hostile.** `sc stop Sentinel` / SCM stop of a still-registered
-   service triggers only the graceful shutdown path (`SentinelService` stop, `WriteLastGasp`). No
+1. **Clean SCM stop is not treated as hostile.** `sc stop Gnyida` / SCM stop of a still-registered
+   service triggers only the graceful shutdown path (`GnyidaService` stop, `WriteLastGasp`). No
    detection is emitted and no evidence is flushed before the process dies.
-2. **Evidence is local-only.** All packs, JSONL, and audit logs live under `%ProgramData%\Sentinel`,
+2. **Evidence is local-only.** All packs, JSONL, and audit logs live under `%ProgramData%\Gnyida`,
    which a local admin can read, tamper with, or delete after suppression. Nothing is mirrored
    off-host, so removing the folder erases the trail.
 
@@ -35,7 +35,7 @@ But two gaps remain that let an admin win *quietly*:
 - Detect and record when the Service is stopped in a way consistent with tampering, and preserve
   that observation durably.
 - Optionally mirror sealed evidence packs off-host so suppression cannot erase them.
-- Do all of this while honoring Sentinel's constraints: userland-only, transparent, fail-closed
+- Do all of this while honoring Gnyida's constraints: userland-only, transparent, fail-closed
   outbound, HMAC-signed, compiled-config, no covert exfil, no overclaiming.
 
 ## Non-goals (explicit)
@@ -51,7 +51,7 @@ But two gaps remain that let an admin win *quietly*:
 
 ### R1 - Detect hostile-looking Service stop (alert-before-suppression)
 
-**User story:** As a victim, when an attacker stops Sentinel to go quiet, I want a durable record
+**User story:** As a victim, when an attacker stops Gnyida to go quiet, I want a durable record
 that the service was stopped under suspicious circumstances, so the gap in coverage is evidence,
 not silence.
 
@@ -72,7 +72,7 @@ Acceptance criteria (EARS):
 ### R2 - Off-host evidence mirror (opt-in, signed, fail-closed)
 
 **User story:** As a high-profile target, I want confirmed-attack evidence copied off my machine so
-a local admin who suppresses Sentinel cannot also delete the proof.
+a local admin who suppresses Gnyida cannot also delete the proof.
 
 Acceptance criteria (EARS):
 
@@ -81,8 +81,8 @@ Acceptance criteria (EARS):
   existing `ProxyAuthHelper` HMAC-signed path (new Worker route, e.g. `/report/evidence`).
 - WHEN off-host mirroring is not enabled OR the shared secret is missing/short (< 16 chars), the
   system SHALL skip the upload silently (fail closed, per FR-11) and continue writing the local pack.
-- The upload SHALL be HMAC-signed with headers `X-Sentinel-Timestamp`, `X-Sentinel-Nonce`,
-  `X-Sentinel-Signature` only, and SHALL NEVER transmit the shared secret (FR-11).
+- The upload SHALL be HMAC-signed with headers `X-Gnyida-Timestamp`, `X-Gnyida-Nonce`,
+  `X-Gnyida-Signature` only, and SHALL NEVER transmit the shared secret (FR-11).
 - The upload SHALL NOT transmit user file contents or secrets - only the detection summary,
   indicators, integrity hashes, and the machine-bound seal as an **origin proof** (see R4).
 - The upload SHALL never crash the reporting path on failure (best-effort, Debug-logged), mirroring

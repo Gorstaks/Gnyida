@@ -1,10 +1,10 @@
-# Sentinel Documentation
+# Gnyida Documentation
 
 **Current Version:** 3.6.4 (see [CHANGELOG.md](CHANGELOG.md) for release history)
 
 ## Core Documentation
 
-Essential documents for understanding and operating Sentinel:
+Essential documents for understanding and operating Gnyida:
 
 | Document | Purpose |
 |----------|---------|
@@ -30,9 +30,9 @@ Specific feature and capability documentation:
 
 ## Tools Documentation
 
-- **[Sentinel.ExploitShield](../tools/Sentinel.ExploitShield/README.md)** - Automatic Windows CVE/PoC collection and patching
-- **[Sentinel.Diagnostics](../tools/Sentinel.Diagnostics/README.md)** - Local event log replay and redacted export for diagnostics
-- **[Sentinel.MlTrainer](../tools/Sentinel.MlTrainer/README.md)** - Optional offline ML model training (soft signals only)
+- **[Gnyida.ExploitShield](../tools/Gnyida.ExploitShield/README.md)** - Automatic Windows CVE/PoC collection and patching
+- **[Gnyida.Diagnostics](../tools/Gnyida.Diagnostics/README.md)** - Local event log replay and redacted export for diagnostics
+- **[Gnyida.MlTrainer](../tools/Gnyida.MlTrainer/README.md)** - Optional offline ML model training (soft signals only)
 
 ## Historical References
 
@@ -49,7 +49,7 @@ These documents provide historical context and implementation rationale:
 
 ### For Operators
 1. Start with [design.md](design.md) to understand the detection pipeline
-2. Review [THREAT_MODEL.md](THREAT_MODEL.md) for what Sentinel protects against
+2. Review [THREAT_MODEL.md](THREAT_MODEL.md) for what Gnyida protects against
 3. Check [CHANGELOG.md](CHANGELOG.md) for new features in your version
 
 ### For Developers

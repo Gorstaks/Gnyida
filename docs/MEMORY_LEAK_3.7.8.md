@@ -1,6 +1,6 @@
 # Service memory leak: DetectionEngine drain loop (fixed in 3.7.8)
 
-Incident record for the `Sentinel.Service` memory growth seen on 3.7.7. Read this before changing the
+Incident record for the `Gnyida.Service` memory growth seen on 3.7.7. Read this before changing the
 `DetectionEngine` telemetry drain loop, `DualLaneWait`, or any code that waits on a channel or a
 cancellation token from a long-running loop.
 
@@ -11,16 +11,16 @@ check is in [Verification](#verification-and-acceptance-criteria). Update this f
 
 | | |
 |---|---|
-| Symptom | `Sentinel.Service` working set reached 9.9 GB after about two days of uptime. |
+| Symptom | `Gnyida.Service` working set reached 9.9 GB after about two days of uptime. |
 | Root cause | `DetectionEngine.ProcessTelemetryQueueAsync` started a new pair of `WaitToReadAsync` calls on every idle pass and raced them with `Task.WhenAny`. The losing wait stayed pending forever. |
 | Size of leak | 15.8 million leaked waits, about 4.9 GB of live objects in the 3.7.7 heap dump. |
 | Fix | `DualLaneWait` keeps at most one outstanding wait per lane and re-issues a wait only after it completes. |
 | Behavior change | None to detection, tiers, deduplication or response. Only the idle wait mechanics changed. |
-| Tests | `tests/Sentinel.Tests/DualLaneWaitTests.cs`. Full suite 3,761 passed, 9 skipped, 0 failed. |
+| Tests | `tests/Gnyida.Tests/DualLaneWaitTests.cs`. Full suite 3,761 passed, 9 skipped, 0 failed. |
 
 ## Evidence
 
-### Growth curve (`Logs\diagnostic.jsonl`, `[SentinelHealthCheck] High memory usage`)
+### Growth curve (`Logs\diagnostic.jsonl`, `[GnyidaHealthCheck] High memory usage`)
 
 The service started on 15 Nov at about 10:21 and was never restarted. Times are as displayed in local time.
 
@@ -111,7 +111,7 @@ free them. This is a leak of pending asynchronous operations, not a large cache.
 
 ## Fix
 
-- New `src/Sentinel.Core/DualLaneWait.cs` (internal). It holds one outstanding `WaitToReadAsync` per lane and
+- New `src/Gnyida.Core/DualLaneWait.cs` (internal). It holds one outstanding `WaitToReadAsync` per lane and
   re-issues a wait only after it has completed. `WaitAsync` returns the wait that completed, which is then
   consumed.
 - `DetectionEngine.ProcessTelemetryQueueAsync` creates one `DualLaneWait` before the loop and calls
@@ -179,8 +179,8 @@ Automated (done, on the build that contains the fix):
 
 On a running service (**pending**, requires installing 3.7.8):
 
-- After 24 hours of uptime, `Sentinel.Service` working set should stay in the hundreds of MB, and
-  `[SentinelHealthCheck] High memory usage` should not appear. Before the fix it grew by 100 to 600 MB per
+- After 24 hours of uptime, `Gnyida.Service` working set should stay in the hundreds of MB, and
+  `[GnyidaHealthCheck] High memory usage` should not appear. Before the fix it grew by 100 to 600 MB per
   hour.
 - If it still grows, do not guess. Follow `tools/diagnostics/heap-dump/README.md`: VMMap first, then a dump,
   then `HeapTypeStats`. Compare the top non-Free types against the table above.
@@ -193,8 +193,8 @@ running-service check is listed separately.
 
 | File | Change |
 |---|---|
-| `src/Sentinel.Core/DualLaneWait.cs` | New. One outstanding wait per lane. |
-| `src/Sentinel.Core/DetectionEngine.cs` | Drain loop uses `DualLaneWait`. |
-| `tests/Sentinel.Tests/DualLaneWaitTests.cs` | New. Four regression tests. |
+| `src/Gnyida.Core/DualLaneWait.cs` | New. One outstanding wait per lane. |
+| `src/Gnyida.Core/DetectionEngine.cs` | Drain loop uses `DualLaneWait`. |
+| `tests/Gnyida.Tests/DualLaneWaitTests.cs` | New. Four regression tests. |
 | `tools/diagnostics/heap-dump/` | New. Analyzer sources and procedure (not part of the solution). |
 | `docs/design.md`, `docs/CHANGELOG.md` | Updated. |

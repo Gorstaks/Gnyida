@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <TargetFramework>net48-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Version>3.9.3</Version>
+    <Company>Gnyida Security</Company>
+    <Product>Gnyida Endpoint Detection and Response</Product>
+    <Description>Gnyida EDR User-Session Agent and Web Dashboard</Description>
+    <Copyright>Copyright (c) 2026 Gnyida Contributors</Copyright>
+    <Authors>Gnyida</Authors>
+    <Platforms>AnyCPU;x64</Platforms>
+    <ApplicationIcon>..\..\installer\assets\Gnyida.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Gnyida.Core\Gnyida.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Edge/Chromium dashboard host. Requires the Edge WebView2 Runtime on the target
+         (pre-installed on current Win10/11). AgentDashboardForm falls back to the legacy
+         WinForms WebBrowser (IE11 emulation) when the runtime is unavailable, so a missing
+         runtime degrades gracefully rather than breaking Settings. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The settings window page. Logical name is fixed so a folder rename cannot silently break the lookup. -->
+    <EmbeddedResource Include="Dashboard\dashboard.html" LogicalName="Gnyida.Agent.Dashboard.dashboard.html" />
+  </ItemGroup>
+</Project>

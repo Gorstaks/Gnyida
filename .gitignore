@@ -56,9 +56,9 @@ publish/
 installer/*.exe
 
 # Large files (>25MB)
-installer/WindowsSentinelSetup-1.2.5.exe
-publish/service/WindowsSentinel.Service.exe
-publish/agent/WindowsSentinel.Agent.exe
+installer/WindowsGnyidaSetup-1.2.5.exe
+publish/service/WindowsGnyida.Service.exe
+publish/agent/WindowsGnyida.Agent.exe
 
 # Kiro workspace config (steering, specs, hooks) is tracked so it travels with the repo.
 

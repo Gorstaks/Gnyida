@@ -1,16 +1,16 @@
-# Sentinel Rule Packs
+# Gnyida Rule Packs
 
 Reviewed for 3.2.3. Packs are local/offline inputs; no pack-download service is implied.
 
 RSA-SHA256 signed packs. HMAC packs are rejected. External `rulepack_pubkey.xml` is ignored (embedded public key only).
 
-Signed correlation rule packs extend multi-signal detection **without recompiling** Sentinel.
+Signed correlation rule packs extend multi-signal detection **without recompiling** Gnyida.
 
 ## Location
 
 | Path | Purpose |
 |------|---------|
-| `%ProgramData%\Sentinel\rules\packs\*.pack.json` | Runtime packs (preferred) |
+| `%ProgramData%\Gnyida\rules\packs\*.pack.json` | Runtime packs (preferred) |
 | `{installDir}\rules\packs\*.pack.json` | Bundled packs |
 
 ## Format
@@ -38,7 +38,7 @@ Legacy `"hmac"` fields are **rejected** (v2.0.4+). Packs must be re-signed with 
 
 ## Signing (RSA-SHA256, offline private key)
 
-v2.0.4+ uses **asymmetric** signatures. Only the public key is embedded in Sentinel.
+v2.0.4+ uses **asymmetric** signatures. Only the public key is embedded in Gnyida.
 The private key never ships to endpoints.
 
 1. Build the JSON **without** the `signature` field (canonical object property order as written).
@@ -55,7 +55,7 @@ $payload = [IO.File]::ReadAllText("pack.unsigned.json")
 ### Trust root (v2.0.8)
 
 - Verification uses the **embedded** RSA public key only.
-- `%ProgramData%\Sentinel\Secure\rulepack_pubkey.xml` is **ignored** if present
+- `%ProgramData%\Gnyida\Secure\rulepack_pubkey.xml` is **ignored** if present
   (prevents admin-writable trust-root swap).
 - Key rotation requires a product update that ships a new embedded public key.
 

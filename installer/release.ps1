@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Sentinel end-of-work release: bump version, build installer, commit, push, publish.
+    Gnyida end-of-work release: bump version, build installer, commit, push, publish.
 
 .DESCRIPTION
     One-command release pipeline. Reads the current version from ../version.txt, computes the
-    NEXT version using Sentinel's strict "increment-by-one, carry on 9" policy, updates
+    NEXT version using Gnyida's strict "increment-by-one, carry on 9" policy, updates
     version.txt, builds the installer via build.ps1 (which stamps every csproj + setup.iss and
     copies the installer to releases\<version>\), commits all changes, pushes to origin, and
     (unless -NoPublish) creates a GitHub release with the installer attached.
@@ -70,7 +70,7 @@ function Get-NextVersion([string]$current) {
 
 #  Extract the CHANGELOG section for a version as GitHub release notes 
 function Get-ChangelogNotes([string]$Version) {
-    $fallback = "Sentinel $Version. See docs/CHANGELOG.md for details."
+    $fallback = "Gnyida $Version. See docs/CHANGELOG.md for details."
     $changelog = Join-Path $RepoRoot "docs\CHANGELOG.md"
     if (-not (Test-Path $changelog)) { return $fallback }
 
@@ -96,7 +96,7 @@ function Get-ChangelogNotes([string]$Version) {
 
     $text = ($body -join "`n").Trim()
     if ([string]::IsNullOrWhiteSpace($text)) { return $fallback }
-    return "## Sentinel $Version`n`n$text"
+    return "## Gnyida $Version`n`n$text"
 }
 
 #  Read current + compute next 
@@ -158,7 +158,7 @@ Write-Step "Building installer via build.ps1"
 & (Join-Path $PSScriptRoot "build.ps1")
 if ($LASTEXITCODE -ne 0) { throw "build.ps1 failed" }
 
-$InstallerPath = Join-Path $RepoRoot "releases\$Next\SentinelSetup-$Next.exe"
+$InstallerPath = Join-Path $RepoRoot "releases\$Next\GnyidaSetup-$Next.exe"
 if (-not (Test-Path $InstallerPath)) { throw "Installer not found at $InstallerPath" }
 Write-Step "Installer ready: $InstallerPath"
 
@@ -218,7 +218,7 @@ if ($NoPublish) {
     $notesFile = New-TemporaryFile
     try {
         Set-Content -Path $notesFile -Value $notes -Encoding UTF8
-        Invoke-External gh @('release', 'create', "v$Next", $InstallerPath, '--title', "Sentinel $Next", '--notes-file', $notesFile.FullName)
+        Invoke-External gh @('release', 'create', "v$Next", $InstallerPath, '--title', "Gnyida $Next", '--notes-file', $notesFile.FullName)
     }
     finally {
         Remove-Item $notesFile -ErrorAction SilentlyContinue

@@ -1,11 +1,11 @@
-# Sentinel - Threat Model
+# Gnyida - Threat Model
 
 ## Red/blue audit remediation (3.7.1)
 
 A source-aware red/blue review found paths where an attacker-controlled signal could steer SYSTEM, or where a local user could reach a secret. Closed in 3.7.1:
 
 - **Dashboard token disclosure.** Any local process could `GET http://localhost:19845/` and read the bearer token from the page. The token is no longer embedded. A request without the token gets a secret-free bootstrap page. `Host` and `Origin` are pinned against DNS rebinding, a CSP is sent, bodies are capped, and exception text is not returned. Residual: the token is still in the tray launch URL (stripped from the address bar after load), and a same-user process that can read the Agent's memory or the WebView profile can still obtain it.
-- **SUBST as a kill trigger.** Any user can create a SUBST drive. Sentinel used to kill the creator, its parent, and every process started in the last 30 seconds outside Windows/Program Files. It also deleted Run values and scheduled tasks on substring matches. Now it only dismounts the drive and emits Tier2 reports.
+- **SUBST as a kill trigger.** Any user can create a SUBST drive. Gnyida used to kill the creator, its parent, and every process started in the last 30 seconds outside Windows/Program Files. It also deleted Run values and scheduled tasks on substring matches. Now it only dismounts the drive and emits Tier2 reports.
 - **Parent-PID steering.** Parent PIDs are attacker-selectable. Ancestor kills now refuse signed images, images under Windows/Program Files, unresolved identities, and known security/VPN products. Residual: an unsigned user-writable ancestor is still contained, which is the intended behavior for loaders.
 - **Registry deletion from metadata.** The executor now deletes only allowlisted persistence shapes, bound to the observed value.
 - **Link-following file mutation.** Path-based quarantine refuses reparse points and hard links. The `takeown`/`icacls` fallback is removed. ISO images are vaulted, not deleted. Residual: a check-then-act race on a plain path remains possible where the parent directory is user-writable. `ContainKnownHashAsync` is the pinned-handle reference design.
@@ -40,13 +40,13 @@ owned by Administrators/SYSTEM, grant no other writer and are not reparse points
 metadata, so posture events carry no `CVE` key and cannot become an exploit leg
 in correlation or authorize any response. A no-CVE zero-day (for example SignDrop)
 never appears in it.
-See [operation and native validation gaps](../tools/Sentinel.ExploitShield/README.md).
+See [operation and native validation gaps](../tools/Gnyida.ExploitShield/README.md).
 
 ## Current runtime boundary (3.4.5)
 
 Attackers are assumed to possess the source, compiled defaults, thresholds, exclusions and this threat model. No security claim depends on hiding them. A single supported complete socket-shell behavior can authorize Tier1 response without waiting for a second event. Direct socket-shell response is fresh, lifetime-bound and durably audited; it avoids ancestor/backing-file response and refuses a reused PID or missing identity. Existing critical/self/game handle-safety limits still apply and are not proof of process trust. Unsupported/custom payloads, observation gaps, short-lived activity and privileged/kernel attackers remain material limits.
 
-NanoAV coverage runs under Sentinel policy, not the archived independent engine. Its unsigned-file cache bug is not imported. Service-only hash context is online; outbound self-blocks are removed and Service/Guard plus Agent retain inbound packet blocks. Hashes do not authorize process kills or grant runtime trust. A separate exact current malware-hash file policy requires bounded same-object revalidation, durable audit and encrypted recovery. A compromised reputation source could induce file containment; recovery copies, protected-path/refusal rules and the 16 MiB cap limit damage but do not authenticate vendor verdict correctness. Byte-range locks do not exclude every pre-existing writable mapping. Delete-pending is not immediate neutralization.
+NanoAV coverage runs under Gnyida policy, not the archived independent engine. Its unsigned-file cache bug is not imported. Service-only hash context is online; outbound self-blocks are removed and Service/Guard plus Agent retain inbound packet blocks. Hashes do not authorize process kills or grant runtime trust. A separate exact current malware-hash file policy requires bounded same-object revalidation, durable audit and encrypted recovery. A compromised reputation source could induce file containment; recovery copies, protected-path/refusal rules and the 16 MiB cap limit damage but do not authenticate vendor verdict correctness. Byte-range locks do not exclude every pre-existing writable mapping. Delete-pending is not immediate neutralization.
 
 Raw privacy indicators are separate Tier2 observations. An unexpected non-game overlay warrants high-priority review, not an unsupported accusation of recording. Graphics DLLs do not prove capture; ConsentStore records can be stale and do not prove user intent or a current process owner. Foreground input recipients are not injected-input senders. The dedicated privacy composite requires a verified current overlay owner and independent terminal socket-shell proof in the same process lifetime. It does not delay that terminal response. Ordinary game streaming, microphone/webcam permission and overlays alone cannot authorize termination.
 
@@ -56,27 +56,27 @@ See [pre-push red/blue review](AUDIT_3.4.5.md) and [source/migration limits](NAN
 
 ## Running next to a VPN client (3.6.8)
 
-Sentinel no longer raises, bundles or installs a VPN; GVPN is a separate project and any VPN client may run alongside. A VPN does not blind Sentinel's process/connection telemetry: ETW, the TCP/UDP owner tables and WFP net events observe sockets per process before the tunnel encrypts them. What changes with a VPN is the local path, so tunnel interfaces are classified (`VpnTunnelClassifier`) by IANA interface type or driver-supplied description, never the user-renamable connection name; Wi-Fi is never classified by description. Tunnel routes, gateways and adapters are recorded as Tier2 and tagged so they never become legs of the `Network Tamper: Local MitM Chain` composite, which is itself a LogOnly report. **Tradeoff:** a local administrator who installs a driver whose description looks like a VPN can make that interface's route/gateway/adapter observations count as tunnel context instead of LAN MitM legs (B1 ceiling - they could already change routes directly); ARP, DNS, bridge, WPAD and Wi-Fi legs are unaffected, and the tag is honoured only on host-wide PID 0-4 monitor events. `VpnTunnelLeakMonitor` reports, without mutating anything, a tunnel going down, public IPv4 routed outside the tunnel, a physical IPv6 path next to an IPv4-only tunnel, and resolvers left on physical adapters. It uses OS state only: a VPN client's log (for example GVPN's `vpn.log` under the user's AppData) is user-writable and is not read or trusted. Enforcement (a kill switch) belongs to the VPN client. Payload contents inside a tunnel and anything the VPN server does with the traffic remain outside Sentinel's view.
+Gnyida no longer raises, bundles or installs a VPN; GVPN is a separate project and any VPN client may run alongside. A VPN does not blind Gnyida's process/connection telemetry: ETW, the TCP/UDP owner tables and WFP net events observe sockets per process before the tunnel encrypts them. What changes with a VPN is the local path, so tunnel interfaces are classified (`VpnTunnelClassifier`) by IANA interface type or driver-supplied description, never the user-renamable connection name; Wi-Fi is never classified by description. Tunnel routes, gateways and adapters are recorded as Tier2 and tagged so they never become legs of the `Network Tamper: Local MitM Chain` composite, which is itself a LogOnly report. **Tradeoff:** a local administrator who installs a driver whose description looks like a VPN can make that interface's route/gateway/adapter observations count as tunnel context instead of LAN MitM legs (B1 ceiling - they could already change routes directly); ARP, DNS, bridge, WPAD and Wi-Fi legs are unaffected, and the tag is honoured only on host-wide PID 0-4 monitor events. `VpnTunnelLeakMonitor` reports, without mutating anything, a tunnel going down, public IPv4 routed outside the tunnel, a physical IPv6 path next to an IPv4-only tunnel, and resolvers left on physical adapters. It uses OS state only: a VPN client's log (for example GVPN's `vpn.log` under the user's AppData) is user-writable and is not read or trusted. Enforcement (a kill switch) belongs to the VPN client. Payload contents inside a tunnel and anything the VPN server does with the traffic remain outside Gnyida's view.
 
 ## Firewall defaults, policy stores, and monitoring (3.2.3)
 
-The service manages PersistentStore and, when the OS exposes it, the local computer Group Policy store (`localhost`). It mirrors Sentinel's own process blocks into local Group Policy and inspects ActiveStore, including rule filters, enforcement status, profile settings, and BFE/MpsSvc health. It never writes a domain GPO. Effective domain exceptions, disabled/overridden profiles, missing rules, or non-enforced filters produce visible conflicts and a dashboard attention state instead of a protected claim. A trimmed image without a local GPO store uses PersistentStore; missing NetSecurity/PowerShell means policy management is unavailable and is reported, while COM inbound-block reconciliation and local detection continue.
+The service manages PersistentStore and, when the OS exposes it, the local computer Group Policy store (`localhost`). It mirrors Gnyida's own process blocks into local Group Policy and inspects ActiveStore, including rule filters, enforcement status, profile settings, and BFE/MpsSvc health. It never writes a domain GPO. Effective domain exceptions, disabled/overridden profiles, missing rules, or non-enforced filters produce visible conflicts and a dashboard attention state instead of a protected claim. A trimmed image without a local GPO store uses PersistentStore; missing NetSecurity/PowerShell means policy management is unavailable and is reported, while COM inbound-block reconciliation and local detection continue.
 
-Inbound allow rules in both local stores are disabled and retained. Outbound allow rules and default outbound actions are preserved; Sentinel's old outbound self-blocks are retired. Firewall profiles are enabled and default inbound policy is Block in the two writable local stores. Exact DHCP-service UDP 68/67 and 546/547 rules are exempt. System-only ICMPv6 error/control types 1-4 and neighbour/router discovery 133-136 are exempt to preserve outbound IPv6; echo and arbitrary application ICMPv6 rules are not. The policy does not automatically enable an existing disabled essential rule.
+Inbound allow rules in both local stores are disabled and retained. Outbound allow rules and default outbound actions are preserved; Gnyida's old outbound self-blocks are retired. Firewall profiles are enabled and default inbound policy is Block in the two writable local stores. Exact DHCP-service UDP 68/67 and 546/547 rules are exempt. System-only ICMPv6 error/control types 1-4 and neighbour/router discovery 133-136 are exempt to preserve outbound IPv6; echo and arbitrary application ICMPv6 rules are not. The policy does not automatically enable an existing disabled essential rule.
 
 Registry tree notifications trigger coalesced rechecks, with a 15-second polling fallback. These are detection/reconciliation intervals, not an atomic prevention guarantee: an unapproved exception may exist briefly before reconciliation. New exceptions and re-enabled unapproved exceptions are disabled again on refresh/restart. Windows changes cannot be reliably distinguished from manual changes from the Enabled flag, so opt-in is explicit. Approval is bound to the store, exact rule name, and complete filter identity; changed definitions lose approval. Privileged approval/revocation is not exposed over the user-session web/pipe API.
 
 Administrators can approve an existing rule from an elevated terminal in the install directory:
 
 ```powershell
-.\Sentinel.Service.exe --allow-inbound PersistentStore 'Exact-Rule-Name'
-.\Sentinel.Service.exe --allow-inbound localhost 'Exact-GPO-Rule-Name'
-.\Sentinel.Service.exe --deny-inbound PersistentStore 'Exact-Rule-Name'
+.\Gnyida.Service.exe --allow-inbound PersistentStore 'Exact-Rule-Name'
+.\Gnyida.Service.exe --allow-inbound localhost 'Exact-GPO-Rule-Name'
+.\Gnyida.Service.exe --deny-inbound PersistentStore 'Exact-Rule-Name'
 ```
 
 The names are the rule `Name` identifiers, not translated display names or wildcard patterns. No new arbitrary rule or command is created by these operations. Windows Firewall UI can still disable an approved exception; enabling an unapproved exception there is temporary until the next reconciliation.
 
-An ACL-protected, atomic rollback journal records original enabled/profile states before changing them, supports interrupted operations, and is serialized across service/administrator processes. Uninstall restores matching recorded original states and removes owned self-blocks; changed rule definitions are skipped and reported. `Sentinel.Service.exe --restore-firewall` is an elevated rollback command that first stops the service/watchdog. Starting Sentinel again resumes the baseline. Preserve the journal for recovery; a malformed/unsafe journal fails visibly rather than silently replacing the original state.
+An ACL-protected, atomic rollback journal records original enabled/profile states before changing them, supports interrupted operations, and is serialized across service/administrator processes. Uninstall restores matching recorded original states and removes owned self-blocks; changed rule definitions are skipped and reported. `Gnyida.Service.exe --restore-firewall` is an elevated rollback command that first stops the service/watchdog. Starting Gnyida again resumes the baseline. Preserve the journal for recovery; a malformed/unsafe journal fails visibly rather than silently replacing the original state.
 
 The fixed, embedded NetSecurity management script runs through an absolute Windows PowerShell path with no profile. Script text is embedded code; request/rule data travels as JSON, not command interpolation. Output, execution time, and pre-authentication pipe input are bounded. This management-only bridge is the reason PowerShell is used here: the firewall COM API does not offer the required policy-store selection. No online lookup is involved.
 
@@ -88,9 +88,9 @@ Game/anti-cheat memory-handle safety restrictions remain. Protected/PPL processe
 
 ## Offline operation and privilege boundary (3.2.3)
 
-Sentinel no longer performs online reputation queries, DNS reputation lookups, live threat/KEV feed downloads, public-IP lookups, cloud connectivity probes, or automatic outbound threat/evidence reporting. Local behavioral telemetry, static/ML analysis, cached/local KEV catalogs, bundled ThreatFox indicators, and local evidence packs remain available. Missing external reputation is Unknown with a neutral score; old online reputation caches are not used. Bundled/cached intelligence becomes stale until supplied through a trusted local update. Legacy encrypted settings cannot re-enable online transports, and the embedded proxy credential has been removed.
+Gnyida no longer performs online reputation queries, DNS reputation lookups, live threat/KEV feed downloads, public-IP lookups, cloud connectivity probes, or automatic outbound threat/evidence reporting. Local behavioral telemetry, static/ML analysis, cached/local KEV catalogs, bundled ThreatFox indicators, and local evidence packs remain available. Missing external reputation is Unknown with a neutral score; old online reputation caches are not used. Bundled/cached intelligence becomes stale until supplied through a trusted local update. Legacy encrypted settings cannot re-enable online transports, and the embedded proxy credential has been removed.
 
-The SYSTEM service installs and reconciles six fixed, executable-scoped Windows Firewall block rules: inbound and outbound for Sentinel.Service.exe, Sentinel.Agent.exe, and SentinelAutoRotate.exe, on Domain/Private/Public profiles, for non-loopback IPv4/IPv6 traffic including LAN/link-local destinations. Loopback is excluded from the blocks because an allow rule cannot override a matching block. Rule identifiers remain stable across upgrades, and uninstall removes only these identifiers. Firewall failures or disabled profiles are logged as errors and retried every minute; local detection continues without falsely claiming network enforcement. The service must run with installation/admin privileges to manage these rules. Authenticode verification uses cached URL data only.
+The SYSTEM service installs and reconciles six fixed, executable-scoped Windows Firewall block rules: inbound and outbound for Gnyida.Service.exe, Gnyida.Agent.exe, and GnyidaAutoRotate.exe, on Domain/Private/Public profiles, for non-loopback IPv4/IPv6 traffic including LAN/link-local destinations. Loopback is excluded from the blocks because an allow rule cannot override a matching block. Rule identifiers remain stable across upgrades, and uninstall removes only these identifiers. Firewall failures or disabled profiles are logged as errors and retried every minute; local detection continues without falsely claiming network enforcement. The service must run with installation/admin privileges to manage these rules. Authenticode verification uses cached URL data only.
 
 The Agent uses an explicit asInvoker manifest and refuses SYSTEM/elevated-administrator execution. The service watchdog checks the session token and selects its limited linked token where necessary; if no suitable token exists it refuses an elevated launch. The Agent applies only its own process mitigations, writes logs/restart state to user-owned storage by default, and delegates privileged operations to the service. Module UI requests schedule service inspection rather than directly quarantining a browser-supplied file path. Certificate requests retain the service's explicit distrust-list authorization. If the service is unavailable these operations fail without an elevated fallback. No generic command execution, arbitrary privileged file-write/delete, or response-disable operation is exposed.
 
@@ -132,7 +132,7 @@ legitimate admin action. Its value is composition: the new-adapter signal and th
 (`NewAdapter`, `Gateway`), so either one alongside an independent ARP/DNS/route tamper reaches the
 `Network Tamper: Local MitM Chain` VPN-shield composite. **Honest ceiling:** a local admin can always
 add an adapter (a legitimate OS operation needing exactly the privilege they'd already have, per B1);
-Sentinel does not and cannot prevent it - it makes the addition visible, durably recorded, and able
+Gnyida does not and cannot prevent it - it makes the addition visible, durably recorded, and able
 to corroborate a MitM chain. Prevention for the LAN-side variants lives on the network (WPA3, 802.1X,
 DHCP snooping), not in a userland host agent.
 
@@ -147,20 +147,20 @@ multi-homing, so these observe and corroborate - they do not prevent or revert.
 
 ### v2.6.8 - silent / user-directed harm, and state-baseline reconciliation
 
-Addresses a threat class that every prior Sentinel defense structurally misses. Every terminal
+Addresses a threat class that every prior Gnyida defense structurally misses. Every terminal
 family (credential theft, C2, ransomware, injection-then-exfil) is defined around harm to the
 **system or its secrets**, and kill authority requires qualifying terminal behavior. Consider instead a module whose only purpose is to harm the **user**: it
 emits an audio / hypnotic stream, flickers the screen, or otherwise degrades sleep and wellbeing.
 It makes no network connection, touches no credentials, destroys no files, and may be signed with
 a **stolen but validly-chaining** certificate. It produces *zero* terminal telemetry and it never
-escalates - the steady state *is* the attack. behavioral terminal classification cannot establish malicious intent from that alone, and signature-based trust is defeated by the stolen cert. Neither of Sentinel's existing
+escalates - the steady state *is* the attack. behavioral terminal classification cannot establish malicious intent from that alone, and signature-based trust is defeated by the stolen cert. Neither of Gnyida's existing
 axes - behavior, or provenance - is sufficient alone against an attacker who deliberately closes
 both doors.
 
 The one thing such a payload cannot avoid is **persisting somewhere** - it must be a module mapped
 into some process. So v2.6.8 adds a third, **state-driven** axis: `StateReconciliationMonitor`
 (SystemIntegrity group, 5-min cadence). It keeps a **reboot-durable** baseline
-(`ModuleBaselineStore`, plain `System.Text.Json` under `%ProgramData%\Sentinel\baseline`, SYSTEM+
+(`ModuleBaselineStore`, plain `System.Text.Json` under `%ProgramData%\Gnyida\baseline`, SYSTEM+
 Admins ACL - deliberately NOT the boot-bound `SecureCacheStore`, which would re-flag every module
 each reboot) of the loaded-module set of a fixed list of **long-lived, low-churn** processes
 (`explorer`, `winlogon`, `services`, `lsass`, `csrss`, `dwm`, `sihost`, `taskhostw`,
@@ -206,11 +206,11 @@ quarantine (a real false positive that was quarantining Microsoft/xUnit source-g
 
 ### v2.6.3 - update/servicing-surface abuse observation
 
-Addresses a user question that generalizes to a real threat class: "can something malicious ride in through the Windows update / CAB servicing path?" Sentinel deliberately does **not** try to validate whether an update is genuine - that is impossible from userland and, for a truly Microsoft-signed CDN-delivered payload (Flame-tier certificate forgery), invisible to any userland tool. Instead `UpdateServicingMonitor` (CoreDetection group, 12s poll) watches what the servicing surface *does*, honoring "behavioral signals only for kill authority": it flags a servicing actor (`TrustedInstaller`/`tiworker`/`wusa`/`dism`/`dismhost`/`expand`/`extrac32`/`pkgmgr`) spawning a shell / LOLBin / credential tool, CAB/MSU extraction to a path outside the legitimate WinSxS/servicing/Temp staging (the CVE-2021-40444 `..\` path-traversal class), a binary named as a servicing actor that is unsigned or not Microsoft-signed (`SignerTrustService.GetSignerName`, folded through `AdjustConfidence`), and plain-HTTP or non-Microsoft WSUS / `AutoConfigURL`-style update sources (the WSUSpect on-path class). Every one of these is emitted **Tier2 / `ResponseAction.LogOnly`** (`KillAuthorized` stays false, `Family` left null so `ResponsePolicy.ClassifyTerminalOutcome` never treats it as kill-grade); the monitor never self-authorizes a destructive action. Its value is composition: it does not re-observe file writes or service registration (that would duplicate `FileActivityMonitor` and `RegistryMonitor`, which already emit those and are servicing-path-aware via `IsServicingProcessActive()`), it contributes the servicing-context observe leg that the correlation layer chains with a `RegistryMonitor` driver/service drop or a subsequent beacon/credential-access leg to reach a confirmed composite. Attacker-relevant honesty: this catches malware *behaving* like post-exploitation once a servicing actor is involved (rogue WSUS, LOLBin extraction, a "signed" package that misbehaves, a BYOVD driver dropped around a servicing event - `TerminalFamily.Byovd`, terminal but never solo kill-grade). It does **not** and cannot catch a genuinely Microsoft-signed backdoor delivered over the real Windows Update CDN; that is out of scope for any userland IDS and would require Microsoft's own signing infrastructure to fail. Legitimate servicing - a clean cumulative update installing via `TrustedInstaller`, NTLite/DISM offline image work, a UUP dump conversion - produces no anomalous child, no abnormal extraction path, and Microsoft-signed binaries, so it emits nothing.
+Addresses a user question that generalizes to a real threat class: "can something malicious ride in through the Windows update / CAB servicing path?" Gnyida deliberately does **not** try to validate whether an update is genuine - that is impossible from userland and, for a truly Microsoft-signed CDN-delivered payload (Flame-tier certificate forgery), invisible to any userland tool. Instead `UpdateServicingMonitor` (CoreDetection group, 12s poll) watches what the servicing surface *does*, honoring "behavioral signals only for kill authority": it flags a servicing actor (`TrustedInstaller`/`tiworker`/`wusa`/`dism`/`dismhost`/`expand`/`extrac32`/`pkgmgr`) spawning a shell / LOLBin / credential tool, CAB/MSU extraction to a path outside the legitimate WinSxS/servicing/Temp staging (the CVE-2021-40444 `..\` path-traversal class), a binary named as a servicing actor that is unsigned or not Microsoft-signed (`SignerTrustService.GetSignerName`, folded through `AdjustConfidence`), and plain-HTTP or non-Microsoft WSUS / `AutoConfigURL`-style update sources (the WSUSpect on-path class). Every one of these is emitted **Tier2 / `ResponseAction.LogOnly`** (`KillAuthorized` stays false, `Family` left null so `ResponsePolicy.ClassifyTerminalOutcome` never treats it as kill-grade); the monitor never self-authorizes a destructive action. Its value is composition: it does not re-observe file writes or service registration (that would duplicate `FileActivityMonitor` and `RegistryMonitor`, which already emit those and are servicing-path-aware via `IsServicingProcessActive()`), it contributes the servicing-context observe leg that the correlation layer chains with a `RegistryMonitor` driver/service drop or a subsequent beacon/credential-access leg to reach a confirmed composite. Attacker-relevant honesty: this catches malware *behaving* like post-exploitation once a servicing actor is involved (rogue WSUS, LOLBin extraction, a "signed" package that misbehaves, a BYOVD driver dropped around a servicing event - `TerminalFamily.Byovd`, terminal but never solo kill-grade). It does **not** and cannot catch a genuinely Microsoft-signed backdoor delivered over the real Windows Update CDN; that is out of scope for any userland IDS and would require Microsoft's own signing infrastructure to fail. Legitimate servicing - a clean cumulative update installing via `TrustedInstaller`, NTLite/DISM offline image work, a UUP dump conversion - produces no anomalous child, no abnormal extraction path, and Microsoft-signed binaries, so it emits nothing.
 
 ### v2.6.0 - protective VPN shield for confirmed local-network MitM
 
-Closes the *exposure window* during a local man-in-the-middle attack. Sentinel already detected and cleaned the individual tampers (ARP poisoning via `ArpSpoofMonitor`, DNS hijack via the DNS validators, route injection via `RouteTableMonitor`, adapter bridging + DNS lock via `NetworkInterfaceGuard`, rogue WPAD/PAC via `WpadProxyMonitor`, Wi-Fi deauth / evil-twin via `WifiSecurityMonitor`), but the user's traffic still rode the hostile path between detection and cleanup. `BehavioralCorrelationEngine` now correlates these PID-0 SYSTEM signals in a dedicated host-wide buffer and emits `Network Tamper: Local MitM Chain` when **>= 2 distinct tamper vectors** (`ARP`, `DNS`, `Route`, `Bridge`, `AdapterDown`, `WPAD`, `WiFiDeauth`, `WiFiEvilTwin`) land within the correlation window - a single vector never self-confirms, and WPAD (a `WeakObserveSeed`) still also feeds the existing `WPAD Proxy Hijack Chain`. The composite authorizes the new **`ResponseAction.VpnShieldUp`** (non-kill; ordered below `KillProcess` so `KillAuthorized` stays false). `VpnShieldEngine` raises a userland RAS VPN tunnel (`rasapi32` - `RasDial`/`RasEnumConnections`/`RasHangUp`; a visible Windows VPN connection, no kernel driver, no self-hiding, honoring the transparency constraint), asks `NetworkInterfaceGuard` to clean the path, verifies clean for `CleanSweepsRequired` consecutive sweeps, then drops the tunnel. **Fail-safe:** if the path cannot be *verified* clean the tunnel STAYS UP; on `MaxShieldSeconds` expiry the incident is escalated and the tunnel is held - never silently dropped. Attacker-relevant properties: the whole path is gated on explicit `VpnShield.Enabled` (`ProductPosture.AllowsVpnShield`, default off) and a confirmed multi-vector chain, so it is not a speculative trigger an attacker can weaponize into forced tunneling; chain confirmation never rewrites `VpnShieldUp` into a process nuke (`ApplyTierLaw` / `PromoteChainConfirmedFields` preserve it), so a spoofed PID-0 network signal cannot escalate into killing a process. A trusted `ProviderProfile` is preferred; VPN Gate public relays are a caveated last-resort fallback only when `UseVpnGateFallback` is set and no trusted profile exists - the incident log records that a volunteer relay replaces a local attacker with a remote unknown one and is not equivalent to a trusted tunnel. Process-level threats (C2 beaconing, DoH exfil, covert mesh/webhook) are deliberately NOT routed here - a tunnel would merely carry the malicious traffic; those remain kill/isolate.
+Closes the *exposure window* during a local man-in-the-middle attack. Gnyida already detected and cleaned the individual tampers (ARP poisoning via `ArpSpoofMonitor`, DNS hijack via the DNS validators, route injection via `RouteTableMonitor`, adapter bridging + DNS lock via `NetworkInterfaceGuard`, rogue WPAD/PAC via `WpadProxyMonitor`, Wi-Fi deauth / evil-twin via `WifiSecurityMonitor`), but the user's traffic still rode the hostile path between detection and cleanup. `BehavioralCorrelationEngine` now correlates these PID-0 SYSTEM signals in a dedicated host-wide buffer and emits `Network Tamper: Local MitM Chain` when **>= 2 distinct tamper vectors** (`ARP`, `DNS`, `Route`, `Bridge`, `AdapterDown`, `WPAD`, `WiFiDeauth`, `WiFiEvilTwin`) land within the correlation window - a single vector never self-confirms, and WPAD (a `WeakObserveSeed`) still also feeds the existing `WPAD Proxy Hijack Chain`. The composite authorizes the new **`ResponseAction.VpnShieldUp`** (non-kill; ordered below `KillProcess` so `KillAuthorized` stays false). `VpnShieldEngine` raises a userland RAS VPN tunnel (`rasapi32` - `RasDial`/`RasEnumConnections`/`RasHangUp`; a visible Windows VPN connection, no kernel driver, no self-hiding, honoring the transparency constraint), asks `NetworkInterfaceGuard` to clean the path, verifies clean for `CleanSweepsRequired` consecutive sweeps, then drops the tunnel. **Fail-safe:** if the path cannot be *verified* clean the tunnel STAYS UP; on `MaxShieldSeconds` expiry the incident is escalated and the tunnel is held - never silently dropped. Attacker-relevant properties: the whole path is gated on explicit `VpnShield.Enabled` (`ProductPosture.AllowsVpnShield`, default off) and a confirmed multi-vector chain, so it is not a speculative trigger an attacker can weaponize into forced tunneling; chain confirmation never rewrites `VpnShieldUp` into a process nuke (`ApplyTierLaw` / `PromoteChainConfirmedFields` preserve it), so a spoofed PID-0 network signal cannot escalate into killing a process. A trusted `ProviderProfile` is preferred; VPN Gate public relays are a caveated last-resort fallback only when `UseVpnGateFallback` is set and no trusted profile exists - the incident log records that a volunteer relay replaces a local attacker with a remote unknown one and is not equivalent to a trusted tunnel. Process-level threats (C2 beaconing, DoH exfil, covert mesh/webhook) are deliberately NOT routed here - a tunnel would merely carry the malicious traffic; those remain kill/isolate.
 
 ### v2.3.5 - script-dropper MOTW + WPAD/PAC proxy hijack (DHCP Option 252)
 
@@ -294,7 +294,7 @@ New detection capabilities (code existed in 2.1.8; **wired in 2.2.0**):
 |------------|------|-----------------|
 | AmsiIntegrityCheck | Detects AMSI/ETW function prologue patching | Kernel-level memory modification (BYOVD) |
 | EdrKillerDetectionMonitor | **Name-only observe fuel** (LogOnly, not President's Law). Catches default tool names. | Rename the binary (always) |
-| HoneypotDllMonitor | Decoy DLLs in `{install}\honeypot\` (never next to Sentinel.exe) | Not touching that folder |
+| HoneypotDllMonitor | Decoy DLLs in `{install}\honeypot\` (never next to Gnyida.exe) | Not touching that folder |
 | DecoyPipeMonitor | Retired in 3.7.4: creating C2-default pipe names looked like a beacon to AV behavior shields. `NamedPipeMonitor` covers real pipes | n/a |
 | KernelModuleAuditMonitor | NtQuerySystemInformation detects stealth BYOVD loads; logs pre-existing RTCore64/WinRing0 | Already having kernel control to hide from NtQSI |
 | TokenPrivilegeAuditMonitor | SeDebugPrivilege/SeImpersonate from user-writable paths | Running from a non-user-writable path (Program Files) |
@@ -316,7 +316,7 @@ Composites: `LPE Campaign Scaffold`, `Initial Access Execution Chain`, `Persiste
 
 - **Gamers / creators:** Always-on hardening; game and anti-cheat paths are not reputation-kill fuel; memory handles skipped on known game trees. Real terminal chains (C2/exfil/token/cred-dump/BYOVD) still authorize response.
 - **High-profile targets:** Dual audit trail + sealed incident packs. Userland limits still apply: local admin / novel kernel implants can win. Use supported OS hardening (Secure Boot/HVCI) and operator-controlled independent/offline evidence copies; another antivirus is optional; no endpoint proxy connection remains.
-- **Honest battle stance:** Sentinel is meant to fight real operators on real desktops - not to market "unhackable."
+- **Honest battle stance:** Gnyida is meant to fight real operators on real desktops - not to market "unhackable."
 
 ---
 
@@ -344,7 +344,7 @@ Composites: `LPE Campaign Scaffold`, `Initial Access Execution Chain`, `Persiste
 
 **Platforms:** Platform-agnostic. Messaging, social, email, browsers, games, voice/video, remote-support - anything that leaves process, file, registry, or network traces on Windows.
 
-**Evidence:** Coercion-tagged packs include a technical section stating what Sentinel asserts vs does not assert, plus optional affidavit checkboxes the **victim** completes (remote control, recording, session theft, threats/coercion). Sentinel never auto-files with police.
+**Evidence:** Coercion-tagged packs include a technical section stating what Gnyida asserts vs does not assert, plus optional affidavit checkboxes the **victim** completes (remote control, recording, session theft, threats/coercion). Gnyida never auto-files with police.
 
 **Honesty for users:** Settings -> **Safety** page. Product language must not overclaim.
 
@@ -355,7 +355,7 @@ Composites: `LPE Campaign Scaffold`, `Initial Access Execution Chain`, `Persiste
 | Capability | Full Windows | Stripped / custom image |
 |------------|--------------|-------------------------|
 | JSONL `events.jsonl` | Primary trail | Primary trail (required) |
-| Windows Event Log Application/Sentinel | Secondary trail (critical IDs) | **Auto-disabled** if create/write fails |
+| Windows Event Log Application/Gnyida | Secondary trail (critical IDs) | **Auto-disabled** if create/write fails |
 | Unified ETW | ~50 ms sensors | Falls back to WMI/poll |
 | User alerts | Local dashboard/tray state; no Win32 toast calls | Local JSONL/dashboard where available |
 | Online TI proxy / feeds | Removed in 3.2.3 | Removed; local/cached data only, potentially stale |
@@ -369,8 +369,8 @@ Attacker wiping only Event Log does not erase JSONL packs. Attacker wiping JSONL
 ```
 
  KERNEL (ring 0)                                         
-   - Sentinel has NO kernel component                    
-   - Active driver can suppress userland (but Sentinel   
+   - Gnyida has NO kernel component                    
+   - Active driver can suppress userland (but Gnyida   
      detects the ENTIRE chain leading to driver load:    
      priv esc -> cert plant -> .sys drop -> service create) 
    - v1.7.0: Planted signing certs are auto-revoked     
@@ -378,7 +378,7 @@ Attacker wiping only Event Log does not erase JSONL packs. Attacker wiping JSONL
                           
 
  SYSTEM (ring 3, highest userland privilege)              
-   - Sentinel service runs here                          
+   - Gnyida service runs here                          
    - ETW providers, full process access                  
    - SecureCacheStore, quarantine, firewall rules        
 
@@ -392,8 +392,8 @@ Attacker wiping only Event Log does not erase JSONL packs. Attacker wiping JSONL
                           
 
  STANDARD USER (ring 3)                                  
-   - Cannot touch Sentinel service or files              
-   - Sentinel agent (watchdog) runs here                 
+   - Cannot touch Gnyida service or files              
+   - Gnyida agent (watchdog) runs here                 
    - Limited telemetry (WMI fallback, no ThreatIntel)    
 
 ```
@@ -525,7 +525,7 @@ See [design.md](design.md) for the full component inventory (all MonitorGroups +
 
 ### B1: Attacker has local admin
 
-**Attack:** `sc stop "Sentinel"` or `taskkill /f /im SentinelService.exe`
+**Attack:** `sc stop "Gnyida"` or `taskkill /f /im GnyidaService.exe`
 
 **Mitigation:**
 - Agent watchdog detects stale heartbeat and attempts restart
@@ -545,14 +545,14 @@ See [design.md](design.md) for the full component inventory (all MonitorGroups +
 
 **Residual risk:** HIGH. A local administrator can suppress the service and delete local evidence. Firewall self-blocks do not prevent an already-compromised SYSTEM process from changing host policy.
 
-**Honest assessment:** If the attacker has admin and knows Sentinel is running, they can kill it.
+**Honest assessment:** If the attacker has admin and knows Gnyida is running, they can kill it.
 The watchdog adds seconds of delay, not a security boundary. Unexpected stops can leave local tamper evidence, but 3.2.3 does not mirror it off-box. An administrator can erase every local copy.
 
 ---
 
 ### B2: BYOVD (Bring Your Own Vulnerable Driver)
 
-**Attack:** Load a signed vulnerable driver, use it to kill Sentinel from kernel.
+**Attack:** Load a signed vulnerable driver, use it to kill Gnyida from kernel.
 
 **Mitigation:**
 - `DriverLoadMonitor` detects Event 7045 (service install), registry service creation, and .sys drops in user-writable paths every 15s
@@ -562,10 +562,10 @@ The watchdog adds seconds of delay, not a security boundary. Unexpected stops ca
 - **v1.7.0 cert-tracing:** Extracts Authenticode cert from detected driver -> checks if cert was planted in TrustedPublisher/Root stores -> if NOT a public CA, fires `RemoveCertAndKillAdder` (revokes cert, kills installer chain, scans for other drivers signed by same cert)
 - Prerequisite monitoring: privilege escalation, UAC bypass, token manipulation all detected before attacker reaches the point of driver installation
 - `SecureBootIntegrityMonitor` detects test signing mode / kernel debug enabled
-- `WfpIntegrityMonitor` detects WFP filters blocking Sentinel/EDR processes
+- `WfpIntegrityMonitor` detects WFP filters blocking Gnyida/EDR processes
 - Memory Integrity (HVCI) monitoring - alerts if disabled
 
-**Residual risk:** MEDIUM. Sentinel wins the race in most scenarios because it monitors the prerequisites (priv esc, file drop, service creation, cert planting). If an attacker has admin, bypasses all prerequisite detections silently, uses an unknown driver not on the blocklist signed by a legitimate public CA (not a planted cert), AND loads it faster than the 15s poll - then the driver can suppress Sentinel. Remote alerting fires before suppression in most cases.
+**Residual risk:** MEDIUM. Gnyida wins the race in most scenarios because it monitors the prerequisites (priv esc, file drop, service creation, cert planting). If an attacker has admin, bypasses all prerequisite detections silently, uses an unknown driver not on the blocklist signed by a legitimate public CA (not a planted cert), AND loads it faster than the 15s poll - then the driver can suppress Gnyida. Remote alerting fires before suppression in most cases.
 
 **v2.2.0 additions:**
 - `KernelModuleAuditMonitor` is **registered** and detects driver loads via `NtQuerySystemInformation` every 30s (LogOnly). Pre-existing RTCore64/WinRing0 at start is logged, not silently trusted.
@@ -577,7 +577,7 @@ The watchdog adds seconds of delay, not a security boundary. Unexpected stops ca
 
 ### B3: ETW blinding
 
-**Attack:** Patch `ntdll!EtwEventWrite` or `ntdll!NtTraceEvent` in Sentinel's process to suppress telemetry.
+**Attack:** Patch `ntdll!EtwEventWrite` or `ntdll!NtTraceEvent` in Gnyida's process to suppress telemetry.
 
 **Mitigation:**
 - EtwTamperingRule detects known patching patterns
@@ -585,7 +585,7 @@ The watchdog adds seconds of delay, not a security boundary. Unexpected stops ca
 - CIG (Code Integrity Guard) audit prevents unsigned DLL load
 - **v2.1.8:** `AmsiIntegrityCheck` captures EtwEventWrite prologue at startup and compares every 30s - detects memory patching at 0.97 confidence
 
-**Residual risk:** MEDIUM. Direct syscall patching bypasses userland hooks. Sentinel now detects the patch AFTER it happens (prologue comparison), but cannot prevent it if attacker is already in-process with write access to ntdll pages.
+**Residual risk:** MEDIUM. Direct syscall patching bypasses userland hooks. Gnyida now detects the patch AFTER it happens (prologue comparison), but cannot prevent it if attacker is already in-process with write access to ntdll pages.
 
 ---
 
@@ -645,16 +645,16 @@ signature anchor and fail closed.
 
 ---
 
-### B7: DLL sideloading into Sentinel process
+### B7: DLL sideloading into Gnyida process
 
-**Attack:** Place a malicious DLL in Sentinel's search path.
+**Attack:** Place a malicious DLL in Gnyida's search path.
 
 **Mitigation:**
 - ProcessHardening.ApplyOrFail() at startup: restricts DLL search to System32 only
 - NTFS ACL lockdown on installation directory
 - Directory watcher deletes unauthorized files and kills writing processes
 - CIG audit mode prevents unsigned DLL loads
-- **v2.2.0:** `HoneypotDllMonitor` plants decoy `version.dll`, `winmm.dll`, `dbghelp.dll`, `WINHTTP.dll` in `{install}\honeypot\` only. Planting those names next to `Sentinel.Service.exe` would be a self-sideload / self-DoS. Access or deletion of the decoy folder is LogOnly anti-tamper fuel.
+- **v2.2.0:** `HoneypotDllMonitor` plants decoy `version.dll`, `winmm.dll`, `dbghelp.dll`, `WINHTTP.dll` in `{install}\honeypot\` only. Planting those names next to `Gnyida.Service.exe` would be a self-sideload / self-DoS. Access or deletion of the decoy folder is LogOnly anti-tamper fuel.
 
 **Residual risk:** LOW if CIG is enforced. MEDIUM if CIG is audit-only. The honeypot folder is an early tripwire for directory scanners; it is not a kill trigger.
 
@@ -662,7 +662,7 @@ signature anchor and fail closed.
 
 ### B8: Time-of-check-to-time-of-use (TOCTOU) on file hashes
 
-**Attack:** Swap a file between when Sentinel hashes it and when it executes.
+**Attack:** Swap a file between when Gnyida hashes it and when it executes.
 
 **Mitigation:**
 - Hash checks happen at process-start time (ETW event)
@@ -680,7 +680,7 @@ signature anchor and fail closed.
 1. **PPID spoof on Inno Setup** - Git for Windows / Chrome extractors (`innosetup-*.tmp`) race ETW vs kernel parent PID -> Kill + ChainTracer quarantine of the signed installer.
 2. **Raw disk on explorer / taskhostw** - Shell holds `\Device\HarddiskVolume*` / disk handles; catalog-sign verify could fail -> KillProcessTree on system binaries.
 3. **ChainTracer empty path** - Critical process names with unresolved image path were treated as non-system -> kill/quarantine.
-4. **Signed quarantine** - Any chain path could wipe Authenticode-valid installers (Git, ChromeSetup, even SentinelSetup).
+4. **Signed quarantine** - Any chain path could wipe Authenticode-valid installers (Git, ChromeSetup, even GnyidaSetup).
 
 **Mitigation (v1.6.2+):**
 - `InstallerHeuristics` + PPID skip for Inno/NSIS extractors and signed installer parents
@@ -724,7 +724,7 @@ signature anchor and fail closed.
 
 ### B10: ActiveResponse config tampering (FIXED in v1.5.9 / v1.6.0)
 
-**Attack:** Attacker injects config to set `ActiveResponse=false`, neutering all kill/quarantine/isolate responses while Sentinel continues running (appearing functional but inert).
+**Attack:** Attacker injects config to set `ActiveResponse=false`, neutering all kill/quarantine/isolate responses while Gnyida continues running (appearing functional but inert).
 
 **Mitigation (v1.5.9+ / v1.6.0):**
 - `AntiTamperGuard` monitors `ActiveResponse` flag every ~10s
@@ -775,13 +775,13 @@ The retained `worker/` server is deployed independently. Its evidence route stor
 
 ### B14: Kill-storm / response weaponization (FIXED in v1.6.0)
 
-**Attack:** Induce many false positives to make Sentinel kill large numbers of processes.
+**Attack:** Induce many false positives to make Gnyida kill large numbers of processes.
 
 **Mitigation (v1.6.0+):**
 - `MaxKillsPerMinute` (default 15) rate-limits kill and quarantine-kill actions
 - Expanded protected process list (Defender / Sense / smartscreen) with path verification
 - Excess kills demoted to LogOnly with a rate-limit response event
-- **v2.1.8:** Chain-confirmed multi-signal detections bypass the per-minute rate limit entirely. An attacker who floods false positives to exhaust the budget can no longer prevent Sentinel from killing chain-confirmed threats.
+- **v2.1.8:** Chain-confirmed multi-signal detections bypass the per-minute rate limit entirely. An attacker who floods false positives to exhaust the budget can no longer prevent Gnyida from killing chain-confirmed threats.
 
 **Residual risk:** LOW. NetworkIsolate has its own separate budget. Chain-confirmed kills are unlimited. Only single-signal kills are rate-limited.
 
@@ -802,15 +802,15 @@ The retained `worker/` server is deployed independently. Its evidence route stor
 
 ---
 
-## What Sentinel CANNOT Protect Against
+## What Gnyida CANNOT Protect Against
 
 Fundamental limitations, not bugs:
 
 1. **Kernel-level attacks with novel implants** - No visibility below ring 3. Default (v1.8.3) IPSec is **attack-only** (Telnet/rsh/classic RAT ports; Remote Registry/Telnet services off) so users keep SSH/RDP/SMB. Full port/service lockdown is opt-in (`RestrictivePortHardening: true`). DEP/SEHOP/Spectre mitigations and ASR still apply.
 2. **Hardware implants** - No firmware/UEFI visibility (but detects Secure Boot disabled)
-3. **Pre-boot attacks** - Sentinel starts after Windows boots (detects boot config tampering)
+3. **Pre-boot attacks** - Gnyida starts after Windows boots (detects boot config tampering)
 4. **Attacker with physical access + offline disk** - Can boot from USB, modify disk (but detects post-idle hardware changes)
-5. **Attacker already running as SYSTEM** - Can kill Sentinel (watchdog adds delay only)
+5. **Attacker already running as SYSTEM** - Can kill Gnyida (watchdog adds delay only)
 6. **Encrypted C2 over legitimate ports** - Looks like normal HTTPS (but TLS cert monitor detects rogue CA installations; beaconing detector catches statistical patterns)
 7. **Direct syscalls from custom code** - Bypasses ntdll hooks (SyscallStubMonitor detects unhooking attempts; v1.6.8 Hell's Gate in-memory pattern detection scans for syscall stubs in non-image regions)
 8. **GPU memory-resident malware** - Code in GPU VRAM/compute shaders has no CPU-side memory to scan
@@ -818,7 +818,7 @@ Fundamental limitations, not bugs:
 
 ---
 
-## What Sentinel CAN Detect Even Against Skilled Attackers
+## What Gnyida CAN Detect Even Against Skilled Attackers
 
 Hard-to-bypass detections (require kernel access to evade):
 
@@ -873,7 +873,7 @@ Hard-to-bypass detections (require kernel access to evade):
 1. **Behavioral over static** - Detect what processes DO, not what they ARE
 2. **No security theater** - If it doesn't work against a competent attacker, document limitations
 3. **Assume the attacker reads the code** - No security-by-obscurity
-4. **Standalone target** - Sentinel must not assume another antivirus is present. Current EPP gaps remain explicit in [the capability matrix](CAPABILITY_MATRIX.md); standalone parity is not yet established
+4. **Standalone target** - Gnyida must not assume another antivirus is present. Current EPP gaps remain explicit in [the capability matrix](CAPABILITY_MATRIX.md); standalone parity is not yet established
 5. **Kill only on corroboration** - Multiple Tier2 signals correlating produce composite kills. Single signals never kill independently (except self-protection)
 6. **Honest documentation** - State what works and what doesn't
 
@@ -947,7 +947,7 @@ Certificate metadata and absent OS trust markers do not establish hostile instal
 
 In the published 3.2.2 build, the cross-validator probes cloudflare.com against 1.1.1.1 over ordinary UDP and compares IPv4 /16 subnets. This is heuristic evidence, not an authenticated independent view; interception of both paths, same-subnet manipulation, IPv6-only behavior and domains outside the probe can evade it. Critical-domain resolution shifts can also reflect legitimate infrastructure changes.
 
-In the 3.2.3 offline implementation, DnsCrossValidator and DnsResponseValidationMonitor are no-op compatibility types and are not active DNS-answer validation. In 3.2.4, local IPv4/IPv6/effective resolver monitoring remains passive and startup-baseline restoration is removed. Explicit administrator repair uses fresh fingerprints, protected snapshots, audit acceptance and bounded verification/rollback; see [DNS repair](DNS_REPAIR.md). A startup observation is not proof that the resolver was trustworthy. Live adapter mutation/reset validation remains separate from read-only CI. Browser DNS policy enforcement does not independently authenticate the OS resolver. Sentinel does not repair router firmware, authenticate DHCP or verify Wi-Fi password strength.
+In the 3.2.3 offline implementation, DnsCrossValidator and DnsResponseValidationMonitor are no-op compatibility types and are not active DNS-answer validation. In 3.2.4, local IPv4/IPv6/effective resolver monitoring remains passive and startup-baseline restoration is removed. Explicit administrator repair uses fresh fingerprints, protected snapshots, audit acceptance and bounded verification/rollback; see [DNS repair](DNS_REPAIR.md). A startup observation is not proof that the resolver was trustworthy. Live adapter mutation/reset validation remains separate from read-only CI. Browser DNS policy enforcement does not independently authenticate the OS resolver. Gnyida does not repair router firmware, authenticate DHCP or verify Wi-Fi password strength.
 
 ## Interrupted DNS transaction boundary (3.2.5)
 
@@ -966,8 +966,8 @@ An attacker may load a patched adjacent DLL into a legitimate host and place a P
 
 ## Standalone scope and attribution hardening (3.4.0)
 
-Sentinel targets standalone protection within userland; Defender runtime/ASR integration
-is optional and cannot be counted as Sentinel-owned detection. Credential Guard chiefly
+Gnyida targets standalone protection within userland; Defender runtime/ASR integration
+is optional and cannot be counted as Gnyida-owned detection. Credential Guard chiefly
 protects domain secrets, not local/personal sign-in passwords or browser cookies. An
 inactive Credential Guard is contextual, not a universal consumer protection failure.
 VBS/CG/HVCI runtime states and verified-image LSASS process protection are distinct from
@@ -1022,7 +1022,7 @@ The protected Threat-Intelligence provider remains unavailable without Windows-g
 access. Historical drops cannot be recovered by a later snapshot. Coalesced path-less
 WMI hints are descriptive observations, not exact registry write attribution.
 
-Duplicate cleanup owns only the six exact offline firewall names with Sentinel's
+Duplicate cleanup owns only the six exact offline firewall names with Gnyida's
 grouping and refuses foreign collisions. Administrative concurrent policy changes can
 race read-back; rule configuration is not packet-level enforcement proof. File-scan
 retries do not bypass ACLs, unlock files or certify inaccessible content. Browser
@@ -1048,7 +1048,7 @@ maliciousness; retain review-only reporting and explicit distrust-policy boundar
 
 Local firewall and local computer GPO are writable policy scopes; domain-managed effective exceptions are reported, never overwritten. Rule-name uniqueness is not approval. Approved rule identity includes the full filter definition; cloning or changing it does not inherit approval. Reconciliation is periodic/event-driven, not an atomic prevention guarantee. Windows Firewall filters TCP, UDP and ICMP packets; IPsec on modern Windows is not independent of BFE/Windows filtering services.
 
-IPsec/connection-security, DNS/NRPT and persistent routes are separately inventoried with bounded metadata hashing. First observation is not an authorized repair baseline or proof of active IPsec negotiation. Sentinel does not import the owner's supplied registry/script exports into a universal product policy. Their legacy port blocks can break legitimate traffic, do not identify C2 by port, and are not an alternative to behavioral detection. Registry exports with repeated keys/assignment values are snapshots, not proof of a simultaneously effective policy.
+IPsec/connection-security, DNS/NRPT and persistent routes are separately inventoried with bounded metadata hashing. First observation is not an authorized repair baseline or proof of active IPsec negotiation. Gnyida does not import the owner's supplied registry/script exports into a universal product policy. Their legacy port blocks can break legitimate traffic, do not identify C2 by port, and are not an alternative to behavioral detection. Registry exports with repeated keys/assignment values are snapshots, not proof of a simultaneously effective policy.
 
 Automatic DNS repair is restricted to a protected previously verified selected profile, revalidated under the repair gate. It retains the original rollback state; restoration or an unresolved later transaction revokes/blocks reassertion. Unknown DNS/hosts/routes do not supply malicious process identity or a trustworthy replacement. Existing compiled hosts/NRPT/browser policy is maintained; arbitrary /32 routes are no longer deleted by shape/count. General autonomous route/IPsec rewriting remains outside the implemented policy scope.
 
@@ -1060,11 +1060,11 @@ Unverified foreign-path DLL identity alone now produces a Tier2 review event, no
 
 ### 3.5.1 policy and compatibility boundary
 
-Sentinel does not ship global Windows user-right/logon-right replacements. Shared service impersonation/token rights must not be stripped as a blanket Potato mitigation, and powerful rights must not be granted to all console logons. Preserve administrator/OS assignments; already-applied changes need separate, machine-specific recovery. Actual Microsoft Defender acceptance of exact build bytes is a required release gate, with unavailable scanning remaining unverified/blocked. Antivirus false-positive review and genuine signing do not justify bypassing Defender or granting runtime trust. See [3.5.1 limits](RELEASE_3.5.1.md).
+Gnyida does not ship global Windows user-right/logon-right replacements. Shared service impersonation/token rights must not be stripped as a blanket Potato mitigation, and powerful rights must not be granted to all console logons. Preserve administrator/OS assignments; already-applied changes need separate, machine-specific recovery. Actual Microsoft Defender acceptance of exact build bytes is a required release gate, with unavailable scanning remaining unverified/blocked. Antivirus false-positive review and genuine signing do not justify bypassing Defender or granting runtime trust. See [3.5.1 limits](RELEASE_3.5.1.md).
 
-## SentinelAutoRotate residual risks (3.5.4, opt-in)
+## GnyidaAutoRotate residual risks (3.5.4, opt-in)
 
-Enabling `SentinelAutoRotate` lowers the local authentication boundary on purpose. The owner approved this for the opt-in task only; see `constraints.md`.
+Enabling `GnyidaAutoRotate` lowers the local authentication boundary on purpose. The owner approved this for the opt-in task only; see `constraints.md`.
 
 - **Empty-password console sign-in.** From boot until the first rotation (about ten minutes after logon), the account password is blank. Windows default policy permits blank-password logon at the console, so anyone at the keyboard can sign in without a credential during that window.
 - **Locked sessions.** After a rotation, sign-in requires the random password, which nobody knows. A locked session can only be unlocked after the next boot resets the password to blank.

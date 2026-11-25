@@ -1,12 +1,12 @@
-# Heap dump diagnosis for Sentinel.Service
+# Heap dump diagnosis for Gnyida.Service
 
 How the 3.7.7 memory leak was found (full write-up: [`docs/MEMORY_LEAK_3.7.8.md`](../../../docs/MEMORY_LEAK_3.7.8.md)).
-Use this when `[SentinelHealthCheck] High memory usage` appears in `%ProgramData%\Sentinel\Logs\diagnostic.jsonl`
+Use this when `[GnyidaHealthCheck] High memory usage` appears in `%ProgramData%\Gnyida\Logs\diagnostic.jsonl`
 and the number keeps climbing.
 
 ## 1. Decide managed versus native (about one minute)
 
-Run Sysinternals **VMMap** elevated and select `Sentinel.Service`. Compare these rows:
+Run Sysinternals **VMMap** elevated and select `Gnyida.Service`. Compare these rows:
 
 | Row | Meaning |
 |---|---|
@@ -20,7 +20,7 @@ In 3.7.7: Managed Heap 9,538 MB of about 9,980 MB committed. Native heap 121 MB,
 
 ```
 mkdir C:\Temp
-procdump64 -accepteula -ma <ServicePid> C:\Temp\sentinel.dmp
+procdump64 -accepteula -ma <ServicePid> C:\Temp\gnyida.dmp
 ```
 
 The dump is about the size of the working set, and the service pauses for a few seconds. **Do not restart
@@ -37,7 +37,7 @@ dotnet new console -n An
 cd An
 dotnet add package Microsoft.Diagnostics.Runtime
 copy <repo>\tools\diagnostics\heap-dump\HeapTypeStats.cs.txt Program.cs
-dotnet run -c Release -- C:\Temp\sentinel.dmp 30
+dotnet run -c Release -- C:\Temp\gnyida.dmp 30
 ```
 
 `HeapTypeStats` prints the heap by type (size and count). A healthy service has a small heap dominated by
@@ -47,7 +47,7 @@ count. Ignore the `Free` row: it is unused space inside the heap, not retained o
 Then swap in `HeapReferrers.cs.txt` as `Program.cs` and run it on the suspect type to see what holds it:
 
 ```
-dotnet run -c Release -- C:\Temp\sentinel.dmp "System.Threading.Channels.AsyncOperation<System.Boolean>" 5
+dotnet run -c Release -- C:\Temp\gnyida.dmp "System.Threading.Channels.AsyncOperation<System.Boolean>" 5
 ```
 
 If output is truncated or the run exits with -1 when piped through `Select -First` or similar, redirect

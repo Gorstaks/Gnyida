@@ -1,15 +1,15 @@
 # BCI / EEG Neural-Input Device Block — Findings Report
 
 **Mode:** READ-ONLY investigation. No source code was modified.
-**Project:** Sentinel (userland Windows EDR, .NET Framework 4.8 / `net48-windows`, C#) at `e:\Gorstak\Sentinel`.
+**Project:** Gnyida (userland Windows EDR, .NET Framework 4.8 / `net48-windows`, C#) at `e:\Gorstak\Gnyida`.
 **Version at time of investigation:** `version.txt` = `3.0.1`.
-**Goal:** Determine exactly how to add a reversible device-installation DENY policy for EEG/BCI neural-input peripherals plus an observe-only (Tier2/LogOnly) detection, reusing Sentinel's existing mechanisms. Posture is deny-by-default: the user owns no BCI device, so any BCI/EEG device that attempts to connect must be prevented from binding.
+**Goal:** Determine exactly how to add a reversible device-installation DENY policy for EEG/BCI neural-input peripherals plus an observe-only (Tier2/LogOnly) detection, reusing Gnyida's existing mechanisms. Posture is deny-by-default: the user owns no BCI device, so any BCI/EEG device that attempts to connect must be prevented from binding.
 
 ---
 
 ## 1. Summary answer (read this first)
 
-- **How Sentinel applies host device/registry policy today:** two mechanisms, both userland.
+- **How Gnyida applies host device/registry policy today:** two mechanisms, both userland.
   1. **Direct HKLM registry writes** via `Microsoft.Win32.Registry.LocalMachine.CreateSubKey(...)` wrapped in the private helpers `HardeningModule.SetRegistryDword` / `SetRegistryString` / `SetRegistryDwordCurrentUser`, and for multi-value lists the ASR pattern writes string/multi-string values directly under a Policy-hive key (`ApplyAsrRules` / `ApplyAsrOnlyExclusions`). This is the dominant pattern and is the right insertion point for a device-install deny.
   2. **LGPO.exe + GSecurity.inf** via `HardeningModule.ApplyLgpoSecurityPolicy()` — a `Process.Start` of the shipped `LGPO.exe` applying a `.inf` security template. This path is for the SECEDIT/security-template class of settings, is coarse, and is **not** the right vehicle for a curated device-install deny list.
 - **There is currently NO handling of `HKLM\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions`** anywhere in `src\` (grep for `DeviceInstall`, `DenyDeviceIDs`, `DenyDeviceClasses`, `DenyUnspecified`, `Restrictions` returns no matches). The DeviceInstall-Restrictions mechanism would be net-new, but it fits cleanly into the existing ASR-style registry-policy pattern.
@@ -20,9 +20,9 @@
 
 ---
 
-## 2. Evidence — how Sentinel applies & reverts host device/registry policy today
+## 2. Evidence — how Gnyida applies & reverts host device/registry policy today
 
-All file/line references are to `e:\Gorstak\Sentinel\src\Sentinel.Core\HardeningModule.cs` unless noted.
+All file/line references are to `e:\Gorstak\Gnyida\src\Gnyida.Core\HardeningModule.cs` unless noted.
 
 ### 2.1 Entry points and lifecycle
 
@@ -40,7 +40,7 @@ All file/line references are to `e:\Gorstak\Sentinel\src\Sentinel.Core\Hardening
   ```
 
   A new `ApplyNeuralInterfaceDenyPolicy()` call would be added here (or driven from the new guard's `StartAsync`).
-- `HardeningModule.ReleaseUserWorkSurface()` is the **revert/teardown** entry point (called on uninstall / work-surface release). It removes only Sentinel-created artifacts (comment: "ONLY removes rules/policies that Sentinel itself created"). It currently calls `RemoveIPSecPolicyIfPresent()`, `RemoveFirewallRuleByName("Sentinel-Block-Remote-RPC-Ephemeral")`, `ReleaseAsrBlockPolicy()`, and `ApplyAsrOnlyExclusions()`. **A new `ReleaseNeuralInterfaceDenyPolicy()` must be added here** so the deny is reverted on uninstall.
+- `HardeningModule.ReleaseUserWorkSurface()` is the **revert/teardown** entry point (called on uninstall / work-surface release). It removes only Gnyida-created artifacts (comment: "ONLY removes rules/policies that Gnyida itself created"). It currently calls `RemoveIPSecPolicyIfPresent()`, `RemoveFirewallRuleByName("Gnyida-Block-Remote-RPC-Ephemeral")`, `ReleaseAsrBlockPolicy()`, and `ApplyAsrOnlyExclusions()`. **A new `ReleaseNeuralInterfaceDenyPolicy()` must be added here** so the deny is reverted on uninstall.
 
 ### 2.2 The two concrete policy-write mechanisms
 
@@ -52,7 +52,7 @@ private static void SetRegistryString(string subKey, string valueName, string va
 private static void SetRegistryDwordCurrentUser(string subKey, string valueName, int value) // Registry.CurrentUser
 ```
 
-Each is wrapped in `try { } catch { }` ("Non-fatal: may lack admin rights"), i.e. fail-soft. `ApplyRegistryHardening()` uses these to write dozens of HKLM policy values, e.g. `SOFTWARE\Policies\Microsoft\Windows\Installer` `AlwaysInstallElevated=0`, `SOFTWARE\Policies\Microsoft\Windows\WCN\Registrars` `EnableRegistrars=0`. This proves Sentinel already writes under `HKLM\SOFTWARE\Policies\Microsoft\Windows\...` — the exact hive the DeviceInstall Restrictions key lives in.
+Each is wrapped in `try { } catch { }` ("Non-fatal: may lack admin rights"), i.e. fail-soft. `ApplyRegistryHardening()` uses these to write dozens of HKLM policy values, e.g. `SOFTWARE\Policies\Microsoft\Windows\Installer` `AlwaysInstallElevated=0`, `SOFTWARE\Policies\Microsoft\Windows\WCN\Registrars` `EnableRegistrars=0`. This proves Gnyida already writes under `HKLM\SOFTWARE\Policies\Microsoft\Windows\...` — the exact hive the DeviceInstall Restrictions key lives in.
 
 **The ASR list pattern is the closest existing analog to a device deny-list** and should be the template. Key symbols:
 
@@ -73,7 +73,7 @@ Each is wrapped in `try { } catch { }` ("Non-fatal: may lack admin rights"), i.e
 - `public static void ReleaseAsrBlockPolicy()` — opens the key writable and `key.DeleteValue(guid, throwOnMissingValue: false)` for each entry (the symmetric teardown).
 - `public static void ReapplyAsrRules() => ApplyAsrRules();` — the re-arm hook called by the guard.
 
-**Self-heal guard pattern:** `AsrPolicyGuard` is registered in `Sentinel.Service\Program.cs` (singleton + Critical-group registration) and documented in `docs\design.md`: every 60s (20s initial delay) it calls `HardeningModule.IsAsrPolicyIntact()`, and on drift re-applies + emits a **Tier1 LogOnly** Anti-Tamper detection. A `NeuralInterfaceDeviceGuard` self-heal should mirror this exactly (periodic `IsNeuralInterfaceDenyPolicyIntact()` → `ReapplyNeuralInterfaceDenyPolicy()` on drift).
+**Self-heal guard pattern:** `AsrPolicyGuard` is registered in `Gnyida.Service\Program.cs` (singleton + Critical-group registration) and documented in `docs\design.md`: every 60s (20s initial delay) it calls `HardeningModule.IsAsrPolicyIntact()`, and on drift re-applies + emits a **Tier1 LogOnly** Anti-Tamper detection. A `NeuralInterfaceDeviceGuard` self-heal should mirror this exactly (periodic `IsNeuralInterfaceDenyPolicyIntact()` → `ReapplyNeuralInterfaceDenyPolicy()` on drift).
 
 **(b) LGPO.exe + GSecurity.inf — secondary, not for this feature.**
 
@@ -90,7 +90,7 @@ private static void ApplyLgpoSecurityPolicy()
 }
 ```
 
-`LGPO.exe` is shipped (found at `src\Sentinel.Core\HardeningResources\LGPO.exe` and in the publish trees). Note a nuance: `ApplyLgpoSecurityPolicy` looks for `LGPO.exe`/`GSecurity.inf` directly in `AppContext.BaseDirectory`, while the files ship under a `HardeningResources\` subfolder — so this path is best-effort and may no-op depending on layout. Regardless, LGPO applies a SECEDIT-style `.inf` and is a poor fit for a curated, retroactive DeviceInstall deny list. **Use direct registry writes (pattern (a)), not LGPO.**
+`LGPO.exe` is shipped (found at `src\Gnyida.Core\HardeningResources\LGPO.exe` and in the publish trees). Note a nuance: `ApplyLgpoSecurityPolicy` looks for `LGPO.exe`/`GSecurity.inf` directly in `AppContext.BaseDirectory`, while the files ship under a `HardeningResources\` subfolder — so this path is best-effort and may no-op depending on layout. Regardless, LGPO applies a SECEDIT-style `.inf` and is a poor fit for a curated, retroactive DeviceInstall deny list. **Use direct registry writes (pattern (a)), not LGPO.**
 
 ### 2.3 Confirmation: no existing DeviceInstall handling
 
@@ -100,7 +100,7 @@ Grep across `src\**\*.cs` for `DeviceInstall | DenyDeviceIDs | DenyDeviceClasses
 
 ## 3. Evidence — how `UsbDeviceFingerprinter` detects devices and the exact emission shape to reuse
 
-File: `e:\Gorstak\Sentinel\src\Sentinel.Core\UsbDeviceFingerprinter.cs`.
+File: `e:\Gorstak\Gnyida\src\Gnyida.Core\UsbDeviceFingerprinter.cs`.
 
 ### 3.1 Enumeration & identifiers captured
 
@@ -115,7 +115,7 @@ File: `e:\Gorstak\Sentinel\src\Sentinel.Core\UsbDeviceFingerprinter.cs`.
 
 ### 3.2 Allow/deny concept today
 
-- **Allow only.** `_trustedVidPid` (built from `DefaultTrustedUsb` + `SentinelConfig.TrustedUsbDevices`) and `AllowedKeyboardVids` (a static HID VID allowlist: Logitech `046D`, Microsoft `045E`, etc.). There is **no deny list** — new/unknown devices are logged (and only auto-disabled under narrow failed-enumeration / kiosk conditions).
+- **Allow only.** `_trustedVidPid` (built from `DefaultTrustedUsb` + `GnyidaConfig.TrustedUsbDevices`) and `AllowedKeyboardVids` (a static HID VID allowlist: Logitech `046D`, Microsoft `045E`, etc.). There is **no deny list** — new/unknown devices are logged (and only auto-disabled under narrow failed-enumeration / kiosk conditions).
 - Response is work-first: HID auto-disable only when `ProductPosture.AllowsProactiveHostLockdown(_config)`; failed-enumeration auto-disable only when `_config.AutoDisableFailedUsbEnumeration` (default **false**).
 - Disable/eject helpers exist but are reactive node operations, **not** install prevention: `DisableUsbDevice` (writes `ConfigFlags=1` under `SYSTEM\CurrentControlSet\Enum\<instanceId>`), `EjectUsbDevice` (CfgMgr `CM_Request_Device_Eject` / parent-hub eject / `pnputil /remove-device`). These remove an *already-present* node; they do not stop a device from binding on the next plug-in. That is exactly why a **DeviceInstall deny policy** is the correct complement.
 
@@ -127,7 +127,7 @@ File: `e:\Gorstak\Sentinel\src\Sentinel.Core\UsbDeviceFingerprinter.cs`.
 var detection = new DetectionEvent
 {
     RuleName = ruleName,                 // e.g. "USB: New Device Connected" / "BadUSB: Unknown HID Device"
-    ProcessName = "SentinelService.exe",
+    ProcessName = "GnyidaService.exe",
     ProcessId = System.Net48Environment.ProcessId,
     Confidence = confidence,
     Tier = tier,                          // DetectionTier.Tier2Indicator or Tier1Behavioral
@@ -145,7 +145,7 @@ var detection = new DetectionEvent
 _ = _detectionEngine.EmitAsync(detection);
 ```
 
-`DetectionEvent` (defined in `src\Sentinel.Core\Models.cs`) fields relevant to a BCI detection:
+`DetectionEvent` (defined in `src\Gnyida.Core\Models.cs`) fields relevant to a BCI detection:
 
 - `string RuleName`, `string? RuleId`, `string Evidence`, `string Reasoning`
 - `double Confidence`
@@ -159,7 +159,7 @@ Emission API: `DetectionEngine.EmitAsync(DetectionEvent)` — "Direct emission b
 
 ### 3.4 Other device-arrival surfaces (hook vs duplicate)
 
-- `UsbDeviceFingerprinter` is a **polling** monitor: constructor baselines connected devices and starts a `System.Threading.Timer` firing `PollUsbDevices` every 30s; new (unbaselined) devices go through `ProcessNewDevice`. It is **not** a `BackgroundService` — it is a self-starting singleton registered in `Sentinel.Service\Program.cs` (`services.AddSingleton<UsbDeviceFingerprinter>();`), injected into `SentinelService.cs`, "registered" via `Reg(nameof(UsbDeviceFingerprinter), MonitorCategory.UserProtection)`, and disposed in the service's disposables array.
+- `UsbDeviceFingerprinter` is a **polling** monitor: constructor baselines connected devices and starts a `System.Threading.Timer` firing `PollUsbDevices` every 30s; new (unbaselined) devices go through `ProcessNewDevice`. It is **not** a `BackgroundService` — it is a self-starting singleton registered in `Gnyida.Service\Program.cs` (`services.AddSingleton<UsbDeviceFingerprinter>();`), injected into `GnyidaService.cs`, "registered" via `Reg(nameof(UsbDeviceFingerprinter), MonitorCategory.UserProtection)`, and disposed in the service's disposables array.
 - `PhysicalAccessMonitor` (`PhysicalAccessMonitor.cs`) is a `BackgroundService` that snapshots USB **and Bluetooth** devices and reports *new USB/Bluetooth devices after an idle period* as physical-tamper anomalies. It already has Bluetooth-device enumeration (`SnapshotBluetoothDevices`) — relevant because a BLE/HID BCI headset may surface here rather than on the USB enumerator.
 - `VolumeMountMonitor` (`VolumeMountMonitor.cs`) handles volume mount/dismount only — not relevant to a neural-input peripheral; do not hook here.
 
@@ -167,9 +167,9 @@ Emission API: `DetectionEngine.EmitAsync(DetectionEvent)` — "Direct emission b
 
 ---
 
-## 4. The Windows DeviceInstall Restrictions mechanism as applied through Sentinel's existing registry path
+## 4. The Windows DeviceInstall Restrictions mechanism as applied through Gnyida's existing registry path
 
-**Hive / key (net-new to Sentinel, standard Windows policy):**
+**Hive / key (net-new to Gnyida, standard Windows policy):**
 `HKLM\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions`
 
 Written exactly like `ApplyAsrRules` — `Registry.LocalMachine.CreateSubKey(..., writable:true)` + `key.SetValue(...)`. All values below are the standard Group-Policy "Prevent installation of devices that match any of these device IDs" / "...device setup classes" value shapes.
@@ -199,11 +199,11 @@ Under subkey `...\DeviceInstall\Restrictions\DenyDeviceClasses`:
 
 ### 4.4 Reversion on uninstall
 
-Mirror `ReleaseAsrBlockPolicy`: open each key writable and `DeleteValue(..., throwOnMissingValue:false)` for every value Sentinel wrote, then delete the empty `DenyDeviceIDs` / `DenyDeviceClasses` subkeys and the enable/retroactive DWORDs. Wire the call (`ReleaseNeuralInterfaceDenyPolicy()`) into `HardeningModule.ReleaseUserWorkSurface()` next to `ReleaseAsrBlockPolicy()`. Delete only Sentinel-written values (track them by the known hardware-ID set) to honor the v2.0.4 HIGH-5 "only remove what Sentinel created" rule.
+Mirror `ReleaseAsrBlockPolicy`: open each key writable and `DeleteValue(..., throwOnMissingValue:false)` for every value Gnyida wrote, then delete the empty `DenyDeviceIDs` / `DenyDeviceClasses` subkeys and the enable/retroactive DWORDs. Wire the call (`ReleaseNeuralInterfaceDenyPolicy()`) into `HardeningModule.ReleaseUserWorkSurface()` next to `ReleaseAsrBlockPolicy()`. Delete only Gnyida-written values (track them by the known hardware-ID set) to honor the v2.0.4 HIGH-5 "only remove what Gnyida created" rule.
 
 ### 4.5 Userland applicability — confirmed within hard constraints
 
-This mechanism is **pure HKLM policy registry writes** executed by the Sentinel service (SYSTEM) — no kernel driver, no direct syscalls, no device-stack surgery. It is identical in nature to the ASR/registry hardening Sentinel already performs. It therefore satisfies "userland only" and "no kernel drivers". Enforcement is performed by the Windows PnP manager reading the policy at install time; Sentinel merely writes the policy and self-heals it. (Note: writing these keys requires the service to run elevated/SYSTEM, same as the existing ASR writes; under standard-user it fails soft like `SetRegistryDword`.)
+This mechanism is **pure HKLM policy registry writes** executed by the Gnyida service (SYSTEM) — no kernel driver, no direct syscalls, no device-stack surgery. It is identical in nature to the ASR/registry hardening Gnyida already performs. It therefore satisfies "userland only" and "no kernel drivers". Enforcement is performed by the Windows PnP manager reading the policy at install time; Gnyida merely writes the policy and self-heals it. (Note: writing these keys requires the service to run elevated/SYSTEM, same as the existing ASR writes; under standard-user it fails soft like `SetRegistryDword`.)
 
 ---
 
@@ -231,7 +231,7 @@ This mechanism is **pure HKLM policy registry writes** executed by the Sentinel 
 
 ## 6. Concrete design for `NeuralInterfaceDeviceGuard`
 
-New file: `src\Sentinel.Core\NeuralInterfaceDeviceGuard.cs` (and/or policy methods on `HardeningModule` to keep registry-policy symbols co-located with the ASR pattern). Monitor class placement must follow the constraint "each monitor class lives in the group file it belongs to under `Monitors/`"; a device/physical-protection guard fits the Critical / SystemIntegrity group alongside `AsrPolicyGuard`.
+New file: `src\Gnyida.Core\NeuralInterfaceDeviceGuard.cs` (and/or policy methods on `HardeningModule` to keep registry-policy symbols co-located with the ASR pattern). Monitor class placement must follow the constraint "each monitor class lives in the group file it belongs to under `Monitors/`"; a device/physical-protection guard fits the Critical / SystemIntegrity group alongside `AsrPolicyGuard`.
 
 ### 6a. Policy half (reversible device-install DENY) — mirrors the ASR symbols
 
@@ -290,7 +290,7 @@ On each enumeration (reusing `SetupDiGetClassDevs("USB", ...)` + `NormalizeVidPi
 var detection = new DetectionEvent
 {
     RuleName = "Neural Interface Device: BCI/EEG Peripheral Observed",
-    ProcessName = "SentinelService.exe",
+    ProcessName = "GnyidaService.exe",
     ProcessId = System.Net48Environment.ProcessId,
     Confidence = 0.60,
     Tier = DetectionTier.Tier2Indicator,          // MUST be Tier2
@@ -313,16 +313,16 @@ await _detectionEngine.EmitAsync(detection);
 
 ### 6c. Wiring (DI)
 
-- Register the guard as a singleton in `Sentinel.Service\Program.cs` (next to `AsrPolicyGuard`), add it to the Critical/SystemIntegrity monitor group registration list, and add it to the disposables array in `SentinelService.cs` — exactly how `AsrPolicyGuard` and `UsbDeviceFingerprinter` are wired. Constructor-inject `DetectionEngine` and `ILogger<NeuralInterfaceDeviceGuard>` (DI required by constraints). Thread `CancellationToken` through any async loop; log every catch at ≥ Debug.
+- Register the guard as a singleton in `Gnyida.Service\Program.cs` (next to `AsrPolicyGuard`), add it to the Critical/SystemIntegrity monitor group registration list, and add it to the disposables array in `GnyidaService.cs` — exactly how `AsrPolicyGuard` and `UsbDeviceFingerprinter` are wired. Constructor-inject `DetectionEngine` and `ILogger<NeuralInterfaceDeviceGuard>` (DI required by constraints). Thread `CancellationToken` through any async loop; log every catch at ≥ Debug.
 
 ---
 
 ## 7. Constraints the guard must satisfy, and confirmation of the sanctioned approach
 
-From `.kiro\steering\constraints.md` and `docs\constraints.md` (v2.5.6 header) and `Sentinel\AGENTS.md`:
+From `.kiro\steering\constraints.md` and `docs\constraints.md` (v2.5.6 header) and `Gnyida\AGENTS.md`:
 
 - **Userland only — no kernel drivers / no direct syscalls / no self-hiding.** The policy is an HKLM registry write; enforcement is by the Windows PnP manager. **Satisfied.** Destructive device-stack teardown (force-removing drivers, ripping the device stack) would NOT be userland-clean behavior in spirit and is **not** acceptable — the registry-restriction policy is the sanctioned mechanism.
-- **Reversible.** `ReleaseNeuralInterfaceDenyPolicy()` wired into `ReleaseUserWorkSurface()`, deleting only Sentinel-written values (honors v2.0.4 HIGH-5 "only remove what Sentinel created"). **Satisfied.**
+- **Reversible.** `ReleaseNeuralInterfaceDenyPolicy()` wired into `ReleaseUserWorkSurface()`, deleting only Gnyida-written values (honors v2.0.4 HIGH-5 "only remove what Gnyida created"). **Satisfied.**
 - **Tier2 can NEVER trigger a response action; Tier2 = LogOnly unconditionally.** The detection half is `Tier2Indicator` + `LogOnly` (`KillAuthorized == false`). The *blocking* is the pre-emptive policy, not a response action fired off a detection — so the observe/act separation is preserved. **Satisfied.**
 - **Behavioral signals only for kill authority / observe-first.** The detection grants no kill authority; it is observe-only fuel. The deny policy is a *configuration* applied as part of always-on hardening, not a per-detection kill. **Satisfied.**
 - **Adversarial mindset / no attacker-controllable trust.** The deny set is keyed on specific hardware IDs; it is a deny list (not an allow list that an attacker could satisfy by naming). The over-block analysis (Section 5) avoids broad class/VID denies that could be weaponized to brick legitimate hardware. **Satisfied.**
@@ -331,13 +331,13 @@ From `.kiro\steering\constraints.md` and `docs\constraints.md` (v2.5.6 header) a
 - **Versioning (AGENTS.md / workflow.md):** `version.txt` currently `3.0.1`; a release bumps exactly one PATCH via `installer\release.ps1`. The implementer must not jump versions.
 - **Monitor placement:** register via a `MonitorGroup`, put the class in the correct `Monitors/` group file; no flat `AddHostedService` and no monolith file (per constraints).
 
-**Conclusion on sanctioned approach:** Yes — a reversible `DeviceInstall\Restrictions` **deny policy** (DenyDeviceIDs + retroactive), applied through Sentinel's existing direct-HKLM-registry pattern (the ASR template) with a self-heal guard and uninstall teardown, plus a Tier2/LogOnly observe-only detection reusing `UsbDeviceFingerprinter`'s enumeration + `DetectionEngine.EmitAsync`, is the correct and constraint-compliant design. Destructive driver removal / device-stack teardown is explicitly NOT sanctioned.
+**Conclusion on sanctioned approach:** Yes — a reversible `DeviceInstall\Restrictions` **deny policy** (DenyDeviceIDs + retroactive), applied through Gnyida's existing direct-HKLM-registry pattern (the ASR template) with a self-heal guard and uninstall teardown, plus a Tier2/LogOnly observe-only detection reusing `UsbDeviceFingerprinter`'s enumeration + `DetectionEngine.EmitAsync`, is the correct and constraint-compliant design. Destructive driver removal / device-stack teardown is explicitly NOT sanctioned.
 
 ---
 
 ## 8. Open items for the implementer (gaps / assumptions)
 
-1. **Confirm real hardware IDs** for Emotiv / Muse / g.tec / Wearable Sensing and the exact NeuroSky (CP210x) and OpenBCI (FTDI) **PIDs** before populating `NeuralInterfaceDenyIds`. The task's `0x1234` for Emotiv is almost certainly a decoy value (it collides with Sentinel's own `RAT_1234` attack-port definition) and must not be shipped unverified.
+1. **Confirm real hardware IDs** for Emotiv / Muse / g.tec / Wearable Sensing and the exact NeuroSky (CP210x) and OpenBCI (FTDI) **PIDs** before populating `NeuralInterfaceDenyIds`. The task's `0x1234` for Emotiv is almost certainly a decoy value (it collides with Gnyida's own `RAT_1234` attack-port definition) and must not be shipped unverified.
 2. **Elevation:** the deny policy requires SYSTEM/elevated writes (same as ASR). Under standard-user it fails soft — document that full enforcement needs the service.
 3. **BLE/HID residual gap** (Section 5) is unavoidable without collateral damage; surface it in user docs rather than overstating coverage.
 4. **Decide enforcement default:** given the user's explicit deny-by-default intent, applying the deny unconditionally (like always-on hardening) is consistent; if a config gate is desired, follow the "compiled config only" constraint (disk JSON is not loaded).

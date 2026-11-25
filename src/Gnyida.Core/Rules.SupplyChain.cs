@@ -1,0 +1,65 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace Gnyida.Core
+{
+    [RuleCategory(DetectionCategory.SecurityEvasion)]
+    public class NpmSupplyChainRule : IDetectionRule
+    {
+        private static readonly string[] SuspiciousInstallMarkers = IndicatorCatalog.List("supplyChain.markers");
+        public string Name => "NpmSupplyChainRule";
+
+        public DetectionEvent? Evaluate(FusedTelemetryContext context)
+        {
+            if (context.TriggeringEvent is not ProcessTelemetry pt)
+                return null;
+
+            var parent = pt.ParentProcessName?.ToLowerInvariant() ?? "";
+            bool parentIsNode =
+                parent is "node" or "node.exe" or "npm" or "npm.exe" or
+                    "npx" or "npx.exe" or "yarn" or "yarn.exe" or "pnpm" or "pnpm.exe";
+
+            if (!parentIsNode)
+                return null;
+
+            var name = pt.ProcessName ?? "";
+            bool childIsShell =
+                name.Contains("powershell") ||
+                name.Contains("pwsh") ||
+                name.Contains("cmd") ||
+                name.Contains("curl") ||
+                name.Contains("wget") ||
+                name.Contains("bitsadmin") ||
+                name.Contains("certutil");
+
+            if (!childIsShell)
+                return null;
+
+            var cmd = pt.CommandLine?.ToLowerInvariant() ?? "";
+            // Markers live in the compressed indicator resource (see IndicatorCatalog). Same ordinal matching.
+            bool suspicious = SuspiciousInstallMarkers.Any(cmd.Contains);
+
+            if (!suspicious)
+                return null;
+
+            return new DetectionEvent
+            {
+                RuleName = Name,
+                ProcessName = pt.ProcessName ?? "",
+                ProcessId = pt.ProcessId,
+                SignalType = SignalType.SuspiciousProcess,
+                Confidence = 0.88,
+                Tier = DetectionTier.Tier1Behavioral,
+                AuthorizedResponse = ResponseAction.KillProcessTree,
+                Evidence = $"Node/npm parent spawned shell with download/encode payload: {pt.CommandLine}",
+                Reasoning =
+                    "Package-manager process (node/npm/yarn/pnpm) launched a shell with network download or " +
+                    "encoded execution - consistent with malicious postinstall/preinstall scripts in npm " +
+                    "supply-chain attacks (e.g. 2025 Shai-Hulud/Tinycolor waves)."
+            };
+        }
+    }
+
+}

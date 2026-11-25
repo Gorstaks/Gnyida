@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>3.9.3</Version>
+    <Company>Gnyida Security</Company>
+    <Product>Gnyida Endpoint Detection and Response</Product>
+    <Description>Gnyida EDR Windows Service Host</Description>
+    <Copyright>Copyright (c) 2026 Gnyida Contributors</Copyright>
+    <Authors>Gnyida</Authors>
+    <Platforms>AnyCPU;x64</Platforms>
+    <ApplicationIcon>..\..\installer\assets\Gnyida.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Gnyida.Core\Gnyida.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <Reference Include="System.ServiceProcess" />
+  </ItemGroup>
+
+</Project>

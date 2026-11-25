@@ -1,9 +1,9 @@
-# Sentinel - Roadmap
+# Gnyida - Roadmap
 
 **North star:** the best, most bulletproof userland protection an honest EDR can give on a
 real Windows desktop people actually use.
 
-This roadmap is deliberately grounded in Sentinel's own documented reality - the residual risks
+This roadmap is deliberately grounded in Gnyida's own documented reality - the residual risks
 in `THREAT_MODEL.md`, the known limitations marked in code, and the "intentionally out of scope"
 list in `requirements.md`. It is not a wishlist of features that would break the project's
 constraints. Anything here must still obey `docs/constraints.md` (userland only, no kernel
@@ -50,7 +50,7 @@ higher. Each is about *narrowing the race*, not claiming to eliminate it.
 
 ## Theme 2 - Coverage breadth (generic-class, not per-CVE)
 
-Sentinel's stated strategy (v2.2.4) is generic exploit-*shape* sensors so the next CVE sibling
+Gnyida's stated strategy (v2.2.4) is generic exploit-*shape* sensors so the next CVE sibling
 doesn't need a new campaign pack. Keep extending shapes, not one-offs.
 
 - New delivery vectors as they emerge (the MOTW script-dropper + WPAD/PAC work in v2.3.5 is the
@@ -87,7 +87,7 @@ The v2.0 WeightedCorrelationEngine + score cards + MITRE mapping is the foundati
 Always-on protection is only bulletproof if it never falls over or bogs the machine down.
 
 - Continue independent-monitor failure isolation and self-healing (MonitorRegistry).
-- Watch detection/response latency percentiles (SentinelMetrics) and keep the telemetry queue
+- Watch detection/response latency percentiles (GnyidaMetrics) and keep the telemetry queue
   bounded under flood.
 - Reduce startup and steady-state cost so users never feel a reason to turn it off.
 
@@ -110,7 +110,7 @@ These are permanent non-goals. Do not add them; they'd break the project's ident
 
 When you want to move forward but don't have a specific task in mind, pick the highest-priority
 item from Theme 1 (that's where "bulletproof" actually improves), and ask to spin it into a
-feature spec. The steering rules keep the work inside Sentinel's constraints, and the
+feature spec. The steering rules keep the work inside Gnyida's constraints, and the
 post-task test hook verifies it before it's called done.
 
 ## Remediation expansion (3.2.4)

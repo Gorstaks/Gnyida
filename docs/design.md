@@ -9,7 +9,7 @@ is recorded. Core detection tiers, removed reporting transports and response dis
 separate. Since 3.8.3 the companion writes a per-cycle `posture.json` (state plus a diff
 against the previous cycle) into its protected folder, and the Service's
 `ExploitShieldPostureMonitor` turns it into Tier2 LogOnly patch-posture events after an
-owner/DACL/reparse check. See [automatic maintenance details and limits](../tools/Sentinel.ExploitShield/README.md).
+owner/DACL/reparse check. See [automatic maintenance details and limits](../tools/Gnyida.ExploitShield/README.md).
 
 DNS collection subscribes to query-start events 3006 from the shared real-time DNS provider. The dispatcher also handles completion events 3008; server-configuration IDs 1001/1002 are not query telemetry. A bounded queue connects the dispatcher to `DnsQueryMonitor`; overflow is counted and reported without discarding the available batch. Structured `QueryName` event-log reads provide fallback when the real-time provider/consumer is unavailable. Source transitions can create a coverage gap and are logged; missing/denied channels do not become an imaginary cache fallback.
 
@@ -31,7 +31,7 @@ Verified weak firewall-helper observations emitted directly by monitors use the 
 
 ## Log reliability and evidence (3.3.4)
 
-The service removes the default host EventLog ILogger provider, whose write exceptions could terminate the ETW thread. A bounded diagnostic JSONL provider writes under `%ProgramData%\Sentinel\Logs` (5 MiB plus one rotated file); sink/formatting failures fall back to Trace without recursion. The existing guarded, critical-only `SentinelEventLogWriter` remains the Windows Event Log trail. Agent logging and the primary events/audit writers are unchanged.
+The service removes the default host EventLog ILogger provider, whose write exceptions could terminate the ETW thread. A bounded diagnostic JSONL provider writes under `%ProgramData%\Gnyida\Logs` (5 MiB plus one rotated file); sink/formatting failures fall back to Trace without recursion. The existing guarded, critical-only `GnyidaEventLogWriter` remains the Windows Event Log trail. Agent logging and the primary events/audit writers are unchanged.
 
 ETW coverage remains degraded while provider access, native query, consumer or loss checks fail. Unavailable session/consumer recreation backs off from 5 to 60 seconds until stable recovery; provider-only access denial does not trigger session recreation. Unchanged degradation produces at most a five-minute reminder; a changed cause alerts immediately. Recovery requires 30 seconds of healthy guard samples, emits a recovery observation and does not restore lost telemetry. Native and dispatch loss counters are compared separately, and failed native queries do not reset their baseline. The native counters are reported as observed; this change does not prove that their magnitude is accurate on every Windows build. Threat-Intelligence provider access denial can reflect Windows protected-provider restrictions; this release does not bypass those restrictions or claim to grant access.
 
@@ -55,27 +55,27 @@ Useful file and socket-shell coverage is native Core code in `NanoAvCoverage`/`N
 
 `DnsRepairService` coordinates injected configuration, protected journal and audit backends. The dashboard previews fixed resolver profiles, then a short-lived UAC helper sends an authenticated operation to the service; the service validates the actual caller token and the preview fingerprint. Snapshots and audit acceptance precede native Windows DNS settings changes. Static/effective read-back, cache flushing, rollback and explicit receipts prevent attempted changes from appearing verified. IPv4/IPv6/DHCP drift stays Tier2 LogOnly; startup observations never authorize DNS restoration. See [DNS repair](DNS_REPAIR.md) and its live-Windows validation limits. These controls supersede historical DNS-lock descriptions below.
 
-# Sentinel - Design Document
+# Gnyida - Design Document
 
 ## Firewall defaults, policy stores, and monitoring (3.2.3)
 
-The service manages PersistentStore and, when the OS exposes it, the local computer Group Policy store (`localhost`). It mirrors Sentinel's own process blocks into local Group Policy and inspects ActiveStore, including rule filters, enforcement status, profile settings, and BFE/MpsSvc health. It never writes a domain GPO. Effective domain exceptions, disabled/overridden profiles, missing rules, or non-enforced filters produce visible conflicts and a dashboard attention state instead of a protected claim. A trimmed image without a local GPO store uses PersistentStore; missing NetSecurity/PowerShell means policy management is unavailable and is reported, while COM inbound-block reconciliation and local detection continue.
+The service manages PersistentStore and, when the OS exposes it, the local computer Group Policy store (`localhost`). It mirrors Gnyida's own process blocks into local Group Policy and inspects ActiveStore, including rule filters, enforcement status, profile settings, and BFE/MpsSvc health. It never writes a domain GPO. Effective domain exceptions, disabled/overridden profiles, missing rules, or non-enforced filters produce visible conflicts and a dashboard attention state instead of a protected claim. A trimmed image without a local GPO store uses PersistentStore; missing NetSecurity/PowerShell means policy management is unavailable and is reported, while COM inbound-block reconciliation and local detection continue.
 
-Inbound allow rules in both local stores are disabled and retained. Outbound allow rules and default outbound actions are preserved; old Sentinel outbound self-blocks are retired. Firewall profiles are enabled and default inbound policy is Block in the two writable local stores. Exact DHCP-service UDP 68/67 and 546/547 rules are exempt. System-only ICMPv6 error/control types 1-4 and neighbour/router discovery 133-136 are exempt to preserve outbound IPv6; echo and arbitrary application ICMPv6 rules are not. The policy does not automatically enable an existing disabled essential rule.
+Inbound allow rules in both local stores are disabled and retained. Outbound allow rules and default outbound actions are preserved; old Gnyida outbound self-blocks are retired. Firewall profiles are enabled and default inbound policy is Block in the two writable local stores. Exact DHCP-service UDP 68/67 and 546/547 rules are exempt. System-only ICMPv6 error/control types 1-4 and neighbour/router discovery 133-136 are exempt to preserve outbound IPv6; echo and arbitrary application ICMPv6 rules are not. The policy does not automatically enable an existing disabled essential rule.
 
 Registry tree notifications trigger coalesced rechecks, with a 15-second polling fallback. These are detection/reconciliation intervals, not an atomic prevention guarantee: an unapproved exception may exist briefly before reconciliation. New exceptions and re-enabled unapproved exceptions are disabled again on refresh/restart. Windows changes cannot be reliably distinguished from manual changes from the Enabled flag, so opt-in is explicit. Approval is bound to the store, exact rule name, and complete filter identity; changed definitions lose approval. Privileged approval/revocation is not exposed over the user-session web/pipe API.
 
 Administrators can approve an existing rule from an elevated terminal in the install directory:
 
 ```powershell
-.\Sentinel.Service.exe --allow-inbound PersistentStore 'Exact-Rule-Name'
-.\Sentinel.Service.exe --allow-inbound localhost 'Exact-GPO-Rule-Name'
-.\Sentinel.Service.exe --deny-inbound PersistentStore 'Exact-Rule-Name'
+.\Gnyida.Service.exe --allow-inbound PersistentStore 'Exact-Rule-Name'
+.\Gnyida.Service.exe --allow-inbound localhost 'Exact-GPO-Rule-Name'
+.\Gnyida.Service.exe --deny-inbound PersistentStore 'Exact-Rule-Name'
 ```
 
 The names are the rule `Name` identifiers, not translated display names or wildcard patterns. No new arbitrary rule or command is created by these operations. Windows Firewall UI can still disable an approved exception; enabling an unapproved exception there is temporary until the next reconciliation.
 
-An ACL-protected, atomic rollback journal records original enabled/profile states before changing them, supports interrupted operations, and is serialized across service/administrator processes. Uninstall restores matching recorded original states and removes owned self-blocks; changed rule definitions are skipped and reported. `Sentinel.Service.exe --restore-firewall` is an elevated rollback command that first stops the service/watchdog. Starting Sentinel again resumes the baseline. Preserve the journal for recovery; a malformed/unsafe journal fails visibly rather than silently replacing the original state.
+An ACL-protected, atomic rollback journal records original enabled/profile states before changing them, supports interrupted operations, and is serialized across service/administrator processes. Uninstall restores matching recorded original states and removes owned self-blocks; changed rule definitions are skipped and reported. `Gnyida.Service.exe --restore-firewall` is an elevated rollback command that first stops the service/watchdog. Starting Gnyida again resumes the baseline. Preserve the journal for recovery; a malformed/unsafe journal fails visibly rather than silently replacing the original state.
 
 The fixed, embedded NetSecurity management script runs through an absolute Windows PowerShell path with no profile. Script text is embedded code; request/rule data travels as JSON, not command interpolation. Output, execution time, and pre-authentication pipe input are bounded. This management-only bridge is the reason PowerShell is used here: the firewall COM API does not offer the required policy-store selection. No online lookup is involved.
 
@@ -87,7 +87,7 @@ Game/anti-cheat memory-handle safety restrictions remain. Protected/PPL processe
 
 ## Online capability and privilege boundary (3.4.5)
 
-The Service performs fixed, bounded HTTPS hash reputation checks. No file upload, arbitrary reporting endpoint or removed embedded credential is restored. Agent legacy reputation remains Unknown unless explicitly wired; outbound networking itself is not prohibited. Two inbound-only image rules cover Service, Agent and Guard, because Guard runs `Sentinel.Service.exe --watchdog`. Loopback remains available; legacy outbound self-blocks are removed from PersistentStore and local GPO, including COM DisplayName aliases. These are inbound packet filters, not a local injection sandbox. Windows Firewall and IPsec rely on Windows filtering services; registry presence does not prove active enforcement.
+The Service performs fixed, bounded HTTPS hash reputation checks. No file upload, arbitrary reporting endpoint or removed embedded credential is restored. Agent legacy reputation remains Unknown unless explicitly wired; outbound networking itself is not prohibited. Two inbound-only image rules cover Service, Agent and Guard, because Guard runs `Gnyida.Service.exe --watchdog`. Loopback remains available; legacy outbound self-blocks are removed from PersistentStore and local GPO, including COM DisplayName aliases. These are inbound packet filters, not a local injection sandbox. Windows Firewall and IPsec rely on Windows filtering services; registry presence does not prove active enforcement.
 
 
 The Agent uses an explicit asInvoker manifest and refuses SYSTEM/elevated-administrator execution. The service watchdog checks the session token and selects its limited linked token where necessary; if no suitable token exists it refuses an elevated launch. The Agent applies only its own process mitigations, writes logs/restart state to user-owned storage by default, and delegates privileged operations to the service. Module UI requests schedule service inspection rather than directly quarantining a browser-supplied file path. Certificate requests retain the service's explicit distrust-list authorization. If the service is unavailable these operations fail without an elevated fallback. No generic command execution, arbitrary privileged file-write/delete, or response-disable operation is exposed.
@@ -107,14 +107,14 @@ Versioned feature-addition sections below retain implementation history. Current
 
 - **Product (Core / Service / Agent / Tests):** .NET Framework 4.8, Windows only (`net48-windows`)
 - **Installer:** framework-dependent publish via `installer/build.ps1` (requires .NET Framework 4.8 on the target PC; Setup offers the Microsoft download if missing)
-- **Optional tooling:** `tools/Sentinel.MlTrainer` targets `net10.0-windows` (build host needs .NET SDK 10)
+- **Optional tooling:** `tools/Gnyida.MlTrainer` targets `net10.0-windows` (build host needs .NET SDK 10)
 - Architecture: win-x64
 
 ---
 
 ## Architecture Overview
 
-Sentinel follows a clean pipeline architecture with strict separation of concerns:
+Gnyida follows a clean pipeline architecture with strict separation of concerns:
 
 ```
 Monitors -> TelemetryFusionEngine -> DetectionEngine -> AdvancedResponseEngine -> JsonlEventLogger
@@ -154,7 +154,7 @@ compiled types and behavior are unchanged:
 | `RulePackLoader` | RSA-SHA256 signed `*.pack.json` -> `ICorrelationRule` plugins |
 | `EventGraph.GetProcessDiversity` | Graph fan-out boost for weighted score cards |
 | `ServiceAgentIpcHost` / `ServiceAgentIpcClient` | HMAC authenticated named pipe with nonce replay prevention (ops/health/scan) |
-| `OpsMetricsPublisher` | Writes `%ProgramData%\Sentinel\ops_metrics.json` |
+| `OpsMetricsPublisher` | Writes `%ProgramData%\Gnyida\ops_metrics.json` |
 | `SelfPathGuard` | Hardlink-aware install self-exclusion |
 | `EncryptedConfigStore` | DPAPI `config.enc` for Hardened Mode / victim identity only; cannot disable detection or rewrite compiled HMAC |
 | `ProductInfo.Version` | Stamped from `version.txt` (3.2.3) |
@@ -173,7 +173,7 @@ Every monitor feeds raw telemetry through the `TelemetryFusionEngine` before the
 The fusion layer is PASSIVE - it never blocks, kills, or modifies telemetry.
 
 **Reflexive-loop guard (ingestion self-exclusion).** `FeedEvent` drops any event whose
-`ProcessId` is Sentinel's own PID before it enters any accumulator (chain, `EventGraph`, or the
+`ProcessId` is Gnyida's own PID before it enters any accumulator (chain, `EventGraph`, or the
 derived context). The Service runs as SYSTEM and continuously scans other processes
 (`OpenProcess` / `ReadProcessMemory` / handle enumeration) and writes its own logs, quarantine,
 and diagnostics; without this guard that self-generated activity could be re-ingested as
@@ -193,9 +193,9 @@ cannot spike RAM between the periodic 15s/2min cleanup passes.
 
 | Process | Session | Runs As | Purpose |
 |---------|---------|---------|---------|
-| `Sentinel.Service.exe` | Session 0 | SYSTEM | Core detection, response, ETW, network, file, registry monitoring |
-| `Sentinel.Agent.exe` | User session | Logged-in user | Tray icon, keyboard hooks, screen/webcam, UI attack detection |
-| `Sentinel.Service.exe --watchdog` (`SentinelGuard`) | Session 0 | SYSTEM | Separate visible watchdog service for core-service recovery |
+| `Gnyida.Service.exe` | Session 0 | SYSTEM | Core detection, response, ETW, network, file, registry monitoring |
+| `Gnyida.Agent.exe` | User session | Logged-in user | Tray icon, keyboard hooks, screen/webcam, UI attack detection |
+| `Gnyida.Service.exe --watchdog` (`GnyidaGuard`) | Session 0 | SYSTEM | Separate visible watchdog service for core-service recovery |
 
 The Service is the authority. The Agent provides user-session visibility and UI.
 Guard is a separate persistent process, although it uses the Service executable with
@@ -220,11 +220,11 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 | `AsrPolicyGuard` | Verifies Defender ASR Block rules (Policy hive); re-applies on drift/tamper | 60s |
 | `AgentWatchdog` | Polls for Agent process; relaunches via CreateProcessAsUser if absent | 10s |
 | `SyscallStubMonitor` | Compares ntdll/amsi function prologues against startup baseline; indirect syscall pattern detection | 30s |
-| `ConnectivityCanaryMonitor` | Verifies Sentinel can reach threat intel endpoints; detects EDRSilencer | 45s |
+| `ConnectivityCanaryMonitor` | Verifies Gnyida can reach threat intel endpoints; detects EDRSilencer | 45s |
 | `EtwSessionGuard` | Checks UnifiedEtwSession IsActive + events/sec floor; auto-recreates | 3s |
 | `EtwProviderTamperMonitor` | Checks EtwEventWrite patches in critical processes; detects logman/wevtutil manipulation | 30s |
-| ~~`AmsiIntegrityCheck`~~ | **Removed v2.3.10** (its `AmsiScanBuffer`/`amsi.dll` string literals were a Kaspersky ML trigger on `Sentinel.Core.dll`). AMSI/ETW integrity coverage preserved via `SyscallStubMonitor` (ntdll prologue baseline) + `ScriptExecutionMonitor.CheckAmsiIntegrity` (Event 4104). | - |
-| `HoneypotDllMonitor` | **v2.2.0 registered.** Decoy DLLs in `{install}\honeypot\` only (never next to Sentinel.exe) | FSW + 60s replant |
+| ~~`AmsiIntegrityCheck`~~ | **Removed v2.3.10** (its `AmsiScanBuffer`/`amsi.dll` string literals were a Kaspersky ML trigger on `Gnyida.Core.dll`). AMSI/ETW integrity coverage preserved via `SyscallStubMonitor` (ntdll prologue baseline) + `ScriptExecutionMonitor.CheckAmsiIntegrity` (Event 4104). | - |
+| `HoneypotDllMonitor` | **v2.2.0 registered.** Decoy DLLs in `{install}\honeypot\` only (never next to Gnyida.exe) | FSW + 60s replant |
 
 #### Group 2: CoreDetection (2s start delay, max 5 restarts)
 
@@ -322,7 +322,7 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 | `FirewallIntegrityMonitor` | Polls firewall profiles via netsh advfirewall; detects disable/bulk rules | 60s |
 | `SecureBootIntegrityMonitor` | Checks Secure Boot, test signing, kernel debug via registry+bcdedit | 5min |
 | `SystemFileAclDriftMonitor` | **v3.8.1.** Walks System32, SysWOW64 and Program Files (skips reparse points) and reports loadable binaries (.exe/.dll/.sys/...) whose DACL grants write to a broad principal (Users, Authenticated Users, Everyone, Interactive, Guests, Network, Anonymous). Per-service SIDs are ignored. The finding is Tier2 LogOnly, one batched event per scan. Each finding under System32/SysWOW64 is handed to `SystemFileAclRepairer` (hardening, gated on `ProductPosture.AllowsProactiveHostLockdown`, not driven by the Tier2 event). Program Files is report-only. | 10min start, then 6h |
-| `SystemFileAclRepairer` | **v3.8.1.** Removes standard-user write grants from OS binaries left writable by image-customization tools. Scope: existing binaries under System32/SysWOW64, no reparse points, explicit (non-inherited) ACEs only. Saves the DACL to `%ProgramData%\Sentinel\AclBackup` (SYSTEM/Administrators-only) before changing it, keeps the ACE's read/execute rights, re-reads the result and restores the backup if a broad write grant remains. `Restore` re-applies a backup (scope-checked). Owner is not changed. | per finding |
+| `SystemFileAclRepairer` | **v3.8.1.** Removes standard-user write grants from OS binaries left writable by image-customization tools. Scope: existing binaries under System32/SysWOW64, no reparse points, explicit (non-inherited) ACEs only. Saves the DACL to `%ProgramData%\Gnyida\AclBackup` (SYSTEM/Administrators-only) before changing it, keeps the ACE's read/execute rights, re-reads the result and restores the backup if a broad write grant remains. `Restore` re-applies a backup (scope-checked). Owner is not changed. | per finding |
 | `WindowsUpdateIntegrityMonitor` | WU service + AU policy + stale installs + **v2.2.3 KEV UBR (CVE-2026-68820 / KB5121003)** + **v2.2.4 missed Patch Tuesday** | 10min |
 | `ScheduledTaskMonitor` | Polls scheduled tasks via schtasks; multi-indicator suspicious task analysis | 60s |
 | `CriticalServiceGuard` | Monitors 15 critical services for crash storms via SCM events (7034/7031) | 10s |
@@ -343,7 +343,7 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 | `ApplicationIntegrityMonitor` | Cuckoo Egg Detection - baselines protected apps (SHA-256 + Authenticode) | FSW + 30s |
 | `PseudoSandbox` | Lightweight behavioral sandbox via restricted Job Objects | on-demand |
 | `AcousticThreatMonitor` | Detects harmful audio frequencies via WASAPI loopback + Goertzel algorithm | continuous |
-| `WfpIntegrityMonitor` | Scans WFP filters for BLOCK rules targeting Sentinel/EDR processes | 30s |
+| `WfpIntegrityMonitor` | Scans WFP filters for BLOCK rules targeting Gnyida/EDR processes | 30s |
 | `DriverLoadMonitor` | BYOVD via Event 7045 (PID when > 4), registry, **interactive user** .sys drops (not SYSTEM profile); cert-tracing | 15s |
 | `GpuProcessMonitor` | GPU helper sandbox-escape (child/net/post-ex DLL) + trojanized GPU .sys names | periodic |
 | `KernelModuleAuditMonitor` | **v2.2.0 registered.** NtQuerySystemInformation module list; logs pre-existing RTCore64/WinRing0 | 30s |
@@ -393,7 +393,7 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 | Component | Mechanism | Notes |
 |-----------|-----------|-------|
 | `TrayIconService` | System tray NotifyIcon; **Settings** / double-click opens native `AgentDashboardForm` with embedded browser. **No** `ShowBalloonTip` | WinForms STA |
-| `AgentDashboardForm` | Thin browser shell hosting `http://localhost:19845` (WebDashboardService). **v3.0.6:** prefers Edge/Chromium `WebView2` (profile under `%LocalAppData%\Sentinel\WebView2`; DevTools/context-menu/new-window locked down); falls back to the legacy `WebBrowser` (IE11 Edge emulation) if the WebView2 Runtime is absent. **v3.8.4:** the IE11 fallback is removed; without WebView2 the form shows a native panel that installs the Evergreen Runtime per user (Microsoft bootstrapper, Authenticode-verified, random temp folder; `WebView2Installer`). **v3.2.6:** probes the runtime first (`GetAvailableBrowserVersionString`) and skips WebView2 entirely when absent — no faulting `CreateAsync` task, no `UnobservedTaskException` spam — logging one report to `agent_runtime.log` and marking the window title `(legacy browser)`. **v2.2.9+:** replaces the old WinForms sidebar panels | WinForms STA |
+| `AgentDashboardForm` | Thin browser shell hosting `http://localhost:19845` (WebDashboardService). **v3.0.6:** prefers Edge/Chromium `WebView2` (profile under `%LocalAppData%\Gnyida\WebView2`; DevTools/context-menu/new-window locked down); falls back to the legacy `WebBrowser` (IE11 Edge emulation) if the WebView2 Runtime is absent. **v3.8.4:** the IE11 fallback is removed; without WebView2 the form shows a native panel that installs the Evergreen Runtime per user (Microsoft bootstrapper, Authenticode-verified, random temp folder; `WebView2Installer`). **v3.2.6:** probes the runtime first (`GetAvailableBrowserVersionString`) and skips WebView2 entirely when absent — no faulting `CreateAsync` task, no `UnobservedTaskException` spam — logging one report to `agent_runtime.log` and marking the window title `(legacy browser)`. **v2.2.9+:** replaces the old WinForms sidebar panels | WinForms STA |
 | `WebDashboardService` | Loopback HTTP dashboard + REST API + WebSocket on localhost:19845. Bearer token auth. Serves `DashboardHtml` at GET / | BackgroundService |
 | `DashboardHtml` | Self-contained HTML/CSS/JS served by WebDashboardService - the full dashboard UI | Static class |
 | `ScreenCaptureMonitor` | Detects DXGI desktop duplication + transparent overlay phishing windows | 15-25s |
@@ -414,9 +414,9 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 
 | Component | Role |
 |-----------|------|
-| `MlThreatScorer` | Offline FastTree models (`MlModels/pe_model.zip`, `url_model.zip`) for PE static malware prior and lexical URL/host risk. Soft signal only; never sole kill. Trained via `tools/Sentinel.MlTrainer` from C/datasets. |
+| `MlThreatScorer` | Offline FastTree models (`MlModels/pe_model.zip`, `url_model.zip`) for PE static malware prior and lexical URL/host risk. Soft signal only; never sole kill. Trained via `tools/Gnyida.MlTrainer` from C/datasets. |
 | `FileReputationEngine` | Multi-signal file score (hash TI + static PE + optional PE ML + signer + path context). Composite 0-100. |
-| `DetectionEngine` | Runs all `IDetectionRule` instances against incoming telemetry. **Bounded** channel (10k, DropOldest). Tiered deduplication (10s Tier1, 30s Tier2). Consultant signals sticky Tier2/LogOnly. Records metrics via `SentinelMetrics`. One drain loop serves the priority and normal lanes through `DualLaneWait`, which keeps at most one outstanding `WaitToReadAsync` per lane; never start fresh waits per idle pass and race them (3.7.7 leaked 15.8 M pending waits, ~5 GB; see `docs/MEMORY_LEAK_3.7.8.md`). |
+| `DetectionEngine` | Runs all `IDetectionRule` instances against incoming telemetry. **Bounded** channel (10k, DropOldest). Tiered deduplication (10s Tier1, 30s Tier2). Consultant signals sticky Tier2/LogOnly. Records metrics via `GnyidaMetrics`. One drain loop serves the priority and normal lanes through `DualLaneWait`, which keeps at most one outstanding `WaitToReadAsync` per lane; never start fresh waits per idle pass and race them (3.7.7 leaked 15.8 M pending waits, ~5 GB; see `docs/MEMORY_LEAK_3.7.8.md`). |
 | `AdvancedResponseEngine` | Enforces the unconditional Tier2 log-only gate and action-specific Tier1 responses. Authorized Tier1 signals can act immediately. Private/LAN IPs are never firewall-isolated. |
 | `ResponsePolicy` | Tier1 response authorization classifier: terminal outcomes, benign System32 redistributable noise, multi-signal PID buffers, silent-observe gates. |
 | `TelemetryFusionEngine` | Correlates raw telemetry across all sources into per-process event chains. Produces `FusedTelemetryContext` with behavioral metrics. |
@@ -440,7 +440,7 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 
 | Component | Role |
 |-----------|------|
-| `SentinelOrchestrator` | Central coordination: routes detections through incident grouping before response. Per-PID response locks. |
+| `GnyidaOrchestrator` | Central coordination: routes detections through incident grouping before response. Per-PID response locks. |
 | `IncidentManager` | Groups detections into unified incidents by PID/parent/hash. Lifecycle: Open -> Active -> Responded -> Closed. |
 | `MonitorRegistry` | Supervises all monitors with heartbeat tracking. Auto-restarts crashed monitors. Death fires anti-tamper. |
 | `StartupSequencer` | Phased dependency-ordered boot: Infrastructure -> Engines -> Monitors -> Validators. |
@@ -454,18 +454,18 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 | `JsonlEventLogger` | JSONL output to events.jsonl. Thread-safe, rate-limited, size-rotated, self-healing. |
 | `SecureCacheStore` | DPAPI machine-scope encryption + HMAC integrity for persisted cache files. |
 | `HashReputationService` | Service-only bounded online SHA256 context with Unknown fallback; no runtime trust or reporting. |
-| `QuarantineManager` | DPAPI machine-scope quarantine under `%ProgramData%\Sentinel\Quarantine`. Production path: SYSTEM+Admins FullControl (inherit) + Interactive this-folder-only List/Traverse (UAC-safe Explorer). Sample blobs stay unreadable to Users. Max 128 MB/file. Restore path-validated (no OS-critical write). Agent never creates the folder. |
+| `QuarantineManager` | DPAPI machine-scope quarantine under `%ProgramData%\Gnyida\Quarantine`. Production path: SYSTEM+Admins FullControl (inherit) + Interactive this-folder-only List/Traverse (UAC-safe Explorer). Sample blobs stay unreadable to Users. Max 128 MB/file. Restore path-validated (no OS-critical write). Agent never creates the folder. |
 | `SignerTrustService` | Centralized Authenticode verification (WinVerifyTrust + catalog fallback). Per-path verdict cache keyed on a size/timestamp/head-tail-hash fingerprint, bounded at 20,000 entries (evicted paths are re-verified). |
 | `AllowlistService` | User/dev/gaming/publisher allowlists. President's Law rules never suppressed. |
 | `SecurityValidation` | Input validation, Authenticode (embedded + catalog), process image path, OS-critical paths, private IP classification, constant-time `SecureCompare`. |
-| `SentinelMetrics` | Performance counters with histograms (P50/P90/P95/P99) for detection and response. |
-| `SentinelHealthCheck` | Structured health checks: process, memory, handles, log file, quarantine, thread pool. |
+| `GnyidaMetrics` | Performance counters with histograms (P50/P90/P95/P99) for detection and response. |
+| `GnyidaHealthCheck` | Structured health checks: process, memory, handles, log file, quarantine, thread pool. |
 | `StartupSelfTest` | Verifies ETW, DPAPI, quarantine, log file, and rule loading before activating monitors. |
 | `ThreatReportService` | Retired compatibility facade; performs no outbound reports. |
 | `AutoIncidentReporter` | v1.7.7/1.7.8/1.9.3/1.9.4: Reportable-grade evidence packs, integrity seal (SHA-256+HMAC), victim affidavit, local ZIP export and national portal references; no automatic TI sharing. Chain-confirmed / composite nukes always write a pack. Coercion-toolkit packs add honest technical scope + optional harm checkboxes. Does not file police reports. |
 | `CoercionAbusePolicy` | v1.9.4: Platform-agnostic classification of remote-control / surveillance / session-theft toolkit signals; pack + toast wording. Not chat moderation. |
-| `SentinelEventLogWriter` | v1.9.5: Critical-only Windows Event Log trail (Application/Sentinel). Self-disables on stripped Windows; JSONL remains primary. |
-| `SentinelEventLogHeartbeatService` | v1.9.5: Optional low-frequency Event Log heartbeat for SIEM gap detection. |
+| `GnyidaEventLogWriter` | v1.9.5: Critical-only Windows Event Log trail (Application/Gnyida). Self-disables on stripped Windows; JSONL remains primary. |
+| `GnyidaEventLogHeartbeatService` | v1.9.5: Optional low-frequency Event Log heartbeat for SIEM gap detection. |
 | `LawEnforcementPortals` | Country -> cybercrime portal directory (IC3, Action Fraud, MUP, ...); INTERPOL info-only. |
 | `IoCScanner` | Loads threat intel indicators from DPAPI-encrypted external cache. |
 | `InstallerHeuristics` | Installer name / Inno extractor / benign prefetch + **`IsLikelyInstallerPath`** (Downloads/Desktop/Program Files; not AppData\Roaming or bare Temp). Used for HighRisk demotion. |
@@ -473,7 +473,7 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 | `UnifiedEtwSession` | Single real-time ETW session subscribing to 9 kernel/system providers via raw P/Invoke. |
 | `EtwEventDispatcher` | Routes raw ETW events by provider GUID to typed telemetry objects. |
 | Config integrity | `AntiTamperGuard` hashes `config.enc` + own binary. Disk JSON is not a config source. |
-| `ProxyAuthHelper` | HMAC-SHA256 of `{timestamp}.{path}.{body}` with `ThreatReporting:ProxySharedSecret` (server-side secret; **not** install entropy). Headers: `X-Sentinel-Timestamp`, `X-Sentinel-Signature` only - never send the secret. |
+| `ProxyAuthHelper` | HMAC-SHA256 of `{timestamp}.{path}.{body}` with `ThreatReporting:ProxySharedSecret` (server-side secret; **not** install entropy). Headers: `X-Gnyida-Timestamp`, `X-Gnyida-Signature` only - never send the secret. |
 | `ParentPidSpoofDetector` | Detects PPID spoofing via CreateToolhelp32Snapshot parent-child validation. |
 | `SafeProcessExemptionRegistry` | Tracks processes confirmed safe by VerdictGateRule to prevent redundant scanning. |
 | `FileVerdictAds` | Reads/writes ADS-based verdict tags on scanned files to avoid re-scanning. |
@@ -556,7 +556,7 @@ Emitted as Tier1 `DetectionEvent`s directly via `EmitAsync`. Requires signals fr
 | `NetworkIsolate` | Tier1: firewall block of **public** C2 IP (COM `INetFwPolicy2`); DNS flush (`DnsFlushResolverCache`); ARP entry purge (`DeleteIpNetEntry`). Skips private/LAN/link-local/multicast/CDN resolvers. Rate-limited (`MaxNetworkIsolatesPerMinute`, default 10). |
 | `KillProcess` | Tier1 with kill authority, confidence gate, via ChainTracer / direct kill; budgets (`MaxKillsPerMinute`, default 15) |
 | `KillProcessTree` | Same as above but walks and kills entire process tree |
-| `Quarantine` | DPAPI-encrypted file quarantine to `%ProgramData%\Sentinel\Quarantine` (<=128 MB; OS-critical paths refused; Interactive browse-only on the folder) |
+| `Quarantine` | DPAPI-encrypted file quarantine to `%ProgramData%\Gnyida\Quarantine` (<=128 MB; OS-critical paths refused; Interactive browse-only on the folder) |
 | `QuarantineAndKill` | Kill process + quarantine binary + place lock file |
 | `RemoveRegistryEntry` | Removes malicious autorun/service/COM entries, only at the exact roots in `RegistryRemovalPolicy` and only while the live value still matches the observation (3.7.1) |
 | `DismountVolume` | Dismounts ISO/VHD drives hosting threats; the backing `.iso`/`.img` is moved to the vault, not deleted (3.7.1). SUBST drives are dismounted by `VolumeMountMonitor`, which reports creator/persistence candidates as Tier2 and kills nothing |
@@ -606,9 +606,9 @@ budgets continue to apply.
 
 | Source | Behavior |
 |--------|----------|
-| `Sentinel:ActiveResponse` | Always armed; the compatibility setter cannot disable response |
-| `Sentinel:ChainConfirmMinSignals` / `ChainConfirmWindowSeconds` | Correlation settings; not a prerequisite for every Tier1 response |
-| `Sentinel:SilentObserve` | Controls existing notification/evidence behavior; does not disable authorized response |
+| `Gnyida:ActiveResponse` | Always armed; the compatibility setter cannot disable response |
+| `Gnyida:ChainConfirmMinSignals` / `ChainConfirmWindowSeconds` | Correlation settings; not a prerequisite for every Tier1 response |
+| `Gnyida:SilentObserve` | Controls existing notification/evidence behavior; does not disable authorized response |
 | DLL remediation | Identity failure on a mapped module can trigger process containment and quarantine; a disk plant alone never authorizes killing its writer |
 | Process containment | Snapshot and rescan descendants, pin native process handles, reject reused parent identities and protect each target individually. Verify observed exits; report incomplete discovery or failures explicitly |
 | DLL containment report | Separate detected, quarantined, already absent, deferred and failed files. Successful process containment requires verified root/descendant outcomes, independently of disk cleanup |
@@ -628,16 +628,16 @@ budgets continue to apply.
 - **Consultant signals never escalate** - `DetectionEngine` refuses Critical re-promotion when `Metadata.ConsultantSignal=true`
 - **Deduplication** - `DetectionEngine` suppresses identical `(RuleName, ProcessId)` pairs within 10s (Tier1) / 30s (Tier2)
 - **Bounded telemetry** - detection queue capacity 10_000, `DropOldest` under flood
-- **All file reads use `FileShare.ReadWrite | FileShare.Delete`** - Sentinel observes, never obstructs
+- **All file reads use `FileShare.ReadWrite | FileShare.Delete`** - Gnyida observes, never obstructs
 - **Monitors are grouped by function and priority** - critical self-protection first, peripheral last
 - **Response path: prefer native APIs** - kill/firewall/DNS/ARP use COM/P-Invoke. **Exceptions still present:** installer `sc.exe`/`takeown`/`icacls`; hardening/LGPO/`secedit`; some monitors still call `netsh` (WFP export, IPSec show, Cast allow rules). Goal is no LOLBins on the kill hot path
-- **No offensive deception tactics** - removed to avoid AV heuristic false positives on the Sentinel binary
+- **No offensive deception tactics** - removed to avoid AV heuristic false positives on the Gnyida binary
 
 ---
 
 ## Logging
 
-`JsonlEventLogger` writes service events to `%ProgramData%\Sentinel\events.jsonl` and agent events to `%LocalAppData%\Sentinel\Agent\events.jsonl` by default. Each destination has its own audit directory; dashboard and tray readers consume both sources.
+`JsonlEventLogger` writes service events to `%ProgramData%\Gnyida\events.jsonl` and agent events to `%LocalAppData%\Gnyida\Agent\events.jsonl` by default. Each destination has its own audit directory; dashboard and tray readers consume both sources.
 
 - Thread-safe via `SemaphoreSlim`
 - `System.Text.Json` only - no string-built JSON
@@ -655,7 +655,7 @@ Single real-time ETW trace session replacing per-monitor polling:
 ```
 
                     UnifiedEtwSession                                  
-   Single real-time trace session (SentinelUnifiedTrace)              
+   Single real-time trace session (GnyidaUnifiedTrace)              
    64 buffers x 256KB, QPC timestamps, AboveNormal priority          
                                                                       
    PROVIDERS:                                                         
@@ -720,7 +720,7 @@ Full browser-based C2 detection expanding `ChromeRemoteDebuggingRule`:
 
 ### Enhanced Monitor: DriverLoadMonitor - BYOVD Certificate Tracing
 
-Full cert-revocation chain for BYOVD attacks. When a vulnerable/suspicious driver is detected, Sentinel now traces back to the signing certificate and revokes it if planted.
+Full cert-revocation chain for BYOVD attacks. When a vulnerable/suspicious driver is detected, Gnyida now traces back to the signing certificate and revokes it if planted.
 
 | Capability | Description | Confidence | Response |
 |------------|-------------|-----------|----------|
@@ -734,7 +734,7 @@ Full cert-revocation chain for BYOVD attacks. When a vulnerable/suspicious drive
 ```
 1. Attacker plants fake cert in TrustedPublisher
 2. Attacker signs driver with that cert -> Windows DSE validates
-3. Sentinel DriverLoadMonitor detects new kernel driver (Event 7045 / registry / .sys drop)
+3. Gnyida DriverLoadMonitor detects new kernel driver (Event 7045 / registry / .sys drop)
 4. Cert-trace: extracts Authenticode cert -> finds it in TrustedPublisher -> NOT a public CA
 5. Fires RemoveCertAndKillAdder -> cert removed from store
 6. Scans System32\drivers -> disables all services using that cert
@@ -786,14 +786,14 @@ The table below records the former implementation, not current runtime behavior.
 
 | Item | Value |
 |------|--------|
-| Proxy auth | `ProxyAuthHelper` / Worker: HMAC only; **no** cleartext `X-Sentinel-Auth` |
+| Proxy auth | `ProxyAuthHelper` / Worker: HMAC only; **no** cleartext `X-Gnyida-Auth` |
 | Telemetry queue | `Channel.CreateBounded` 10k DropOldest |
 | Dynamic rules | Property allowlist; SecureCompare HMAC; async reload debounce |
 | Consultant | Sticky Tier2 + LogOnly (no scoring kill escalation) |
 | BYOVD neutralize | Exact thumbprint only; stop service + SCM key; **no** `System32\drivers` file delete |
 | NetworkIsolate | Private/LAN/multicast denied; ARP entry flush restored via `DeleteIpNetEntry` (native) |
 | Quarantine | Production ACL SYSTEM+Admins; Agent never mkdir; 128 MB cap; restore path guards |
-| Diagnostics | ProgramData\Sentinel ACL locked before early service traces |
+| Diagnostics | ProgramData\Gnyida ACL locked before early service traces |
 | Installer demotion | `IsLikelyInstallerPath` required for HighRisk->Tier2 demotion |
 | Tests | `V181SecurityHardeningTests`; full suite ~945 |
 
@@ -833,10 +833,10 @@ The table below records the former implementation, not current runtime behavior.
 |------|--------|
 | Entry | Tray **Settings** (bold) / double-click |
 | Form | `AgentDashboardForm` - WebView2 shell hosting the embedded dashboard on localhost:19845 (no IE11 fallback since 3.8.4) |
-| Page | `src/Sentinel.Agent/Dashboard/dashboard.html`, an embedded resource served by `DashboardHtml.GetHtml()`; light and dark theme follow Windows unless chosen in the sidebar |
+| Page | `src/Gnyida.Agent/Dashboard/dashboard.html`, an embedded resource served by `DashboardHtml.GetHtml()`; light and dark theme follow Windows unless chosen in the sidebar |
 | Pages | Protection: Overview, Activity, Scan, Quarantine - Tools: Program inspector, Personal safety, Report to police - System: Protection health, Diagnostics, About |
 | Filing | Edit affidavit in web UI -> Save Affidavit API call -> Send Report opens national portal link; pack folder path shown |
-| Prefs | `%LocalAppData%\Sentinel\user_report_prefs.json` |
+| Prefs | `%LocalAppData%\Gnyida\user_report_prefs.json` |
 | Not exposed | ActiveResponse toggle (service-only); balloon tips |
 
 ## v1.7.8 Additions
@@ -858,8 +858,8 @@ The table below records the former implementation, not current runtime behavior.
 
 | Item | Value |
 |------|--------|
-| Hook | `SentinelOrchestrator.ProcessDetectionAsync` after response (async, non-blocking) |
-| Pack root | `%ProgramData%\Sentinel\IncidentReports\AUTO_*` |
+| Hook | `GnyidaOrchestrator.ProcessDetectionAsync` after response (async, non-blocking) |
+| Pack root | `%ProgramData%\Gnyida\IncidentReports\AUTO_*` |
 | TI share | Removed in 3.2.3; packs remain local and legacy settings cannot enable uploads |
 | LE filing | Human: national portal URL embedded in pack + toast |
 | Not supported | Direct INTERPOL / police API auto-file (does not exist for consumers) |
@@ -882,7 +882,7 @@ hardcoded special case. Current state:
 | Enforcement | `HostsFileGuard.EnforceConfiguredBlocks` enforces the **union** of `RuntimeBlocklistService` and the operator `EnforcedDomainBlocks`/`EnforcedIpBlocks` arrays: domain = hosts line (apex + `www`) + wildcard NRPT (`.domain` -> `0.0.0.0`); IP = in/out firewall rules. Posture-gated (`MayEnforceConfiguredBlocks`), self-healing on the 30s scan |
 | Un-block (deliberate) | A block is torn down only when it drops out of the desired set (wildcard NRPT rule and firewall rules deleted; hosts-file sinkhole lines are never cleared to prevent threats from auto-allowing themselves). The old automatic startup `CleanupRetiredForumHrArtifacts` un-block was **removed in v2.8.7** - machines are no longer blindly un-blocked |
 | Reusable capability | `BuildDomainNrptRule(ruleGuid, domainSuffix, sinkhole)` builds the wildcard NRPT rule; `NrptRuleGuidForDomain` derives its stable GUID |
-| Behavioral pairing | The forum.hr *behavior* (a page taking control of a browser) is caught by `LocalControlChannelMonitor.ClassifyPairing` regardless of domain; `SentinelConfig.RiskyPairingOrigins` (seeded with `forum.hr`) is an aggravator only, never a verdict |
+| Behavioral pairing | The forum.hr *behavior* (a page taking control of a browser) is caught by `LocalControlChannelMonitor.ClassifyPairing` regardless of domain; `GnyidaConfig.RiskyPairingOrigins` (seeded with `forum.hr`) is an aggravator only, never a verdict |
 
 ## v1.7.5 Additions
 
@@ -926,7 +926,7 @@ Applied once at service start (best-effort, non-fatal failures):
    - **Default:** attack-only ports (Telnet, rsh/rlogin/rexec, TFTP, RPCBind, classic RAT ports 666/1337/4444/31337/...). **Not** SSH/RDP/SMB/SOCKS/Docker/DB.
    - **`RestrictivePortHardening: true`:** also blocks the broader service set (SSH, RDP, SMB, WinRM, DBs, discovery, ...).
    - **3.9.0:** the always-on inbound set also covers services Windows PCs commonly expose once an app or firewall prompt adds an allow rule: web servers (80, 443, 8080, 8443), printing (515, 631, 9100), media streaming (554, 10243), PPTP server (1723), Hyper-V VMConnect (2179), network discovery (3702/udp, 5357, 5358), Connected Devices (5050/udp), Delivery Optimization LAN peers (7680), direct VNC/TeamViewer/AnyDesk (5800, 5901, 5938, 7070), Windows Admin Center (6516) and WinRM compat (47001). These are inbound only; outbound use, replies and loopback are untouched.
-3. Safe Mode registration + inbound RPC dynamic block (lateral movement). **3.9.0:** the RPC dynamic range 49664-49699 is a compiled `PortBlockSpec` range (`Sentinel-PortBlock-6-1-49664-49699`), blocked from every remote address and verified/repaired with the other owned port rules. The v1.4.2 `Sentinel-Block-Remote-RPC-Ephemeral` rule (LocalSubnet only, never repaired) is removed only after the compiled range is verified in place.
+3. Safe Mode registration + inbound RPC dynamic block (lateral movement). **3.9.0:** the RPC dynamic range 49664-49699 is a compiled `PortBlockSpec` range (`Gnyida-PortBlock-6-1-49664-49699`), blocked from every remote address and verified/repaired with the other owned port rules. The v1.4.2 `Gnyida-Block-Remote-RPC-Ephemeral` rule (LocalSubnet only, never repaired) is removed only after the compiled range is verified in place.
 4. **Service disable (v1.8.3):** always Telnet + Remote Registry; RDP/SSH/WinRM/TeamViewer/UPnP only if restrictive
 5. Registry security (LSA, TLS 1.3, SEHOP, Spectre/Meltdown, AlwaysInstallElevated, firewall profiles). Remote WMI/WinRM registry clamps only if restrictive
 6. DEP AlwaysOn (`bcdedit /set nx AlwaysOn`)
@@ -957,7 +957,7 @@ Module identity is the PE-map backbone. Count is not a signal.
 
 ## v2.2.4 Additions
 
-Generic CVE-class coverage. Does not patch kernel races. Folder `Monitors/` is file layout; types live in `namespace Sentinel.Core`.
+Generic CVE-class coverage. Does not patch kernel races. Folder `Monitors/` is file layout; types live in `namespace Gnyida.Core`.
 
 | Item | Reality in 2.2.4 |
 |------|------------------|
@@ -969,7 +969,7 @@ Generic CVE-class coverage. Does not patch kernel races. Folder `Monitors/` is f
 | unionfs | User-writable isolation-filter .sys (CVE-2026-72971) |
 | CveShield | Windows OS-class KEV matches WorkstationOs; no synthetic PoC hashes |
 | Patch Tuesday | Toast if last CU is before the latest second Tuesday (7-day grace) |
-| Namespace | `V217Hardening.cs` is `Sentinel.Core` - there is no second monitor type universe |
+| Namespace | `V217Hardening.cs` is `Gnyida.Core` - there is no second monitor type universe |
 
 ## v2.2.3 Additions
 
@@ -993,7 +993,7 @@ Honest remediations. Several 2.1.8 "fixes" were not in force until this version.
 |------|------------------|
 | Dashboard auth | `LoopbackDashboardAuth` - Authorization Bearer for `/api/*`; `?token=` only for `GET /` and `/ws/events`. Referer is ignored. 3.7.1: the token is never embedded in HTML; a bare `GET /` gets a secret-free bootstrap page. `DashboardRequestGuard` pins `Host`/`Origin` and supplies the CSP. Tray opens `DashboardLaunchUrl`. |
 | V217 monitors | Registered in MonitorGroups (see inventory above). Dead code until 2.2.0. |
-| Honeypot DLLs | `{install}\honeypot\` only - never `version.dll` next to Sentinel.exe |
+| Honeypot DLLs | `{install}\honeypot\` only - never `version.dll` next to Gnyida.exe |
 | EDR-killer names | LogOnly observe fuel, not President's Law |
 | Game reputation skip | `ShouldSkipReputationForGamePath` - user profile / Temp / Desktop cannot skip |
 | ChainTracer | System32 / SysWOW64 only (`Windows\Temp` is quarantinable) |
@@ -1012,13 +1012,13 @@ Honest remediations. Several 2.1.8 "fixes" were not in force until this version.
 
 | Component | Location | Role |
 |-----------|----------|------|
-| `WebDashboardService` | Sentinel.Agent | Local HTTP dashboard (`http://localhost:19845`); CSRF + bearer from tray `?token=` (Referer is not auth) |
-| `DashboardHtml` | Sentinel.Agent | Static HTML/CSS/JS generator for the web dashboard |
-| `ScanEngine` | Sentinel.Core | On-demand file/directory scan engine; powers `/api/scan` from dashboard and `scan` IPC command |
-| `GpuProcessMonitor` | Sentinel.Core/Monitors | Detects crypto-mining via GPU compute usage patterns (non-gaming, non-video processes) |
-| `LegacyVerdictSidecarPurgeService` | Sentinel.Core | Cleanup service for deprecated verdict sidecar files from pre-ADS versions |
-| `BulkTransferNoise` | Sentinel.Core | Noise suppression for legitimate bulk transfer clients (torrent, P2P, aria2) |
-| `EnrichmentSignals` | Sentinel.Core | Cross-monitor enrichment signal types for ContextBus pub/sub |
+| `WebDashboardService` | Gnyida.Agent | Local HTTP dashboard (`http://localhost:19845`); CSRF + bearer from tray `?token=` (Referer is not auth) |
+| `DashboardHtml` | Gnyida.Agent | Static HTML/CSS/JS generator for the web dashboard |
+| `ScanEngine` | Gnyida.Core | On-demand file/directory scan engine; powers `/api/scan` from dashboard and `scan` IPC command |
+| `GpuProcessMonitor` | Gnyida.Core/Monitors | Detects crypto-mining via GPU compute usage patterns (non-gaming, non-video processes) |
+| `LegacyVerdictSidecarPurgeService` | Gnyida.Core | Cleanup service for deprecated verdict sidecar files from pre-ADS versions |
+| `BulkTransferNoise` | Gnyida.Core | Noise suppression for legitimate bulk transfer clients (torrent, P2P, aria2) |
+| `EnrichmentSignals` | Gnyida.Core | Cross-monitor enrichment signal types for ContextBus pub/sub |
 
 ### Security Fixes (v2.1.7)
 
@@ -1038,7 +1038,7 @@ Honest remediations. Several 2.1.8 "fixes" were not in force until this version.
 | `EdrKillerDetectionMonitor` | Observe (v2.2.0) | Name-only LogOnly on known EDR-killer process names. Rename bypasses. Wired in 2.2.0. |
 | `KernelModuleAuditMonitor` | SystemIntegrity | NtQuerySystemInformation(SystemModuleInformation) enumeration; detects stealth driver loads bypassing SCM events |
 | `TokenPrivilegeAuditMonitor` | CredentialProtection | Enumerates processes holding SeDebugPrivilege/SeImpersonate from non-admin paths (potato attacks, token theft) |
-| `HoneypotDllMonitor` | Anti-Tamper | Plants decoys in `{install}\honeypot\` (v2.2.0). Not next to Sentinel.exe. |
+| `HoneypotDllMonitor` | Anti-Tamper | Plants decoys in `{install}\honeypot\` (v2.2.0). Not next to Gnyida.exe. |
 | `DecoyPipeMonitor` | Anti-Tamper | Retired in 3.7.4 (see CHANGELOG) |
 | Critical response budget | Response | Chain-confirmed multi-signal detections bypass per-minute rate limit (separate unlimited budget) |
 
@@ -1074,12 +1074,12 @@ incident-summary checkpoints can be anchored by the Worker in KV. `DetectionRepl
 reuses weighted correlation with an injected historical clock and no response engine.
 `RestoreTransaction` journals explicit restores and retains the vault. The diagnostic
 CLI verifies chains/manifests, inspects interrupted restores and exports allowlisted,
-redacted investigation copies. See `tools/Sentinel.Diagnostics/README.md` for contracts.
+redacted investigation copies. See `tools/Gnyida.Diagnostics/README.md` for contracts.
 
 
 ## Log-derived reliability corrections
 
-The service owns its events and audit directory. The interactive agent writes its own events and audit chain under LocalAppData/Sentinel/Agent (or an agent subdirectory of the configured log destination). Dashboard and tray readers combine these event sources. Event destinations reject competing writers rather than renaming a live file. Certificate trust-marker absence is an uncertain observation: the guard emits Tier2 LogOnly and the remediator refuses mutations without explicit thumbprint distrust policy. Kernel-reported current-process PID attribution excludes own decoy inspection from pipe alerts. CVE product matches are candidates without version applicability proof.
+The service owns its events and audit directory. The interactive agent writes its own events and audit chain under LocalAppData/Gnyida/Agent (or an agent subdirectory of the configured log destination). Dashboard and tray readers combine these event sources. Event destinations reject competing writers rather than renaming a live file. Certificate trust-marker absence is an uncertain observation: the guard emits Tier2 LogOnly and the remediator refuses mutations without explicit thumbprint distrust policy. Kernel-reported current-process PID attribution excludes own decoy inspection from pipe alerts. CVE product matches are candidates without version applicability proof.
 
 In 3.2.5, the legacy RegistryMonitor proxy-change path is Tier2 LogOnly and no longer writes/deletes proxy values to restore startup observations. This does not add a manual proxy repair workflow or complete interactive-user/WinHTTP policy coverage.
 
@@ -1227,7 +1227,7 @@ remain in force. A client timeout does not undo accepted server mutations.
 
 `NetworkPolicyInventoryMonitor` reads bounded local legacy IPsec, modern connection-security, DNS policy and persistent-route registry trees, hashing contents in memory and emitting only changed scopes. It does not upload/export policy blobs, certificates, secrets or addresses. Missing/unreadable/budget-limited collection is explicit. A successful hash cycle proves configuration collection, not active IPsec SAs or packet enforcement. The historic `IPSecIntegrityGuard` actually reconciles compiled Windows Firewall port blocks and must not be described as a second filtering stack.
 
-The local/GPO firewall reconciler also reapplies a previously verified administrator-selected DNS profile on eligible unmanaged adapters. It rechecks the protected policy transaction under the operation gate, current adapter fingerprint and audit/snapshot acceptance; native verification and rollback remain required. Reconciliation preserves the original pre-policy DNS rollback snapshot. Restoration revokes that policy; pending/failed/managed/VPN states are not blindly overwritten. No initial DHCP configuration is deemed trusted merely because Sentinel started.
+The local/GPO firewall reconciler also reapplies a previously verified administrator-selected DNS profile on eligible unmanaged adapters. It rechecks the protected policy transaction under the operation gate, current adapter fingerprint and audit/snapshot acceptance; native verification and rollback remain required. Reconciliation preserves the original pre-policy DNS rollback snapshot. Restoration revokes that policy; pending/failed/managed/VPN states are not blindly overwritten. No initial DHCP configuration is deemed trusted merely because Gnyida started.
 
 Hosts/NRPT/browser DNS guards retain their existing compiled-policy scope. Arbitrary host routes and groups of /32 routes are observed, not deleted on shape/count alone. No general autonomous route or arbitrary IPsec rewrite is claimed without an approved target policy. DNS-answer authenticity, router safety and local/kernel injection prevention are separate limits.
 
@@ -1239,6 +1239,6 @@ The Agent's targeted overlay proof inspector queries only a reported unexpected 
 
 Unverified foreign-path DLL identity alone now produces a Tier2 review event, not process containment or a runtime trust grant. Explicit writable-drop and sideload-plant checks remain separate. MalwareBazaar uses its authenticated recent-hash API with an owner-provided protected credential; no key means visible Unknown malware reputation, not a clean verdict. Duplicate per-PID registry hints coalesce before queue admission; all other event and loss semantics remain unchanged. Owner-created GSecurity IPsec policy is preserved during uninstall. See [3.4.6 release scope and limits](RELEASE_3.4.6.md).
 
-## SentinelAutoRotate (standalone opt-in tool, 3.5.4)
+## GnyidaAutoRotate (standalone opt-in tool, 3.5.4)
 
-`tools/Sentinel.AutoRotate` is a standalone net48 executable with no project reference to the EDR. It is not a monitor and is not registered in any `MonitorGroup`. The installer offers it as an unchecked task. Its modes are `--install` (run as administrator from the target account's desktop), `--boot` (SYSTEM scheduled task at startup), `--session` (target account logon task) and `--uninstall`. A machine-wide named mutex serializes password writes. State is non-secret JSON in the protected `%ProgramData%\Sentinel\AutoRotate` directory. Passwords are never stored or logged. Password changes are administrative sets, so DPAPI-protected data may become unreadable; see the owner-approved exception in `constraints.md` and the residual risks in `THREAT_MODEL.md`.
+`tools/Gnyida.AutoRotate` is a standalone net48 executable with no project reference to the EDR. It is not a monitor and is not registered in any `MonitorGroup`. The installer offers it as an unchecked task. Its modes are `--install` (run as administrator from the target account's desktop), `--boot` (SYSTEM scheduled task at startup), `--session` (target account logon task) and `--uninstall`. A machine-wide named mutex serializes password writes. State is non-secret JSON in the protected `%ProgramData%\Gnyida\AutoRotate` directory. Passwords are never stored or logged. Password changes are administrative sets, so DPAPI-protected data may become unreadable; see the owner-approved exception in `constraints.md` and the residual risks in `THREAT_MODEL.md`.

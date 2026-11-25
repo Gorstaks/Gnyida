@@ -1,11 +1,11 @@
 /**
- * Sentinel - Threat Report Proxy Worker (v2.1.7)
+ * Gnyida - Threat Report Proxy Worker (v2.1.7)
  *
- * Receives threat reports from Sentinel agents and forwards them to
+ * Receives threat reports from Gnyida agents and forwards them to
  * abuse.ch (MalwareBazaar, URLhaus) using server-side API keys.
  *
  * SECURITY:
- *   - SENTINEL_SHARED_SECRET is REQUIRED (fail closed).
+ *   - GNYIDA_SHARED_SECRET is REQUIRED (fail closed).
  *   - HMAC-SHA256 over `timestamp.nonce.path.body` using the shared secret
  *     as the key (never accept a client-provided signing key).
  *   - 60-second timestamp window (v2.0.8: was 5 minutes).
@@ -21,7 +21,7 @@
  *   GET  /health         - Health check (unauthenticated)
  *
  * Deploy: wrangler deploy
- * Secrets: wrangler secret put SENTINEL_SHARED_SECRET
+ * Secrets: wrangler secret put GNYIDA_SHARED_SECRET
  *          wrangler secret put MALWAREBAZAAR_KEY
  *          wrangler secret put URLHAUS_TOKEN
  *          wrangler secret put ABUSEIPDB_KEY
@@ -84,7 +84,7 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Sentinel-Signature, X-Sentinel-Timestamp, X-Sentinel-Nonce',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Gnyida-Signature, X-Gnyida-Timestamp, X-Gnyida-Nonce',
     };
 
     if (request.method === 'OPTIONS') {
@@ -94,7 +94,7 @@ export default {
     if (url.pathname === '/health') {
       return new Response(JSON.stringify({
         status: 'ok',
-        service: 'sentinel-threat-proxy',
+        service: 'gnyida-threat-proxy',
         version: '2.1.8',
         timestamp: new Date().toISOString(),
         authRequired: true,
@@ -110,9 +110,9 @@ export default {
       });
     }
 
-    if (!env.SENTINEL_SHARED_SECRET || env.SENTINEL_SHARED_SECRET.length < 16) {
+    if (!env.GNYIDA_SHARED_SECRET || env.GNYIDA_SHARED_SECRET.length < 16) {
       return new Response(JSON.stringify({
-        error: 'Service misconfigured: SENTINEL_SHARED_SECRET required'
+        error: 'Service misconfigured: GNYIDA_SHARED_SECRET required'
       }), {
         status: 503,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -128,13 +128,13 @@ export default {
       });
     }
 
-    const signature = request.headers.get('X-Sentinel-Signature');
-    const timestamp = request.headers.get('X-Sentinel-Timestamp');
-    const nonce = request.headers.get('X-Sentinel-Nonce');
+    const signature = request.headers.get('X-Gnyida-Signature');
+    const timestamp = request.headers.get('X-Gnyida-Timestamp');
+    const nonce = request.headers.get('X-Gnyida-Nonce');
 
     if (!signature || !timestamp || !nonce) {
       return new Response(JSON.stringify({
-        error: 'Bad Request: Missing X-Sentinel-Signature, X-Sentinel-Timestamp, or X-Sentinel-Nonce'
+        error: 'Bad Request: Missing X-Gnyida-Signature, X-Gnyida-Timestamp, or X-Gnyida-Nonce'
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -170,7 +170,7 @@ export default {
       // v2.0.8 payload: timestamp.nonce.path.body
       const signatureValid = await verifySignature(
         signature,
-        env.SENTINEL_SHARED_SECRET,
+        env.GNYIDA_SHARED_SECRET,
         timestamp,
         nonce,
         url.pathname,
@@ -367,7 +367,7 @@ async function reportHash(body, env) {
     const comment = new URLSearchParams();
     comment.append('query', 'add_comment');
     comment.append('hash', body.value);
-    comment.append('comment', body.comment || 'Reported by Sentinel');
+    comment.append('comment', body.comment || 'Reported by Gnyida');
     await fetch('https://mb-api.abuse.ch/api/v1/', {
       method: 'POST',
       headers: { 'Auth-Key': env.MALWAREBAZAAR_KEY },
@@ -396,7 +396,7 @@ async function reportUrl(body, env) {
   formData.append('submission', JSON.stringify([{
     url: body.value,
     threat: body.threat || 'malware_download',
-    tags: body.tags || ['sentinel']
+    tags: body.tags || ['gnyida']
   }]));
 
   const response = await fetch('https://urlhaus-api.abuse.ch/v1/urls/add/', {
@@ -423,7 +423,7 @@ async function reportIp(body, env) {
     body: JSON.stringify({
       ip: body.value,
       categories: (body.categories || [14]).join(','),
-      comment: body.comment || 'Malicious activity detected by Sentinel',
+      comment: body.comment || 'Malicious activity detected by Gnyida',
       timestamp: new Date().toISOString()
     })
   });
@@ -492,7 +492,7 @@ async function lookupVirusTotal(body, env) {
 
 /**
  * v2.7.3: Proxied MalwareBazaar hash lookup. abuse.ch now requires an Auth-Key for ALL API
- * access, so the Sentinel agent cannot query keyless (it 401s). The Worker holds the key
+ * access, so the Gnyida agent cannot query keyless (it 401s). The Worker holds the key
  * (MALWAREBAZAAR_KEY, the same secret /report/hash uses) and returns a normalized verdict the
  * client parses: { success:true, verdict:"malicious"|"not_found" }. Fails closed to not_found on
  * any upstream/transport error so a failure is never treated as Safe (client maps -> Unknown).
@@ -503,7 +503,7 @@ async function lookupMalwareBazaar(body, env) {
   }
 
   const hash = body.value;
-  // MalwareBazaar accepts MD5/SHA-1/SHA-256; the Sentinel client sends SHA-256.
+  // MalwareBazaar accepts MD5/SHA-1/SHA-256; the Gnyida client sends SHA-256.
   if (!hash || hash.length !== 64 || !/^[a-fA-F0-9]+$/.test(hash)) {
     return { success: false, error: 'Invalid SHA-256 hash' };
   }

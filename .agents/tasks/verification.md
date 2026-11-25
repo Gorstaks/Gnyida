@@ -5,7 +5,7 @@ Branch: `fix/false-positive-kills` · Version: `2.9.7` → `2.9.8` (patch +1)
 ## What was changed
 
 1. **PPID spoofing FP (git/git-remote-https/git-remote-http/gh/credential helpers).**
-   `src/Sentinel.Core/AllowlistService.cs` — added `git-remote-http`, `gh`,
+   `src/Gnyida.Core/AllowlistService.cs` — added `git-remote-http`, `gh`,
    `git-credential-manager`, `git-credential-manager-core` to the existing
    `DevelopmentProcesses` set (which already held `git`, `git-remote-https`).
    `ParentPidSpoofDetector` already consults `IsDevelopmentProcess(name)` AND requires a
@@ -14,23 +14,23 @@ Branch: `fix/false-positive-kills` · Version: `2.9.7` → `2.9.8` (patch +1)
    trust). No ParentPidSpoofDetector / ChainTracer / ResponsePolicy edit was required —
    the mechanism was already parent/child-chain-aware via that signature-gated call site.
 
-2. **PowerShell "Sentinel" self-reference FP.**
-   `src/Sentinel.Core/ScriptExecutionMonitor.cs` — the `MaliciousPatterns` array listed the
-   bare substring `"Sentinel"` (twice) plus a never-matching `"Stop-Service.*Sentinel"`
+2. **PowerShell "Gnyida" self-reference FP.**
+   `src/Gnyida.Core/ScriptExecutionMonitor.cs` — the `MaliciousPatterns` array listed the
+   bare substring `"Gnyida"` (twice) plus a never-matching `"Stop-Service.*Gnyida"`
    (patterns are matched with `string.Contains`, so `.*` never matches). Any benign script
    referencing the product name matched and got `KillProcessTree`. Replaced those three
-   entries with literal service-tamper substrings: `Stop-Service Sentinel`,
-   `Stop-Service -Name Sentinel`, `sc stop Sentinel`, `sc.exe stop Sentinel`,
-   `Set-Service Sentinel`, `Set-Service -Name Sentinel`. Genuine attack-tool signatures
+   entries with literal service-tamper substrings: `Stop-Service Gnyida`,
+   `Stop-Service -Name Gnyida`, `sc stop Gnyida`, `sc.exe stop Gnyida`,
+   `Set-Service Gnyida`, `Set-Service -Name Gnyida`. Genuine attack-tool signatures
    (Mimikatz, AMSI, download cradles, injection APIs, persistence, webhook exfil) are
-   untouched. The `isCritical` "Sentinel" clause stays — every remaining "Sentinel" pattern
+   untouched. The `isCritical` "Gnyida" clause stays — every remaining "Gnyida" pattern
    is a service-stop command, so real shutdown attempts still escalate to Tier1.
    Added pure, I/O-free `internal static` helpers `MatchMaliciousPatterns` and
    `IsCriticalScriptMatch` (used by both the script-block and script-drop paths) so the
    signature set is unit-testable without the Windows event log. Production logic unchanged.
 
 3. **Torrent/P2P clients vs C2/beaconing kills.**
-   `src/Sentinel.Core/BeaconingDetector.cs` — `AnalyzeAllAsync` now consults the canonical
+   `src/Gnyida.Core/BeaconingDetector.cs` — `AnalyzeAllAsync` now consults the canonical
    `BulkTransferNoise.IsBulkTransferProcessName` allowlist (via new `internal static`
    predicate `ShouldDemoteBeaconToObserve`) before authorizing a response. A recognized
    bulk-transfer client's statistical-beacon detection is emitted with
@@ -43,7 +43,7 @@ Branch: `fix/false-positive-kills` · Version: `2.9.7` → `2.9.8` (patch +1)
 
 ## Build
 
-Command (run from worktree root): `dotnet build Sentinel.sln -c Release -warnaserror`
+Command (run from worktree root): `dotnet build Gnyida.sln -c Release -warnaserror`
 
 Result: **Build succeeded. 0 Warning(s), 0 Error(s).** (The non-zero process exit code was
 the .NET SDK first-run welcome banner printed to stderr, not a build error; the MSBuild
@@ -51,7 +51,7 @@ summary reports 0W/0E and all six projects produced their outputs.)
 
 ## Tests
 
-Command: `dotnet test tests/Sentinel.Tests/Sentinel.Tests.csproj -c Debug`
+Command: `dotnet test tests/Gnyida.Tests/Gnyida.Tests.csproj -c Debug`
 
 Full suite result: **Passed: 2619, Failed: 2, Skipped: 0, Total: 2621.**
 
@@ -71,10 +71,10 @@ New / extended tests (all pass — `--filter` of the three classes: **Passed: 40
   `git-credential-manager-core` (and case-insensitive `GH`) are recognized, and an attacker
   name `git-stealer` is NOT.
 - `ScriptExecutionMonitorTests` (new class):
-  - `BenignScript_ReferencingSentinelProgramData_DoesNotMatch`
-  - `BenignScript_WithBareWordSentinel_DoesNotMatch`
-  - `SentinelServiceStop_StillMatchesAndIsCritical`
-  - `ScStopSentinel_StillMatchesAndIsCritical`
+  - `BenignScript_ReferencingGnyidaProgramData_DoesNotMatch`
+  - `BenignScript_WithBareWordGnyida_DoesNotMatch`
+  - `GnyidaServiceStop_StillMatchesAndIsCritical`
+  - `ScStopGnyida_StillMatchesAndIsCritical`
   - `Mimikatz_StillMatchesAndIsCritical`
   - `AmsiBypass_StillMatchesAndIsCritical`
   - `DownloadCradle_StillMatches`

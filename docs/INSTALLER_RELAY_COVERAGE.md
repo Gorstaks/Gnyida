@@ -27,7 +27,7 @@ These changes target behaviors and do not establish protection against those sam
   budget. Network/optical drives remain excluded. The walk retains its 30-second
   startup delay, existing exclusions and scan index; analysis is asynchronous.
 
-NanoAV and its aggressive original response policy are unchanged. Sentinel
+NanoAV and its aggressive original response policy are unchanged. Gnyida
 does not gain a name-based rule for Ren'Py, Python, installers or relay services.
 No additional desktop content collection or outbound reporting is introduced.
 
@@ -63,12 +63,12 @@ are cross-built; Linux portable execution cannot replace native Windows checks.
 Before treating installed protection as verified, use an isolated Windows VM:
 
 1. Build/install 3.4.0 and run the native Framework test suite. Confirm both
-   Sentinel and the separate NanoAV payloads are packaged and launch as expected.
+   Gnyida and the separate NanoAV payloads are packaged and launch as expected.
 2. Launch a legitimate Ren'Py game, installer and ordinary Python network client;
    confirm these new rules do not authorize response from their names/networking.
 3. Use an isolated benign shell/socket fixture with no real credentials or
    external destination. Verify ETW delivery, authorized termination, evidence
-   logging and protection of Sentinel processes. Never run an unknown forum sample.
+   logging and protection of Gnyida processes. Never run an unknown forum sample.
 4. Attach/detach a test removable volume, including more than five cycles.
    Confirm scanner health returns, subscriptions are rebuilt, and new scannable
    files generate analysis. Check an already-populated volume is walked too.

@@ -1,18 +1,18 @@
-SENTINEL - LEGAL DISCLAIMER
+GNYIDA - LEGAL DISCLAIMER
 ===========================
 
-Sentinel is provided for defensive, educational, and research purposes only.
+Gnyida is provided for defensive, educational, and research purposes only.
 
 By clicking "I Agree" and installing this software you agree to the following
 terms:
 
 1. AUTHORISED USE ONLY
-   You will only run Sentinel on systems you own or have explicit written
+   You will only run Gnyida on systems you own or have explicit written
    authorisation to monitor. Unauthorised monitoring of third-party systems
    may be a criminal offence.
 
 2. PRIVACY AND CONSENT
-   You will not use Sentinel to monitor, surveil, or collect data on any
+   You will not use Gnyida to monitor, surveil, or collect data on any
    person without their knowledge and consent where required by applicable law.
 
 3. NO WARRANTY
@@ -26,7 +26,7 @@ terms:
    arising from the use or inability to use this software.
 
 5. SYSTEM IMPACT
-   Sentinel actively terminates processes and modifies host security policy
+   Gnyida actively terminates processes and modifies host security policy
    (IPSec rules, ASR Block rules, firewall rules, registry hardening). Test
    in a non-production environment before deploying broadly.
 

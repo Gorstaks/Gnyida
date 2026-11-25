@@ -11,8 +11,8 @@ policy and builds/commits/pushes/publishes.
 > **STATUS (reconciled 2026-09-21): SHIPPED in v2.5.8.** Tasks 1-10 are implemented, tested, and
 > documented in the current codebase - the checkboxes below were never updated after the work
 > landed. Verified against the tree:
-> - `ShutdownContext` (`src/Sentinel.Core/ShutdownContext.cs`); `MarkExpected` wired into
->   `SentinelService.StopAsync`, `Program.cs` OS-shutdown (`ApplicationStopping`), and the watchdog
+> - `ShutdownContext` (`src/Gnyida.Core/ShutdownContext.cs`); `MarkExpected` wired into
+>   `GnyidaService.StopAsync`, `Program.cs` OS-shutdown (`ApplicationStopping`), and the watchdog
 >   stop path.
 > - `AntiTamperGuard.WriteLastGasp` classifies expected vs suspicious and emits the
 >   `SERVICE_STOP_SUSPECTED` audit record + Tier1 `AntiTamper` LogOnly detection.
@@ -26,14 +26,14 @@ policy and builds/commits/pushes/publishes.
 > No further code work is required; this spec is retained as the record of the shipped design.
 
 - [x] 1. Add `ShutdownContext` lifecycle signal
-  - Create a small thread-safe `ShutdownContext` (internal, `Sentinel.Core`) holding a
+  - Create a small thread-safe `ShutdownContext` (internal, `Gnyida.Core`) holding a
     `volatile` expected-stop reason + timestamp, with `MarkExpected(reason)` and `TryGetExpected(...)`.
   - Document the deliberate process-lifetime exception to the "no static mutable state" rule.
   - _Requirements: R1_
 
 - [x] 2. Mark expected stops from legitimate shutdown paths
-  - Call `ShutdownContext.MarkExpected(...)` in `SentinelService` stop `finally` and
-    `SentinelGuardService.OnStop`, and on `SERVICE_CONTROL_SHUTDOWN` / `SessionEnding`.
+  - Call `ShutdownContext.MarkExpected(...)` in `GnyidaService` stop `finally` and
+    `GnyidaGuardService.OnStop`, and on `SERVICE_CONTROL_SHUTDOWN` / `SessionEnding`.
   - Ensure upgrade/uninstall paths (installer-triggered stop) set the appropriate reason.
   - _Requirements: R1_
 
@@ -74,7 +74,7 @@ policy and builds/commits/pushes/publishes.
 
 - [x] 9. Tests - off-host mirror contract
   - Missing/short secret -> no request, local pack still written (fail-closed).
-  - Valid secret -> request has `X-Sentinel-Timestamp`/`-Nonce`/`-Signature`, no secret header.
+  - Valid secret -> request has `X-Gnyida-Timestamp`/`-Nonce`/`-Signature`, no secret header.
   - Tier2 detection -> mirror never fires. `EvidenceSummary` carries no file contents/secrets.
   - `MirrorEvidenceOffHost` defaults to false.
   - _Requirements: R2, R4, R5; FR-11_

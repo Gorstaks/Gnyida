@@ -2,7 +2,7 @@
 inclusion: always
 ---
 
-# Sentinel - Autonomous Workflow & Release Policy
+# Gnyida - Autonomous Workflow & Release Policy
 
 ## Autonomous execution
 
@@ -49,7 +49,7 @@ When a unit of work (a spec, a feature, a fix) is complete and verified, perform
    Use `installer/release.ps1 -DryRun` first if unsure. Note: `release.ps1` also *attempts* a git
    commit/push, but that step is best-effort and will (correctly) fail if `.git` is absent - it is
    NOT the authoritative publish path. Do not treat a failed git step here as a blocker.
-3. **Publish.** Run `D:\Gorstak\push.ps1 -ProjectFilter sentinel` from `D:\Gorstak`. This is the
+3. **Publish.** Run `D:\Gorstak\push.ps1 -ProjectFilter gnyida` from `D:\Gorstak`. This is the
    authoritative, owner-authorized push/release path: it inits the repo if needed, commits,
    fetches + rebases onto `origin/main`, resolves divergence (force-with-lease, local wins), and
    uploads the `releases/<version>/` installer as GitHub release `v<version>`. Run it without

@@ -11,8 +11,8 @@
 
 **However, there is one real, current-code architectural gap for the broader "signed-publisher egress exemption" question:** there is **no signer/trusted-publisher check consulted before a `NetworkIsolate` (or ThreatIntel firewall) response**, analogous to the signed-file refusal that exists for quarantine. In the current `src/` tree a validly-signed binary is **not** exempt from egress blocking:
 
-- `BeaconingDetector.DetermineBeaconResponse` (src/Sentinel.Core/BeaconingDetector.cs:333-347) **deliberately** keeps a validly-signed, Program-Files, high-trust binary (trustScore ≥ 5, Authenticode worth +3) on `NetworkIsolate` rather than exempting it — the comment cites SolarWinds-style supply-chain compromise. That is a defensible design choice, not a bug, but it means "signed by a trusted publisher" is explicitly **not** a get-out-of-egress-block card.
-- The `QuarantineManager` `TrustedPublishers` set (with "Johannes Schindelin") that the brief refers to currently exists **only in the `.worktrees/aggressive-dll-sweep` branch**, not in `src/Sentinel.Core/QuarantineManager.cs`. Even there it only guards *quarantine*, never the network-isolate path.
+- `BeaconingDetector.DetermineBeaconResponse` (src/Gnyida.Core/BeaconingDetector.cs:333-347) **deliberately** keeps a validly-signed, Program-Files, high-trust binary (trustScore ≥ 5, Authenticode worth +3) on `NetworkIsolate` rather than exempting it — the comment cites SolarWinds-style supply-chain compromise. That is a defensible design choice, not a bug, but it means "signed by a trusted publisher" is explicitly **not** a get-out-of-egress-block card.
+- The `QuarantineManager` `TrustedPublishers` set (with "Johannes Schindelin") that the brief refers to currently exists **only in the `.worktrees/aggressive-dll-sweep` branch**, not in `src/Gnyida.Core/QuarantineManager.cs`. Even there it only guards *quarantine*, never the network-isolate path.
 
 Because `NetworkIsolate` requires a **chain-confirmed or kill-grade-terminal** signal to fire, and because a normal one-shot `git push` matches **none** of the kill-grade terminal families, the current code would not block a routine push from observe-grade noise. A block could only occur if git's connection genuinely tripped a Tier1 terminal (e.g. the push IP appearing in a threat-intel feed, or git being mis-fingerprinted as statistical C2 beaconing). The minimal, constraints-consistent improvement is a **shared trusted-publisher gate in front of the egress-block/isolate executor**, so a validly-signed trusted-publisher process is spared an IP block the same way it is spared quarantine — see Recommendations.
 
@@ -24,23 +24,23 @@ Because `NetworkIsolate` requires a **chain-confirmed or kill-grade-terminal** s
 
 `AdvancedResponseEngine.HandleAsync` is the single response funnel.
 
-- Global legacy chain-wait mode gate (src/Sentinel.Core/AdvancedResponseEngine.cs, ~L430-470): when `legacy chain-wait mode` is true (product default, and `constraints.md` says it is locked on), `chainAuthorized = ResponsePolicy.MayPerformDestructiveResponse(...)`. If not chain-authorized (and not DLL-/MitM-exempt), the detection is forced to `Tier2Indicator` + `LogOnly`.
-- The `NetworkIsolate` branch (src/Sentinel.Core/AdvancedResponseEngine.cs:571) only sets `shouldIsolateNetwork = true` when `effectiveResponse == NetworkIsolate && effectiveTier == Tier1Behavioral && ar`. `ar` itself requires `ActiveResponse && (!legacy chain-wait mode || chainAuthorized || dllExempt || mitmExempt)`.
-- `ResponsePolicy.DemoteToObserve` (src/Sentinel.Core/ResponsePolicy.cs:443-448) lowers any `AuthorizedResponse >= NetworkIsolate` to `LogOnly` whenever a signal is demoted to Tier2.
+- Global legacy chain-wait mode gate (src/Gnyida.Core/AdvancedResponseEngine.cs, ~L430-470): when `legacy chain-wait mode` is true (product default, and `constraints.md` says it is locked on), `chainAuthorized = ResponsePolicy.MayPerformDestructiveResponse(...)`. If not chain-authorized (and not DLL-/MitM-exempt), the detection is forced to `Tier2Indicator` + `LogOnly`.
+- The `NetworkIsolate` branch (src/Gnyida.Core/AdvancedResponseEngine.cs:571) only sets `shouldIsolateNetwork = true` when `effectiveResponse == NetworkIsolate && effectiveTier == Tier1Behavioral && ar`. `ar` itself requires `ActiveResponse && (!legacy chain-wait mode || chainAuthorized || dllExempt || mitmExempt)`.
+- `ResponsePolicy.DemoteToObserve` (src/Gnyida.Core/ResponsePolicy.cs:443-448) lowers any `AuthorizedResponse >= NetworkIsolate` to `LogOnly` whenever a signal is demoted to Tier2.
 - `constraints.md`: *"Tier2 can never trigger action — enforced unconditionally in `AdvancedResponseEngine.HandleAsync`."*
 
 **Net:** no Tier2 signal can reach `shouldIsolateNetwork`.
 
 ### 2. The IP-block executor and its guardrails
 
-`IsolateNetworkTarget` (src/Sentinel.Core/AdvancedResponseEngine.NetworkActions.cs:62-116) adds **both outbound and inbound** Windows-Firewall BLOCK rules for the `TargetIP` via `HNetCfg.FwPolicy2`. A silent outbound BLOCK on an in-flight HTTPS socket is exactly the shape that would make a push hang rather than error — so the executor *could* produce the reported symptom **if** it were ever reached for git's destination IP.
+`IsolateNetworkTarget` (src/Gnyida.Core/AdvancedResponseEngine.NetworkActions.cs:62-116) adds **both outbound and inbound** Windows-Firewall BLOCK rules for the `TargetIP` via `HNetCfg.FwPolicy2`. A silent outbound BLOCK on an in-flight HTTPS socket is exactly the shape that would make a push hang rather than error — so the executor *could* produce the reported symptom **if** it were ever reached for git's destination IP.
 
-Pre-isolate collateral guards (src/Sentinel.Core/AdvancedResponseEngine.cs, `shouldIsolateNetwork` branch): the target IP is skipped if it is loopback / `0.0.0.0` / broadcast / RFC1918-private (`SecurityValidation.IsPrivateIpAddress`) / multicast / or a known public resolver-or-CDN (`IsLikelyCdnOrPublicResolver`, which only covers Cloudflare 1.1.1/1.0.0, Google 8.8.8/8.8.4, Quad9 9.9.9). **GitHub / git CDN egress IPs are not covered by any of these guards.** There is **no signer-identity guard here at all.**
+Pre-isolate collateral guards (src/Gnyida.Core/AdvancedResponseEngine.cs, `shouldIsolateNetwork` branch): the target IP is skipped if it is loopback / `0.0.0.0` / broadcast / RFC1918-private (`SecurityValidation.IsPrivateIpAddress`) / multicast / or a known public resolver-or-CDN (`IsLikelyCdnOrPublicResolver`, which only covers Cloudflare 1.1.1/1.0.0, Google 8.8.8/8.8.4, Quad9 9.9.9). **GitHub / git CDN egress IPs are not covered by any of these guards.** There is **no signer-identity guard here at all.**
 
 ### 3. The two "scary" monitors are observe-only by construction
 
-- `AppNetworkPolicyMonitor.EmitPolicyAlert` (src/Sentinel.Core/AppNetworkPolicyMonitor.cs:~276-300): "Network Policy: Unusual Destination", `Tier = Tier2Indicator`, confidence ~0.55 (halved further for signed binaries via `SignerTrustService.AdjustConfidence`). It carries `RemoteIp`/`Subnet` metadata, **not** `TargetIP`, so even if it were promoted it would not feed the isolate executor's `TargetIP` lookup. It is listed in `IsObserveOnlyUserActivityHeuristic` (AdvancedResponseEngine.cs) and in `PureUxObserveRuleFragments` (ResponsePolicy.cs), so `IsWeakObserveSeed`/`IsPureUxObserveNoise` exclude it from both the chain buffer and composites. Its `git`/`powershell` attribution risk is real (the `NetworkAllowlist` contains neither `git` nor `powershell`), but the signal is inert at Tier2.
-- `DataExfiltrationMonitor` (src/Sentinel.Core/DataExfiltrationMonitor.cs): a large push emits "Traffic Anomaly: Outbound Volume Spike" at `Tier2Indicator`, confidence 0.55, `ProcessId = 0`, `AuthorizedResponse = LogOnly`, flagged `WeakObserveSeed=true`. The rule name deliberately avoids "Exfil*" so it cannot complete an Exfil chain leg, and it is in `PureUxObserveRuleFragments`. It publishes only a soft `ExfiltrationSpikeSignal` for enrichment. **A big push cannot drive a block.**
+- `AppNetworkPolicyMonitor.EmitPolicyAlert` (src/Gnyida.Core/AppNetworkPolicyMonitor.cs:~276-300): "Network Policy: Unusual Destination", `Tier = Tier2Indicator`, confidence ~0.55 (halved further for signed binaries via `SignerTrustService.AdjustConfidence`). It carries `RemoteIp`/`Subnet` metadata, **not** `TargetIP`, so even if it were promoted it would not feed the isolate executor's `TargetIP` lookup. It is listed in `IsObserveOnlyUserActivityHeuristic` (AdvancedResponseEngine.cs) and in `PureUxObserveRuleFragments` (ResponsePolicy.cs), so `IsWeakObserveSeed`/`IsPureUxObserveNoise` exclude it from both the chain buffer and composites. Its `git`/`powershell` attribution risk is real (the `NetworkAllowlist` contains neither `git` nor `powershell`), but the signal is inert at Tier2.
+- `DataExfiltrationMonitor` (src/Gnyida.Core/DataExfiltrationMonitor.cs): a large push emits "Traffic Anomaly: Outbound Volume Spike" at `Tier2Indicator`, confidence 0.55, `ProcessId = 0`, `AuthorizedResponse = LogOnly`, flagged `WeakObserveSeed=true`. The rule name deliberately avoids "Exfil*" so it cannot complete an Exfil chain leg, and it is in `PureUxObserveRuleFragments`. It publishes only a soft `ExfiltrationSpikeSignal` for enrichment. **A big push cannot drive a block.**
 
 **On the brief's specific worries (2a large-push volume spike, 2b LOLBin-with-network-child, 2c libexec-path helpers): none can author a block today** — they are all Tier2/observe or simply not emitted as terminal.
 
@@ -55,13 +55,13 @@ So **a routine push cannot assemble a chain-confirmed nuke/isolate.** The only T
 
 ### 5. Is a signed/trusted-publisher binary exempt from egress block anywhere? (Question #3/#4 — the gap)
 
-**No.** Searching the whole tree, the only trusted-publisher allowlist (`TrustedPublishers` incl. "Johannes Schindelin") lives in `.worktrees/aggressive-dll-sweep/src/Sentinel.Core/QuarantineManager.cs` and gates **quarantine only** (returns null to refuse quarantining a validly-signed trusted-publisher file). It is **not** present in `src/Sentinel.Core/QuarantineManager.cs` at all (grep: no matches), and it is **never** consulted on the network-isolate path.
+**No.** Searching the whole tree, the only trusted-publisher allowlist (`TrustedPublishers` incl. "Johannes Schindelin") lives in `.worktrees/aggressive-dll-sweep/src/Gnyida.Core/QuarantineManager.cs` and gates **quarantine only** (returns null to refuse quarantining a validly-signed trusted-publisher file). It is **not** present in `src/Gnyida.Core/QuarantineManager.cs` at all (grep: no matches), and it is **never** consulted on the network-isolate path.
 
-`SignerTrustService` (src/Sentinel.Core/SignerTrustService.cs) is explicit that *"being signed does NOT grant trust or exemption"* — it only lowers confidence (`SignedConfidenceMultiplier = 0.5`). And `BeaconingDetector` (BeaconingDetector.cs:333-347) **intentionally** keeps even a validly-signed, Program-Files, high-trust binary on `NetworkIsolate` to defend supply-chain compromise. So the architecture's current answer is: *a valid Authenticode signature from a trusted publisher does not exempt a process from an egress block.*
+`SignerTrustService` (src/Gnyida.Core/SignerTrustService.cs) is explicit that *"being signed does NOT grant trust or exemption"* — it only lowers confidence (`SignedConfidenceMultiplier = 0.5`). And `BeaconingDetector` (BeaconingDetector.cs:333-347) **intentionally** keeps even a validly-signed, Program-Files, high-trust binary on `NetworkIsolate` to defend supply-chain compromise. So the architecture's current answer is: *a valid Authenticode signature from a trusted publisher does not exempt a process from an egress block.*
 
 ### 6. `ThreatIntelFeedBlocker` — the most plausible real block path
 
-src/Sentinel.Core/ThreatIntelFeedBlocker.cs:
+src/Gnyida.Core/ThreatIntelFeedBlocker.cs:
 - Default mode is OBSERVE-ONLY; it does not pre-install feed rules unless `ThreatIntelProactiveFirewall && ActiveResponse`.
 - `CheckActiveConnections` (L480-525) emits `Tier1Behavioral`, confidence **0.92**, `Family = C2Beacon`, `AuthorizedResponse = NetworkIsolate` when `ActiveResponse` is on and an established connection's remote IP matches a feed entry (Spamhaus DROP / Feodo / EmergingThreats).
 - Because C2Beacon is a kill-grade terminal family, this single Tier1 signal can author an isolate on the matched IP via the executor in §2.
@@ -70,7 +70,7 @@ src/Sentinel.Core/ThreatIntelFeedBlocker.cs:
 
 ### 7. `RuntimeBlocklistService` / `HostsFileGuard` — not a detection auto-block
 
-src/Sentinel.Core/RuntimeBlocklistService.cs is a runtime-mutable desired-set of domain/IP blocks enforced by `HostsFileGuard`. Its only wired caller is DI registration (Sentinel.Service/Program.cs:382) plus the first-run `forum.hr` seed; **no detection/response code calls `BlockIp`/`BlockDomain` automatically.** `NormalizeIp` already refuses loopback/broadcast/Any. This is not an attacker- or FP-driven egress-block path for git.
+src/Gnyida.Core/RuntimeBlocklistService.cs is a runtime-mutable desired-set of domain/IP blocks enforced by `HostsFileGuard`. Its only wired caller is DI registration (Gnyida.Service/Program.cs:382) plus the first-run `forum.hr` seed; **no detection/response code calls `BlockIp`/`BlockDomain` automatically.** `NormalizeIp` already refuses loopback/broadcast/Any. This is not an attacker- or FP-driven egress-block path for git.
 
 ---
 

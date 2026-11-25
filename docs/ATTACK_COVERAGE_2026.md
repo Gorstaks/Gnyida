@@ -1,6 +1,6 @@
 # Windows attack coverage and validation: 3.3.0
 
-Sentinel is a userland Windows EDR. No claim of protection against every 2026 attack,
+Gnyida is a userland Windows EDR. No claim of protection against every 2026 attack,
 commercial detection parity, or guaranteed prevention before credential theft is made.
 This release strengthens specific input paths used by the existing detection pipeline.
 
@@ -49,7 +49,7 @@ not proof of ownership or a general read-interception mechanism.
 - Low-volume theft with no recognized C2 behavior remains a gap. Nothing here guarantees
   that containment happens before an attacker uploads credentials or deletes a payload.
 - Browser phishing, QR-login abuse, OAuth consent, malicious extensions and account
-  takeover require separate browser/account defenses. Sentinel cannot revoke remote
+  takeover require separate browser/account defenses. Gnyida cannot revoke remote
   sessions, reverse fraud, reset every compromised setting, or repair router firmware.
 - OS/browser vulnerabilities require security updates. Userland telemetry is not a
   substitute for OS patching, credential isolation, MFA and independent backups.

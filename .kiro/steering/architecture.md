@@ -1,12 +1,12 @@
 ---
 inclusion: auto
-name: Sentinel Architecture
-description: Sentinel's pipeline architecture, monitor groups, engines, orchestration, and response flow. Load this when adding or modifying monitors, engines, correlation, or response paths, or when a request involves how components fit together.
+name: Gnyida Architecture
+description: Gnyida's pipeline architecture, monitor groups, engines, orchestration, and response flow. Load this when adding or modifying monitors, engines, correlation, or response paths, or when a request involves how components fit together.
 ---
 
-# Sentinel - Architecture
+# Gnyida - Architecture
 
-Sentinel follows a clean pipeline with strict separation of concerns:
+Gnyida follows a clean pipeline with strict separation of concerns:
 
 ```
 Monitors -> TelemetryFusionEngine -> DetectionEngine -> AdvancedResponseEngine -> JsonlEventLogger
@@ -17,7 +17,7 @@ Monitors -> TelemetryFusionEngine -> DetectionEngine -> AdvancedResponseEngine -
 - All components are wired via `Microsoft.Extensions.DependencyInjection`.
 - Monitors are registered via `MonitorGroup` (staggered startup, restart policy, health checks) -
   never a flat `AddHostedService`. Each monitor class lives in its group file under `Monitors/`.
-- Runtime monitor types live in `Sentinel.Core` (the `Monitors/` folder is layout only).
+- Runtime monitor types live in `Gnyida.Core` (the `Monitors/` folder is layout only).
 - The **Service is the authority**; the Agent provides user-session visibility/UI and must never
   expose a way to disable ActiveResponse.
 

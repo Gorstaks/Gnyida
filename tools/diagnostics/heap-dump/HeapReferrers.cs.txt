@@ -1,7 +1,7 @@
 // Who holds objects of a given type? Samples N instances of the type, finds the heap objects that
 // reference them and checks whether they are direct GC roots. Works on .NET Framework dumps via ClrMD.
 // Usage:  dotnet run -c Release -- <dump.dmp> "<exact type name>" [sampleCount]
-//   e.g.  ... sentinel.dmp "System.Threading.Channels.AsyncOperation<System.Boolean>" 5
+//   e.g.  ... gnyida.dmp "System.Threading.Channels.AsyncOperation<System.Boolean>" 5
 // See README.md in this folder for setup and how to read the output.
 //
 // Reading the output:

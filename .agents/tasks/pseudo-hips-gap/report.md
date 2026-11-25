@@ -1,13 +1,13 @@
-# Sentinel Pseudo-HIPS Gap Analysis & Phased Plan
+# Gnyida Pseudo-HIPS Gap Analysis & Phased Plan
 
 **Mode:** READ-ONLY investigation. No code was modified. All paths absolute; citations are `file:symbol` or `file` with the construct named.
-**Scope:** Turn Sentinel's userland EDR into a "pseudo-HIPS" (host intrusion *prevention*) without violating the hard constraints in `e:\Gorstak\Sentinel\docs\constraints.md`. No kernel driver, no direct syscalls — so true inline kernel gating (minifilter / WFP callout driver) is permanently off the table.
+**Scope:** Turn Gnyida's userland EDR into a "pseudo-HIPS" (host intrusion *prevention*) without violating the hard constraints in `e:\Gorstak\Gnyida\docs\constraints.md`. No kernel driver, no direct syscalls — so true inline kernel gating (minifilter / WFP callout driver) is permanently off the table.
 
 ---
 
 ## 1. Summary answer (read this first)
 
-Sentinel today is a **detect-then-react** EDR with a **large preventive-hardening surface already bolted on at startup**. It is *closer to a HIPS than the brief assumed*: it already ships Defender ASR Block rules, DEP/NX AlwaysOn, exploit-mitigation registry policy (SEHOP, Spectre/Meltdown, AlwaysInstallElevated=0, COM auto-approval off), IPSec port blocking, RPC-ephemeral firewall block, LGPO baseline, and credential hardening — all re-armed continuously by guards. What it is **missing** to be a credible pseudo-HIPS, all achievable in userland:
+Gnyida today is a **detect-then-react** EDR with a **large preventive-hardening surface already bolted on at startup**. It is *closer to a HIPS than the brief assumed*: it already ships Defender ASR Block rules, DEP/NX AlwaysOn, exploit-mitigation registry policy (SEHOP, Spectre/Meltdown, AlwaysInstallElevated=0, COM auto-approval off), IPSec port blocking, RPC-ephemeral firewall block, LGPO baseline, and credential hardening — all re-armed continuously by guards. What it is **missing** to be a credible pseudo-HIPS, all achievable in userland:
 
 | Gap | Achievable in userland? | Highest-value |
 |-----|------------------------|---------------|
@@ -18,7 +18,7 @@ Sentinel today is a **detect-then-react** EDR with a **large preventive-hardenin
 | **Declarative operation-level allow/deny policy engine** layered on existing monitors | ✅ Yes (post-hoc enforcement only; cannot be synchronous pre-op deny) | Phase 2 |
 | **Synchronous pre-execution/pre-operation DENY of arbitrary file/registry/syscall** | ❌ No — requires the forbidden kernel path | Never (Section 6) |
 
-The single most impactful *latency* improvement — shrinking detect→kill — is already partly present via `ResponsePolicy.IsAttackClassTerminal` (solo-confirm at ≥0.85), but **all detections share one channel consumer** (`DetectionEngine.ProcessTelemetryQueueAsync`), so a terminal-class kill can queue behind slower work. The cheapest prevention win is **not** faster kills; it is **leaning harder on Windows-native preventive policy** (ASR expansion, IFEO mitigations, WDAC) that blocks *before* Sentinel's loop ever runs.
+The single most impactful *latency* improvement — shrinking detect→kill — is already partly present via `ResponsePolicy.IsAttackClassTerminal` (solo-confirm at ≥0.85), but **all detections share one channel consumer** (`DetectionEngine.ProcessTelemetryQueueAsync`), so a terminal-class kill can queue behind slower work. The cheapest prevention win is **not** faster kills; it is **leaning harder on Windows-native preventive policy** (ASR expansion, IFEO mitigations, WDAC) that blocks *before* Gnyida's loop ever runs.
 
 **Honest ceiling:** pseudo-HIPS can *pre-block by policy* (Defender/WDAC/AppLocker/IFEO decide at the kernel on Windows' behalf) and *react fast*, but it can **never** itself synchronously intercept-and-deny an arbitrary file write, registry write, or syscall the way a minifilter/callout HIPS does. That boundary is dictated by `constraints.md` ("No kernel drivers", "No direct syscalls").
 
@@ -28,7 +28,7 @@ The single most impactful *latency* improvement — shrinking detect→kill — 
 
 ### 2.1 Startup hardening — applied unconditionally, always-on
 
-`e:\Gorstak\Sentinel\src\Sentinel.Service\Program.cs` calls `HardeningModule.ApplyOrFail()` then `HardeningModule.SecureInstallationDirectory()` at service entry (Program.cs:119,122). `RestrictivePortHardeningEnabled` is a hard `get => true` no-op setter (`HardeningModule.cs`), matching the **"HARDENING IS ALWAYS-ON (v2.5.5)"** constraint.
+`e:\Gorstak\Gnyida\src\Gnyida.Service\Program.cs` calls `HardeningModule.ApplyOrFail()` then `HardeningModule.SecureInstallationDirectory()` at service entry (Program.cs:119,122). `RestrictivePortHardeningEnabled` is a hard `get => true` no-op setter (`HardeningModule.cs`), matching the **"HARDENING IS ALWAYS-ON (v2.5.5)"** constraint.
 
 `ApplyOrFail()` → `ApplyUserSetupScriptsHardening()` runs this preventive chain (`HardeningModule.cs`, `ApplyUserSetupScriptsHardening`):
 
@@ -51,16 +51,16 @@ Continuous re-arm guards (so prevention survives tamper): `AsrPolicyGuard` (veri
 
 ### 2.2 Preventive-adjacent runtime controls
 
-- **`VerdictGateRule`** (`e:\Gorstak\Sentinel\src\Sentinel.Core\Rules.VerdictGate.cs`): on process-start telemetry, hashes the image, reads a *signed* ADS verdict; `HashVerdict.Unsafe` → Tier1 `KillProcessTree` conf 0.99. The code comment says "Execution prevented," but mechanically this is **detect-then-kill after the process has started**, not a pre-execution deny. It only fires on binaries previously signed `Unsafe` (reputation consensus), so coverage is narrow. Still, it is the closest thing to an application-control gate today.
+- **`VerdictGateRule`** (`e:\Gorstak\Gnyida\src\Gnyida.Core\Rules.VerdictGate.cs`): on process-start telemetry, hashes the image, reads a *signed* ADS verdict; `HashVerdict.Unsafe` → Tier1 `KillProcessTree` conf 0.99. The code comment says "Execution prevented," but mechanically this is **detect-then-kill after the process has started**, not a pre-execution deny. It only fires on binaries previously signed `Unsafe` (reputation consensus), so coverage is narrow. Still, it is the closest thing to an application-control gate today.
 - **File-reputation on-execute** (`DetectionEngine.ProcessTelemetryQueueAsync`, the `ProcessTelemetry pt` branch): `Malicious` → KillProcessTree 0.95; `HighRisk` → KillProcess 0.80 (demoted to observe for installer-like unknowns). Again post-launch kill, not pre-exec block.
-- **`ThreatIntelFeedBlocker`** (`e:\Gorstak\Sentinel\src\Sentinel.Core\ThreatIntelFeedBlocker.cs`): CAN proactively add COM firewall block rules for feed IPs — but design says **observe-only by default**, proactive firewall only when `ThreatIntelProactiveFirewall`. This is the one existing component that *adds* network blocks preventively.
+- **`ThreatIntelFeedBlocker`** (`e:\Gorstak\Gnyida\src\Gnyida.Core\ThreatIntelFeedBlocker.cs`): CAN proactively add COM firewall block rules for feed IPs — but design says **observe-only by default**, proactive firewall only when `ThreatIntelProactiveFirewall`. This is the one existing component that *adds* network blocks preventively.
 - **`HostsFileGuard` + `RuntimeBlocklistService`**: enforce domain blocks (hosts line + wildcard NRPT) and IP blocks (in/out firewall) for a configured/runtime block set — preventive, posture-gated (design.md).
 - **`DllUnloadEngine`**: FreeLibrary-unloads foreign modules and quarantines hijack-name disk plants on drop. This is *remediation after load*, the closest userland analogue to blocking a load.
 
 ### 2.3 WFP today = DETECTION only (confirmed)
 
-`e:\Gorstak\Sentinel\src\Sentinel.Core\Monitors\WfpIntegrityMonitor.cs`:
-- Exports filters via `netsh wfp show filters`, regex-parses for BLOCK filters targeting Sentinel/EDR binaries (`AnalyzeWfpFiltersAsync`). Emits Tier1 detections (EDRSilencer / bulk-block / multi-tool-block).
+`e:\Gorstak\Gnyida\src\Gnyida.Core\Monitors\WfpIntegrityMonitor.cs`:
+- Exports filters via `netsh wfp show filters`, regex-parses for BLOCK filters targeting Gnyida/EDR binaries (`AnalyzeWfpFiltersAsync`). Emits Tier1 detections (EDRSilencer / bulk-block / multi-tool-block).
 - `AttemptFilterRemovalAsync` explicitly **does not add or remove filters by GUID** — it only re-enables netevents auditing and *logs an operator recommendation* to restart BFE. The code comment states a blanket purge / BFE restart "would tear down the host firewall, an unacceptable blast radius for a userland EDR." So **no WFP filter ADD exists anywhere** in `src`.
 
 ### 2.4 What is confirmed ABSENT (grep across `src/**/*.cs`)
@@ -71,7 +71,7 @@ Continuous re-arm guards (so prevention survives tamper): `AsrPolicyGuard` (veri
 - **No ACG / CFG / BlockNonMicrosoftBinaries** anywhere.
 - **No declarative operation-level allow/deny policy language** — enforcement decisions are hard-coded in `ResponsePolicy` / rules, not expressed as a user-authored allow/deny grammar. (`DynamicRulesEvaluator` loads HMAC-signed *detection* rules with an allowlisted field set; it is a detection extension, not an operation-gating policy engine.)
 
-*(Note: `.worktrees\*` copies exist, including one named `autorotate` tied to an unrelated password-rotation thread. They were ignored; all citations are from the canonical `e:\Gorstak\Sentinel\src` tree.)*
+*(Note: `.worktrees\*` copies exist, including one named `autorotate` tied to an unrelated password-rotation thread. They were ignored; all citations are from the canonical `e:\Gorstak\Gnyida\src` tree.)*
 
 ---
 
@@ -92,7 +92,7 @@ ETW/WMI/FSW monitors
        • ResponsePolicy.ApplyTierLaw   (demote non-terminal to Tier2/LogOnly)
        • HandleDetectionEventAsync
        • THEN correlationEngine.RegisterSignalAsync (composites emit later)
-  → HandleDetectionEventAsync → SentinelOrchestrator.ProcessDetectionAsync
+  → HandleDetectionEventAsync → GnyidaOrchestrator.ProcessDetectionAsync
   → AdvancedResponseEngine.HandleAsync                           AdvancedResponseEngine.cs
        • self-exclusion, IDE/game protection, allowlist
        • legacy chain-wait mode gate: ResponsePolicy.MayPerformDestructiveResponse
@@ -123,12 +123,12 @@ Legend: **(a)** achievable in userland within constraints · **(b)** requires fo
 | # | Gap | Class | Extends which component | Bounding constraints (quoted) |
 |---|-----|-------|-------------------------|-------------------------------|
 | 1 | **Expand ASR Block coverage** (add high-value Block rules beyond the current 13; keep installer carve-outs) | **(a)** | `HardeningModule.AsrRules` + `AsrPolicyGuard` | "HARDENING IS ALWAYS-ON"; "Never ASR-block our own installer (v1.9.6)" — must keep `c1db55ab` out of Block and preserve `ASROnlyExclusions`. |
-| 2 | **IFEO `MitigationOptions` process mitigations** for named high-risk hosts (e.g. CFG, DEP-permanent, image-load from remote off, child-process on Office) — pure HKLM registry, persists per image name | **(a)** | new `HardeningModule` block + a re-arm guard like `AsrPolicyGuard` | "No persistence mechanisms" applies to *Sentinel self-survival*, not to Windows security policy it configures; still "No self-hiding", "All actions ... logged". Must not weaken host (parallel to "Kiosk LGPO must not weaken the host"). |
-| 3 | **`SetProcessMitigationPolicy` ACG/CFG/BlockNonMicrosoftBinaries** on Sentinel's **own** processes (self-hardening), and optionally on children it launches | **(a)** | `HardeningModule.ApplyOrFail` self-protect section (sits beside existing `SetDefaultDllDirectories`) | "No kernel drivers / No direct syscalls" — `SetProcessMitigationPolicy` is a documented Win32 API, compliant. Self-only is safest (no FP surface). |
+| 2 | **IFEO `MitigationOptions` process mitigations** for named high-risk hosts (e.g. CFG, DEP-permanent, image-load from remote off, child-process on Office) — pure HKLM registry, persists per image name | **(a)** | new `HardeningModule` block + a re-arm guard like `AsrPolicyGuard` | "No persistence mechanisms" applies to *Gnyida self-survival*, not to Windows security policy it configures; still "No self-hiding", "All actions ... logged". Must not weaken host (parallel to "Kiosk LGPO must not weaken the host"). |
+| 3 | **`SetProcessMitigationPolicy` ACG/CFG/BlockNonMicrosoftBinaries** on Gnyida's **own** processes (self-hardening), and optionally on children it launches | **(a)** | `HardeningModule.ApplyOrFail` self-protect section (sits beside existing `SetDefaultDllDirectories`) | "No kernel drivers / No direct syscalls" — `SetProcessMitigationPolicy` is a documented Win32 API, compliant. Self-only is safest (no FP surface). |
 | 4 | **Terminal-class fast lane** to shrink detect→kill (Section 3.3 #1) | **(a)** | `DetectionEngine.ProcessTelemetryQueueAsync` + `AdvancedResponseEngine` | "No static mutable state" (use `Channel<T>`); "Tier2 can never trigger action"; "legacy chain-wait mode" — fast lane may only short-circuit for `IsAttackClassTerminal` at ≥`MinTier1Confidence`, never for Tier2. |
 | 5 | **User-mode WFP outbound BLOCK filter addition** (replace the "operator must restart BFE" gap with surgical `FwpmFilterAdd0` by GUID; also remove hostile EDRSilencer filters by GUID) | **(a)** | `WfpIntegrityMonitor` (add enforcement) or new `WfpEnforcementEngine`; register as a `ResponseAction` | "No kernel drivers" — FWPUAPI user-mode add is **not** a callout driver, compliant. "Response path: prefer native APIs." Blast-radius caution already documented in `AttemptFilterRemovalAsync`. |
-| 6 | **WDAC / AppLocker allowlist policy generation + deployment** | **(a)** | new `AppControlPolicyModule` in `Sentinel.Core`; deploy via CI policy file / AppLocker registry + re-arm guard | "No kernel drivers" (WDAC *is* enforced by the OS kernel, but Sentinel only *authors/deploys* policy — compliant, like ASR). "Must function as a standard user (reduced capability)" — deploy only when elevated. HUGE lockout risk → audit-mode first. |
-| 7 | **Declarative operation-level allow/deny policy engine** layered on monitors (user writes "deny process X writing to Y"; Sentinel enforces post-hoc kill/quarantine/block) | **(a) partial** | new policy model consumed by `ResponsePolicy` / `AdvancedResponseEngine`; signed like `DynamicRulesEvaluator` | "No string-built JSON" (use `System.Text.Json`); "Compiled config only" / "Disk JSON is not loaded" — any on-disk policy MUST be HMAC-signed with install entropy and fail-closed, exactly like `DynamicRulesEvaluator`. **Enforcement is reactive, not synchronous pre-op.** |
+| 6 | **WDAC / AppLocker allowlist policy generation + deployment** | **(a)** | new `AppControlPolicyModule` in `Gnyida.Core`; deploy via CI policy file / AppLocker registry + re-arm guard | "No kernel drivers" (WDAC *is* enforced by the OS kernel, but Gnyida only *authors/deploys* policy — compliant, like ASR). "Must function as a standard user (reduced capability)" — deploy only when elevated. HUGE lockout risk → audit-mode first. |
+| 7 | **Declarative operation-level allow/deny policy engine** layered on monitors (user writes "deny process X writing to Y"; Gnyida enforces post-hoc kill/quarantine/block) | **(a) partial** | new policy model consumed by `ResponsePolicy` / `AdvancedResponseEngine`; signed like `DynamicRulesEvaluator` | "No string-built JSON" (use `System.Text.Json`); "Compiled config only" / "Disk JSON is not loaded" — any on-disk policy MUST be HMAC-signed with install entropy and fail-closed, exactly like `DynamicRulesEvaluator`. **Enforcement is reactive, not synchronous pre-op.** |
 | 8 | **Synchronous pre-execution/pre-operation DENY** of arbitrary file/registry/syscall/image-load | **(b)** | — | "No kernel drivers"; "No direct syscalls". Impossible in userland. See Section 6. |
 
 ---
@@ -141,20 +141,20 @@ Each phase lists components touched, applicable constraints, and user-facing ris
 
 **1A. Expand ASR Block rules (gap #1).**
 - Component: `HardeningModule.AsrRules` (add vetted GUIDs), re-armed by existing `AsrPolicyGuard`.
-- Candidates to evaluate (all Defender-native, Block=`1`): "Block Adobe Reader from creating child processes", "Block Webshell creation for Servers", "Block use of copied/impersonated system tools", "Block rebooting into Safe Mode" (caution: Sentinel registers for Safe Mode), plus any current Audit-only rules promoted to Block after telemetry review.
+- Candidates to evaluate (all Defender-native, Block=`1`): "Block Adobe Reader from creating child processes", "Block Webshell creation for Servers", "Block use of copied/impersonated system tools", "Block rebooting into Safe Mode" (caution: Gnyida registers for Safe Mode), plus any current Audit-only rules promoted to Block after telemetry review.
 - Constraints: keep `c1db55ab` **out** of Block ("Never ASR-block our own installer"); keep `ASROnlyExclusions` for the install dir.
 - Risk: **Medium.** ASR Block rules can break legit workflows (macro-heavy Office, LOLBin-using installers). **Mitigation:** stage each new rule in Audit first; only promote rules with zero legit hits in the field. Flag that "Block process creations from PSExec and WMI" (already active) can break admin tooling.
 
 **1B. Self-process mitigation hardening via `SetProcessMitigationPolicy` (gap #3, self-only).**
 - Component: `HardeningModule.ApplyOrFail` self-protect section (next to `SetDllDirectory`/`SetDefaultDllDirectories`).
-- Apply to Sentinel's own Service/Agent: CFG, DEP permanent, `BlockNonMicrosoftBinaries` / `MicrosoftSignedOnly` image-load (if it doesn't break Sentinel's unsigned dev builds — gate on signed release builds only), strict handle checks, extension-point disable.
+- Apply to Gnyida's own Service/Agent: CFG, DEP permanent, `BlockNonMicrosoftBinaries` / `MicrosoftSignedOnly` image-load (if it doesn't break Gnyida's unsigned dev builds — gate on signed release builds only), strict handle checks, extension-point disable.
 - Constraints: Win32 API — compliant with "No kernel drivers / No direct syscalls". "Must function as a standard user" — wrap in try/catch, fail-soft (matches `ApplyOrFail` best-effort pattern).
 - Risk: **Low.** Self-only, no third-party FP surface. Verify unsigned dev builds still start (BlockNonMicrosoftBinaries would kill them) — gate that specific policy behind a signed-build check.
 
 **1C. IFEO `MitigationOptions` for a *small* curated set of high-risk host images (gap #2).**
 - Component: new `HardeningModule.ApplyProcessMitigationIfeo()` + a re-arm guard modeled on `AsrPolicyGuard` (registered in the same group in `Program.cs`).
 - Scope Phase 1 narrowly: enable CFG / DEP-permanent on classic LOLBin / Office-child surfaces only where it won't break function. **Do not** apply `BlockNonMicrosoftBinaries` broadly here (that is Phase 3 opt-in).
-- Constraints: HKLM `Image File Execution Options\<exe>\MitigationOptions` is OS-sanctioned policy, not Sentinel self-persistence; "All actions ... logged before execution"; parallel to "Kiosk LGPO must not weaken the host" — never set options that reduce security.
+- Constraints: HKLM `Image File Execution Options\<exe>\MitigationOptions` is OS-sanctioned policy, not Gnyida self-persistence; "All actions ... logged before execution"; parallel to "Kiosk LGPO must not weaken the host" — never set options that reduce security.
 - Risk: **Medium.** A bad `MitigationOptions` value can prevent an app from starting. **Mitigation:** curated per-image list, documented, with a one-switch rollback (delete the IFEO values); ship disabled-by-default with a per-image allowlist.
 
 **1D. Terminal-class fast lane (gap #4).**
@@ -166,8 +166,8 @@ Each phase lists components touched, applicable constraints, and user-facing ris
 
 **2A. User-mode WFP outbound BLOCK enforcement (gap #5).**
 - Component: new `WfpEnforcementEngine` (FWPUAPI P/Invoke: `FwpmEngineOpen0`, `FwpmFilterAdd0`, `FwpmFilterDeleteById0`) + a new `ResponseAction.WfpBlockOutbound`; wire into `AdvancedResponseEngine.HandleAsync` branch table; let `WfpIntegrityMonitor` *remove hostile EDRSilencer filters by GUID* instead of only logging a BFE-restart recommendation.
-- Use for: chain-confirmed C2 egress block as a surgical alternative/supplement to `NetworkIsolate`'s firewall rule; targeted removal of filters that block Sentinel.
-- Constraints: "No kernel drivers" (user-mode WFP API, compliant); "prefer native APIs"; blast-radius discipline already noted in `WfpIntegrityMonitor.AttemptFilterRemovalAsync` — add filters tagged with a Sentinel sublayer/provider so they're cleanly removable and never touch the host firewall sublayer.
+- Use for: chain-confirmed C2 egress block as a surgical alternative/supplement to `NetworkIsolate`'s firewall rule; targeted removal of filters that block Gnyida.
+- Constraints: "No kernel drivers" (user-mode WFP API, compliant); "prefer native APIs"; blast-radius discipline already noted in `WfpIntegrityMonitor.AttemptFilterRemovalAsync` — add filters tagged with a Gnyida sublayer/provider so they're cleanly removable and never touch the host firewall sublayer.
 - Risk: **Medium.** Mis-scoped filters can break legit egress. **Mitigation:** gate behind chain-confirm (same bar as kill), own-sublayer only, rate-limited like `NetworkIsolate`, auto-expire.
 
 **2B. Declarative operation-level allow/deny policy engine (gap #7).**
@@ -180,8 +180,8 @@ Each phase lists components touched, applicable constraints, and user-facing ris
 
 **3A. WDAC / AppLocker application-allowlisting (gap #6).**
 - Component: new `AppControlPolicyModule` (generate a WDAC CI policy from a learned baseline, or AppLocker rules via the AppLocker policy registry/CSP); deploy only when elevated; re-arm/verify guard like `AsrPolicyGuard`; `BehavioralBaselineService` can seed the allowlist.
-- Constraints: "No kernel drivers" (Sentinel authors policy; the OS enforces — same model as ASR, compliant); "Must function as a standard user (reduced capability, no crash)" → generation/deploy elevated-only, degrade gracefully otherwise; "no attacker-controllable trust" → allow by publisher/hash/trusted-path only, never bare filename.
-- Risk: **HIGH / lockout-capable.** A wrong WDAC policy can brick the machine (block boot-critical or user-critical binaries). **Mitigation (mandatory):** ship **Audit mode only** by default; require explicit operator opt-in to Enforce; always keep a signed rollback policy and a documented recovery (safe-mode removal — note Sentinel's existing SafeBoot registration helps recovery); never auto-promote Audit→Enforce.
+- Constraints: "No kernel drivers" (Gnyida authors policy; the OS enforces — same model as ASR, compliant); "Must function as a standard user (reduced capability, no crash)" → generation/deploy elevated-only, degrade gracefully otherwise; "no attacker-controllable trust" → allow by publisher/hash/trusted-path only, never bare filename.
+- Risk: **HIGH / lockout-capable.** A wrong WDAC policy can brick the machine (block boot-critical or user-critical binaries). **Mitigation (mandatory):** ship **Audit mode only** by default; require explicit operator opt-in to Enforce; always keep a signed rollback policy and a documented recovery (safe-mode removal — note Gnyida's existing SafeBoot registration helps recovery); never auto-promote Audit→Enforce.
 
 **3B. Broad `BlockNonMicrosoftBinaries` / strict ACG via IFEO or `SetProcessMitigationPolicy` for third-party hosts.**
 - Component: extend 1C with the aggressive mitigations, opt-in per image.
@@ -196,12 +196,12 @@ Each phase lists components touched, applicable constraints, and user-facing ris
 
 ## 6. What pseudo-HIPS will NEVER do (honest expectations)
 
-A true HIPS inserts itself **inline in the kernel** (filesystem minifilter, registry callback, WFP callout driver, process/thread/image-load notify callbacks) and returns a **DENY before the operation completes**. Because `constraints.md` forbids **"No kernel drivers"** and **"No direct syscalls"**, Sentinel's pseudo-HIPS can **never**:
+A true HIPS inserts itself **inline in the kernel** (filesystem minifilter, registry callback, WFP callout driver, process/thread/image-load notify callbacks) and returns a **DENY before the operation completes**. Because `constraints.md` forbids **"No kernel drivers"** and **"No direct syscalls"**, Gnyida's pseudo-HIPS can **never**:
 
-1. **Synchronously block an arbitrary file write/read/delete** before it happens. (Userland FSW/ETW are *notifications after the fact*; `FileActivityMonitor` observes, it cannot veto. Constraint also mandates `FileShare.Delete` — "Sentinel never blocks user file deletion.")
+1. **Synchronously block an arbitrary file write/read/delete** before it happens. (Userland FSW/ETW are *notifications after the fact*; `FileActivityMonitor` observes, it cannot veto. Constraint also mandates `FileShare.Delete` — "Gnyida never blocks user file deletion.")
 2. **Synchronously block an arbitrary registry write** before it commits. (`RegistryMonitor` is WMI/ETW observe; it removes malicious keys *after* via `RemoveRegistryEntry`.)
 3. **Intercept/deny a syscall or an arbitrary API call** inline. (No direct syscalls; no inline hooking engine.)
-4. **Block an arbitrary process launch pre-execution** by its own logic. Launch-blocking only happens for classes Windows itself gates (**ASR / WDAC / AppLocker / IFEO / Defender**); for everything else Sentinel can only **kill after start** (`SafeKillProcessTree`), which is a race, not a veto.
+4. **Block an arbitrary process launch pre-execution** by its own logic. Launch-blocking only happens for classes Windows itself gates (**ASR / WDAC / AppLocker / IFEO / Defender**); for everything else Gnyida can only **kill after start** (`SafeKillProcessTree`), which is a race, not a veto.
 5. **Block a DLL load pre-load.** `DllUnloadEngine` FreeLibrary-unloads *after* the module is mapped; a kernel HIPS denies the load image notification before mapping.
 6. **Guarantee "the action never mattered."** The fast lane (Phase 1D) shrinks the window but cannot eliminate it. Only OS-policy prevention (ASR/WDAC/IFEO) removes the race for *covered* classes.
 
@@ -212,6 +212,6 @@ A true HIPS inserts itself **inline in the kernel** (filesystem minifilter, regi
 ## 7. Recommendations (implement nothing now — scoping only)
 
 1. **Start with Phase 1A + 1B + 1D.** They reuse mechanisms that already exist (`AsrRules`/`AsrPolicyGuard`, `ApplyOrFail` self-protect, the detection channel) and carry the lowest FP/lockout risk for the biggest preventive gain.
-2. **Treat ASR expansion and IFEO as the cheapest "prevention" lever** — they block at the OS before Sentinel's loop runs, which is strictly better than any kill-latency work for covered classes.
+2. **Treat ASR expansion and IFEO as the cheapest "prevention" lever** — they block at the OS before Gnyida's loop runs, which is strictly better than any kill-latency work for covered classes.
 3. **Phase 2/3 (WFP add, policy engine, WDAC) are genuine prevention but lockout-capable** — gate every one behind audit-mode-first + explicit opt-in + signed/fail-closed config + one-action rollback, honoring "Compiled config only", "no attacker-controllable trust", and "Must function as a standard user".
 4. **Keep expectations honest per Section 6** in any user-facing text ("No security theater features").

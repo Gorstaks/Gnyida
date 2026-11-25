@@ -1,7 +1,7 @@
 # PPID Name-Demote Findings — `ShouldDemotePpidToLogOnly`
 
 **Investigation:** READ-ONLY. No source code was changed.
-**Target:** `ParentPidSpoofDetector.ShouldDemotePpidToLogOnly(string processName, string? imagePath, bool selfSigned, bool allowlistedDevTool = false)` — `src/Sentinel.Core/ParentPidSpoofDetector.cs:235`.
+**Target:** `ParentPidSpoofDetector.ShouldDemotePpidToLogOnly(string processName, string? imagePath, bool selfSigned, bool allowlistedDevTool = false)` — `src/Gnyida.Core/ParentPidSpoofDetector.cs:235`.
 **Shipped-at:** commit `d63ad9d` "fix: PPID detector never kills allowlisted dev/browser tools on a signature-check race (3.0.0)" (2026-10-04).
 
 ---
@@ -20,7 +20,7 @@ The comment's claim that "an impostor merely named gh/git is caught by other rul
 
 ### (a) How `allowlistedDevTool` is computed and passed — the single call site
 
-`ParentPidSpoofDetector.Scan` (`src/Sentinel.Core/ParentPidSpoofDetector.cs:161-162`):
+`ParentPidSpoofDetector.Scan` (`src/Gnyida.Core/ParentPidSpoofDetector.cs:161-162`):
 
 ```csharp
 bool allowlistedDevTool = (isDev || isBrowser);
@@ -37,14 +37,14 @@ bool isBrowser = lowerName is "chrome" or "msedge" or "firefox" or "brave" or "o
 
 Both inputs are **name-only**:
 
-- `AllowlistService.IsDevelopmentProcess(string processName)` (`src/Sentinel.Core/AllowlistService.cs:71-74`) is a pure set-membership test against the static `DevelopmentProcesses` HashSet (`AllowlistService.cs:76-87`, contains `git`, `git-remote-https`, `gh`, `dotnet`, `node`, `python`, `powershell`, `cmd`, etc.). Its own doc-comment states: *"Requires path verification at the call site - this method alone does NOT grant any suppression."* — but the PPID call site does **not** add that path verification before setting `allowlistedDevTool`.
+- `AllowlistService.IsDevelopmentProcess(string processName)` (`src/Gnyida.Core/AllowlistService.cs:71-74`) is a pure set-membership test against the static `DevelopmentProcesses` HashSet (`AllowlistService.cs:76-87`, contains `git`, `git-remote-https`, `gh`, `dotnet`, `node`, `python`, `powershell`, `cmd`, etc.). Its own doc-comment states: *"Requires path verification at the call site - this method alone does NOT grant any suppression."* — but the PPID call site does **not** add that path verification before setting `allowlistedDevTool`.
 - `isBrowser` is a literal name switch on `proc.ProcessName`.
 
 So `allowlistedDevTool` is `true` for anything **named** `gh` (etc.), regardless of path or signature. `selfSigned` (`ParentPidSpoofDetector.cs:139-142`) *is* a real signature check, but it is passed as a **separate** argument and the method returns on `allowlistedDevTool` **before** `selfSigned` matters in the attacker's favor — see below.
 
 ### The demote method short-circuits on name before any path/signature test
 
-`ShouldDemotePpidToLogOnly` (`src/Sentinel.Core/ParentPidSpoofDetector.cs:235-258`):
+`ShouldDemotePpidToLogOnly` (`src/Gnyida.Core/ParentPidSpoofDetector.cs:235-258`):
 
 ```csharp
 internal static bool ShouldDemotePpidToLogOnly(
@@ -111,8 +111,8 @@ Why this does not reintroduce the mid-operation kill race:
 
 **Is the impostor "caught by other rules"?** Partially — and critically, **not for the PPID signal itself**:
 
-- There is **no** rule in the current `src/Sentinel.Core` tree that re-derives a *kill* from PPID spoofing. The historical "Spoofed Process Phoning Home" composite named in `docs/CHANGELOG.md` does **not** exist in current source (grep for `Parent PID Mismatch` / `Phoning Home` / `Spoofed` in `src/Sentinel.Core/**` returns no matches). The PPID detector is the sole producer of the PPID-spoof signal, and its kill is exactly what the demote removes.
-- `UnsignedBinaryRule` (`src/Sentinel.Core/Rules.PathProvenance.cs`) **would** flag `C:\Temp\gh.exe` ("Binary executed from user-writeable path"), but only as **Tier2 / Confidence 0.60 / LogOnly** observe fuel — it never kills alone (and `AdvancedResponseEngine` enforces Tier2-never-acts unconditionally).
+- There is **no** rule in the current `src/Gnyida.Core` tree that re-derives a *kill* from PPID spoofing. The historical "Spoofed Process Phoning Home" composite named in `docs/CHANGELOG.md` does **not** exist in current source (grep for `Parent PID Mismatch` / `Phoning Home` / `Spoofed` in `src/Gnyida.Core/**` returns no matches). The PPID detector is the sole producer of the PPID-spoof signal, and its kill is exactly what the demote removes.
+- `UnsignedBinaryRule` (`src/Gnyida.Core/Rules.PathProvenance.cs`) **would** flag `C:\Temp\gh.exe` ("Binary executed from user-writeable path"), but only as **Tier2 / Confidence 0.60 / LogOnly** observe fuel — it never kills alone (and `AdvancedResponseEngine` enforces Tier2-never-acts unconditionally).
 - The behavioral composites in `BehavioralCorrelationEngine` (`Injected C2 Beacon` 0.98, `Credential Dump + Exfiltration` 0.96, `Fileless Attack Chain` 0.95, `Covert RAT` etc.) key off **`SignalType`** (ProcessInjection, NetworkC2, CredentialTheft, Ransomware, …), **not** off the process name or the PPID signal. They catch the impostor **only if it additionally performs** those behaviors. An attacker who PPID-spoofs to hide lineage and then operates quietly (e.g., long-dwell recon, or injection the memory scanners happen to miss) loses the one dedicated T1134.004 kill that would have fired.
 
 So the comment's defense ("caught by other rules") holds for *noisy* impostors that also trip behavioral terminals, but it is **not** true that the PPID-spoof kill itself is redundant. For the specific job of this detector, the name-demote is the only line of defense and it is being waived by name.
@@ -140,7 +140,7 @@ Note the distinction: using an allowlisted name to decline a kill when the path 
 
 ### Precise code-change shape (not applied)
 
-In `ShouldDemotePpidToLogOnly` (`src/Sentinel.Core/ParentPidSpoofDetector.cs:252`), change:
+In `ShouldDemotePpidToLogOnly` (`src/Gnyida.Core/ParentPidSpoofDetector.cs:252`), change:
 
 ```csharp
 if (allowlistedDevTool) return true;
@@ -163,26 +163,26 @@ Optional hardening (not required for correctness): the caller could also stop se
 
 ### Tests that would need to change
 
-In `tests/Sentinel.Tests/ParentPidSpoofDetectorTests.cs`:
+In `tests/Gnyida.Tests/ParentPidSpoofDetectorTests.cs`:
 
 1. **`ShouldDemotePpidToLogOnly_AllowlistedDevTool_DemotesRegardlessOfPath`** (`:82-87`) — asserts `("gh", @"C:\Temp\gh.exe", selfSigned:false, allowlistedDevTool:true)` returns **true**. Under the tightening this must become **false** (resolved untrusted path, unsigned → kill stands). The test name/comment (which assert "DemotesRegardlessOfPath" is "by design") must be rewritten to the corrected intent — this is the exact stale assertion called out in the brief and in `.agents/tasks/input-integrity-verification.md:77-82`, where a prior refinement test (`allowlistedNameUnresolvedPath`) was *reverted* to match shipped behavior. The tightening restores that original intent.
 2. **`ShouldDemotePpidToLogOnly_ReturnsTrue_ForAllowlistedNameWithUnresolvedPath`** (`:59-64`) — asserts `gh`/`git-remote-https`/`chrome` with `null`/`""` path and `allowlistedDevTool:true` return **true**. This stays **green** (the transient-race window is still demoted) and documents the preserved behavior.
 3. **`ShouldDemotePpidToLogOnly_ReturnsFalse_ForNonAllowlistedUnresolvedPath`** (`:70-74`) — unaffected (stays green).
 4. **New test to add:** an allowlisted name with a resolved untrusted path and `selfSigned:true` (e.g. `("gh", @"C:\Program Files\GitHub CLI\gh.exe", selfSigned:true, allowlistedDevTool:true)`) must still return **true** via the `selfSigned` branch — proving the real signed tool is still protected after tightening.
 
-`tests/Sentinel.Tests/InstallerFalsePositiveTests.cs` `ShouldDemotePpidToLogOnly_WinReducerCase` (`:107-111`) calls the 3-arg overload (no `allowlistedDevTool`) and is **unaffected**.
+`tests/Gnyida.Tests/InstallerFalsePositiveTests.cs` `ShouldDemotePpidToLogOnly_WinReducerCase` (`:107-111`) calls the 3-arg overload (no `allowlistedDevTool`) and is **unaffected**.
 
 ---
 
 ## File / symbol index
 
-- `src/Sentinel.Core/ParentPidSpoofDetector.cs` — `Scan` (`:63`), timer 10s (`:61`), `imagePath` resolve (`:76`), top-of-scan signed-skip (`:95-104`), `isDev`/`isBrowser` (`:96-99`), `selfSigned` (`:139-142`), `allowlistedDevTool` compute (`:161`), demote call (`:162`), `ShouldDemotePpidToLogOnly` (`:235-258`), name short-circuit (`:252`), `IsStockWindowsConsoleHost` (`:264-293`).
-- `src/Sentinel.Core/AllowlistService.cs` — `IsDevelopmentProcess` (`:71-74`), `DevelopmentProcesses` set (`:76-87`), `IsUserAllowlisted` path+signature anchor (`:120-150`).
-- `src/Sentinel.Core/SignerTrustService.cs` — `IsSignedFile` (`:65-91`), cache (`:27`).
-- `src/Sentinel.Core/SecurityValidation.cs` — `VerifyAuthenticodeSignature` (`:482`), `WinVerifyTrust` import (`:302`), `AuthenticodeCache` (`:436`), `GetProcessImagePath` (`:771`), `IsOsCriticalPath` (`:169`), `IsUserProfileOrStagingPath` (`:810`).
-- `src/Sentinel.Core/Rules.PathProvenance.cs` — `UnsignedBinaryRule` (Tier2/0.60, flags Temp/Downloads), `FullPathParentChildRule` (SENT-003, Tier2).
-- `src/Sentinel.Core/BehavioralCorrelationEngine.cs` — composites keyed on `SignalType`, not PPID/name.
-- `src/Sentinel.Core/ChainTracer.cs` — defense-in-depth PPID/OS-path chain-kill skip (`:188-192`).
+- `src/Gnyida.Core/ParentPidSpoofDetector.cs` — `Scan` (`:63`), timer 10s (`:61`), `imagePath` resolve (`:76`), top-of-scan signed-skip (`:95-104`), `isDev`/`isBrowser` (`:96-99`), `selfSigned` (`:139-142`), `allowlistedDevTool` compute (`:161`), demote call (`:162`), `ShouldDemotePpidToLogOnly` (`:235-258`), name short-circuit (`:252`), `IsStockWindowsConsoleHost` (`:264-293`).
+- `src/Gnyida.Core/AllowlistService.cs` — `IsDevelopmentProcess` (`:71-74`), `DevelopmentProcesses` set (`:76-87`), `IsUserAllowlisted` path+signature anchor (`:120-150`).
+- `src/Gnyida.Core/SignerTrustService.cs` — `IsSignedFile` (`:65-91`), cache (`:27`).
+- `src/Gnyida.Core/SecurityValidation.cs` — `VerifyAuthenticodeSignature` (`:482`), `WinVerifyTrust` import (`:302`), `AuthenticodeCache` (`:436`), `GetProcessImagePath` (`:771`), `IsOsCriticalPath` (`:169`), `IsUserProfileOrStagingPath` (`:810`).
+- `src/Gnyida.Core/Rules.PathProvenance.cs` — `UnsignedBinaryRule` (Tier2/0.60, flags Temp/Downloads), `FullPathParentChildRule` (SENT-003, Tier2).
+- `src/Gnyida.Core/BehavioralCorrelationEngine.cs` — composites keyed on `SignalType`, not PPID/name.
+- `src/Gnyida.Core/ChainTracer.cs` — defense-in-depth PPID/OS-path chain-kill skip (`:188-192`).
 - `.kiro/steering/constraints.md` / `docs/constraints.md` — "Adversarial mindset: no attacker-controllable trust"; "Behavioral signals only for kill authority"; "No filename-based primary detection".
 - Commit `d63ad9d` (3.0.0) — introduced the unconditional name demote; `d2d7ba2` (2.9.9) — the prior unresolved-path fix.
 

@@ -9,13 +9,13 @@ bumps one patch per the strict versioning policy and builds/commits/pushes/publi
 
 - [ ] 1. `ServicingWindow` shared helper
   - Lift `FileActivityMonitor.IsServicingProcessActive()` into an internal shared
-    `ServicingWindow.IsActive()` in `Sentinel.Core` (keep the original delegating to it to avoid
+    `ServicingWindow.IsActive()` in `Gnyida.Core` (keep the original delegating to it to avoid
     behavior change). Optional: record a last-active UTC for a short "recently active" grace.
   - _Requirements: R4_
 
 - [ ] 2. `ModuleBaselineSnapshot` + `ModuleBaselineStore`
   - Add the snapshot model and the reboot-durable System.Text.Json store under
-    `%ProgramData%\Sentinel\baseline`, SYSTEM+Admins ACL, load-failure -> empty (learn mode).
+    `%ProgramData%\Gnyida\baseline`, SYSTEM+Admins ACL, load-failure -> empty (learn mode).
   - _Requirements: R2_
 
 - [ ] 3. `StateReconciliationMonitor : BackgroundService` skeleton
@@ -41,7 +41,7 @@ bumps one patch per the strict versioning policy and builds/commits/pushes/publi
 
 - [ ] 7. DI wiring
   - Register `ModuleBaselineStore` + `StateReconciliationMonitor` singletons; add the monitor to the
-    SystemIntegrity MonitorGroup in `Sentinel.Service/Program.cs`.
+    SystemIntegrity MonitorGroup in `Gnyida.Service/Program.cs`.
   - _Requirements: R1_
 
 - [ ] 8. Tests
@@ -60,4 +60,4 @@ bumps one patch per the strict versioning policy and builds/commits/pushes/publi
 
 - [ ] 10. Release
   - `installer/release.ps1` (bump one patch, build, stamp, installer), then
-    `D:\Gorstak\push.ps1 -ProjectFilter sentinel`. Build 0W/0E + full suite green first.
+    `D:\Gorstak\push.ps1 -ProjectFilter gnyida`. Build 0W/0E + full suite green first.

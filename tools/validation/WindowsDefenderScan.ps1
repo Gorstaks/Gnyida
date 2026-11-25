@@ -10,7 +10,7 @@ $outputRoot = (Resolve-Path -LiteralPath $OutputDirectory).Path
 $reportPath = Join-Path $outputRoot 'defender-scan.json'
 $report = [ordered]@{ StartedUtc=[DateTime]::UtcNow.ToString('O'); Status='NotPassed'; Engine=$null; Signature=$null; SignatureUpdated=$null; Files=@(); ExitCode=$null; Error=$null }
 # Keep scan targets outside the workspace and user-controlled TEMP/exclusion roots.
-$scanRoot = Join-Path ($env:SystemDrive + '\') ('SentinelDefenderValidation-' + [Guid]::NewGuid().ToString('N'))
+$scanRoot = Join-Path ($env:SystemDrive + '\') ('GnyidaDefenderValidation-' + [Guid]::NewGuid().ToString('N'))
 try {
     Import-Module Defender -ErrorAction Stop
     $status = Get-MpComputerStatus -ErrorAction Stop
@@ -71,7 +71,7 @@ try {
         $index++
     }
     $files = @(Get-ChildItem -LiteralPath $scanRoot -File -Recurse)
-    if (-not ($files | Where-Object Name -eq 'Sentinel.Core.dll')) { throw 'The actual Sentinel.Core.dll payload must be scanned.' }
+    if (-not ($files | Where-Object Name -eq 'Gnyida.Core.dll')) { throw 'The actual Gnyida.Core.dll payload must be scanned.' }
     $report.Files = @($files | ForEach-Object { [ordered]@{ Path=$_.FullName.Substring($scanRoot.Length); SHA256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() } })
     # This custom-scan option reports detections without silently treating successful
     # remediation as a clean scan. It does NOT turn off Defender or its real-time protection.

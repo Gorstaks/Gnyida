@@ -14,7 +14,7 @@
 //
 // Usage
 //   dotnet run tools/validation/SourceScan.cs
-//   dotnet run tools/validation/SourceScan.cs -- --path src/Sentinel.Core --numbers
+//   dotnet run tools/validation/SourceScan.cs -- --path src/Gnyida.Core --numbers
 //   dotnet run tools/validation/SourceScan.cs -- --fail-on SYNTAX,SLEEP
 
 using System.Text.RegularExpressions;

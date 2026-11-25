@@ -24,7 +24,7 @@ immune to an administrator rewriting all copies.
 
 These changes do not restore inaccessible protected ETW providers, recover dropped
 events, complete an interrupted file walk, or establish KGB RAT coverage. Those limits
-remain visible. Sentinel's marker regression tests intentionally contain inert reported
+remain visible. Gnyida's marker regression tests intentionally contain inert reported
 strings; finding those strings in the compiled test assembly is not proof of infection.
 The installer takes product publish outputs, not the test build directories.
 

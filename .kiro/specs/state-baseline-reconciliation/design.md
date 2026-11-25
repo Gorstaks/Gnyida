@@ -9,17 +9,17 @@ Authoritative references: `#[[file:../../../docs/constraints.md]]`,
 
 ---
 
-## Components (all new, `Sentinel.Core`)
+## Components (all new, `Gnyida.Core`)
 
 ### 1. `ModuleBaselineStore` - reboot-durable baseline persistence
-Mirrors the `kev_cache.json` pattern (System.Text.Json under `%ProgramData%\Sentinel`), NOT
+Mirrors the `kev_cache.json` pattern (System.Text.Json under `%ProgramData%\Gnyida`), NOT
 `SecureCacheStore` (whose HMAC key is boot-bound and would invalidate every reboot -> re-flag
 everything as new).
 
 ```
 public sealed class ModuleBaselineStore
 {
-    public ModuleBaselineStore(string? customPath = null);   // default %ProgramData%\Sentinel\baseline
+    public ModuleBaselineStore(string? customPath = null);   // default %ProgramData%\Gnyida\baseline
     public ModuleBaselineSnapshot Load();                    // empty snapshot if missing/unreadable
     public void Save(ModuleBaselineSnapshot snapshot);       // System.Text.Json, restricted ACL
 }
@@ -35,7 +35,7 @@ public sealed class ModuleBaselineSnapshot
     public int SchemaVersion { get; set; } = 1;
 }
 ```
-- File: `%ProgramData%\Sentinel\baseline\module_baseline.json`, dir created with SYSTEM+Admins ACL
+- File: `%ProgramData%\Gnyida\baseline\module_baseline.json`, dir created with SYSTEM+Admins ACL
   (reuse the ACL helper pattern from `Program.EnsureRestrictedProgramDataDir` / `SecureCacheStore`).
 - Load failure -> empty snapshot (learn mode). Save failure -> `LogDebug`, continue (NFR-2).
 - Module identity string = `ModuleIdentity.Normalize(path)` (already lowercases, strips `\\?\`).

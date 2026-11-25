@@ -1,12 +1,12 @@
 # Verification Note — PPID name-demote + stale TLS test fixes
 
 Branch: `feature/ppid-tls-fixes`
-Worktree: `e:\Gorstak\Sentinel\.worktrees\ppid-tls-fixes`
+Worktree: `e:\Gorstak\Gnyida\.worktrees\ppid-tls-fixes`
 
 ## Changes
 
 ### FIX 1 — PPID name-demote tightened to unresolved-path-only (kill-authority)
-Product: `src/Sentinel.Core/ParentPidSpoofDetector.cs`, `ShouldDemotePpidToLogOnly`.
+Product: `src/Gnyida.Core/ParentPidSpoofDetector.cs`, `ShouldDemotePpidToLogOnly`.
 Replaced the unconditional name demote
 `if (allowlistedDevTool) return true;`
 with
@@ -18,7 +18,7 @@ resolved untrusted path (C:\Temp\gh.exe) is not exonerated by name. Mirrors the 
 IsStockWindowsConsoleHost empty-path carve-out. Caller at ~line 161-162 unchanged (imagePath
 already passed).
 
-Tests: `tests/Sentinel.Tests/ParentPidSpoofDetectorTests.cs`
+Tests: `tests/Gnyida.Tests/ParentPidSpoofDetectorTests.cs`
 - Renamed `ShouldDemotePpidToLogOnly_AllowlistedDevTool_DemotesRegardlessOfPath` ->
   `ShouldDemotePpidToLogOnly_AllowlistedDevTool_ResolvedUntrustedPath_DoesNotDemote`; it now
   asserts FALSE for ("gh", C:\Temp\gh.exe, selfSigned:false, allowlistedDevTool:true), with a
@@ -32,7 +32,7 @@ Tests: `tests/Sentinel.Tests/ParentPidSpoofDetectorTests.cs`
   unaffected and still passes.
 
 ### FIX 2 — stale TLS no-EKU test thresholds corrected (TEST-ONLY)
-Tests: `tests/Sentinel.Tests/Monitors/TlsCertificateMonitorTests.cs`
+Tests: `tests/Gnyida.Tests/Monitors/TlsCertificateMonitorTests.cs`
 - `AnalyzeCert_SelfSigned_Alone_DoesNotIncreaseConfidence`: `Confidence < 0.60` ->
   `Confidence <= 0.65`, comment updated to note the +0.25 no-EKU/All-Purpose bonus.
 - `AnalyzeCert_LongLivedSelfSignedRoot_MissingCrl_NotScored`: strict `< 0.65` -> `<= 0.65`,
@@ -42,7 +42,7 @@ Tests: `tests/Sentinel.Tests/Monitors/TlsCertificateMonitorTests.cs`
 
 ## Commands run (from worktree root) and results
 
-1. `dotnet build Sentinel.sln -c Release`
+1. `dotnet build Gnyida.sln -c Release`
    => Build succeeded. 0 Warning(s), 0 Error(s).
 
 2. `dotnet test --filter "ParentPidSpoof|TlsCertificate" -c Release --no-build`

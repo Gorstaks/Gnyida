@@ -33,11 +33,11 @@ jobs:
 
     - name: Security template compatibility regression
       shell: pwsh
-      run: ./tests/Sentinel.Tests/SecurityTemplate.Tests.ps1
+      run: ./tests/Gnyida.Tests/SecurityTemplate.Tests.ps1
 
     - name: Firewall policy regression tests
       shell: pwsh
-      run: ./tests/Sentinel.Tests/LocalFirewallPolicy.Tests.ps1
+      run: ./tests/Gnyida.Tests/LocalFirewallPolicy.Tests.ps1
 
     - name: Setup Node for Worker tests
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -50,22 +50,22 @@ jobs:
 
     - name: Release artifact integrity regression tests
       shell: pwsh
-      run: ./tests/Sentinel.Tests/ReleaseArtifacts.Tests.ps1
+      run: ./tests/Gnyida.Tests/ReleaseArtifacts.Tests.ps1
 
     - name: Dashboard response rendering tests
       run: node --test tests/dashboard-response.test.cjs
 
     - name: Restore dependencies
-      run: dotnet restore Sentinel.sln
+      run: dotnet restore Gnyida.sln
 
     # Fail the build if warnings reappear - the codebase currently builds 0-warning
     # and we want to keep it that way. -warnaserror turns any new warning into a red CI.
     - name: Build (warnings as errors)
-      run: dotnet build Sentinel.sln -c Release --no-restore -warnaserror
+      run: dotnet build Gnyida.sln -c Release --no-restore -warnaserror
 
     - name: Require actual Defender acceptance of Core
       shell: pwsh
-      run: ./tools/validation/WindowsDefenderScan.ps1 -InputPaths @('src/Sentinel.Core/bin/Release/net48-windows')
+      run: ./tools/validation/WindowsDefenderScan.ps1 -InputPaths @('src/Gnyida.Core/bin/Release/net48-windows')
 
     - name: Upload Defender validation evidence
       if: always()
@@ -79,7 +79,7 @@ jobs:
     # One test execution produces both the TRX results and coverage report.
     - name: Test with coverage
       run: >
-        dotnet test tests/Sentinel.Tests/Sentinel.Tests.csproj
+        dotnet test tests/Gnyida.Tests/Gnyida.Tests.csproj
         -c Release --no-restore --verbosity minimal
         --blame-hang --blame-hang-timeout 3m --blame-hang-dump-type none
         /p:CollectCoverage=true
@@ -107,7 +107,7 @@ jobs:
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: coverage
-        path: ${{ github.workspace }}/tests/Sentinel.Tests/TestResults/coverage.cobertura.xml
+        path: ${{ github.workspace }}/tests/Gnyida.Tests/TestResults/coverage.cobertura.xml
         if-no-files-found: ignore
 
   firewall-smoke:
@@ -121,9 +121,9 @@ jobs:
     - name: Build native Windows firewall integration fixture
       shell: pwsh
       run: |
-        dotnet build Sentinel.sln -c Release -warnaserror
+        dotnet build Gnyida.sln -c Release -warnaserror
         if ($LASTEXITCODE -ne 0) { throw 'Solution build failed' }
-        dotnet build tools/Sentinel.FirewallSmoke/Sentinel.FirewallSmoke.csproj -c Release -warnaserror
+        dotnet build tools/Gnyida.FirewallSmoke/Gnyida.FirewallSmoke.csproj -c Release -warnaserror
         if ($LASTEXITCODE -ne 0) { throw 'Native firewall fixture build failed' }
     - name: Exercise real local and Group Policy firewall stores on disposable runner
       shell: powershell
@@ -138,7 +138,7 @@ jobs:
       with:
         dotnet-version: '10.0.x'
     - name: Build native DNS validation fixture
-      run: dotnet build Sentinel.sln -c Release -warnaserror
+      run: dotnet build Gnyida.sln -c Release -warnaserror
     - name: Exercise DNS repair and emergency restoration on disposable runner
       shell: powershell
       run: ./tools/validation/WindowsDnsSmoke.ps1
@@ -161,9 +161,9 @@ jobs:
     - name: Publish ExploitShield and build native task fixture
       shell: pwsh
       run: |
-        dotnet publish tools/Sentinel.ExploitShield/Sentinel.ExploitShield.csproj -c Release -warnaserror -o "$env:RUNNER_TEMP/exploitshield-payload"
+        dotnet publish tools/Gnyida.ExploitShield/Gnyida.ExploitShield.csproj -c Release -warnaserror -o "$env:RUNNER_TEMP/exploitshield-payload"
         if ($LASTEXITCODE -ne 0) { throw 'ExploitShield publication failed' }
-        dotnet build tools/Sentinel.ExploitShieldSmoke/Sentinel.ExploitShieldSmoke.csproj -c Release -warnaserror
+        dotnet build tools/Gnyida.ExploitShieldSmoke/Gnyida.ExploitShieldSmoke.csproj -c Release -warnaserror
         if ($LASTEXITCODE -ne 0) { throw 'Native task fixture build failed' }
     - name: Exercise native WUA access and protected SYSTEM task lifecycle
       shell: powershell
@@ -178,11 +178,11 @@ jobs:
       with:
         dotnet-version: '10.0.x'
     - name: Build endpoint containment and attribution fixtures
-      run: dotnet build tests/Sentinel.Tests/Sentinel.Tests.csproj -c Release -warnaserror
+      run: dotnet build tests/Gnyida.Tests/Gnyida.Tests.csproj -c Release -warnaserror
     - name: Verify native containment, registry attribution and runtime providers
       shell: pwsh
       run: |
-        dotnet test tests/Sentinel.Tests/Sentinel.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName~EndpointProtectionWindowsTests|FullyQualifiedName~LoaderPayloadWindowsTests|FullyQualifiedName~Release343WindowsTests|FullyQualifiedName~Release345WindowsTests|FullyQualifiedName~Release346WindowsTests' --logger 'trx;LogFileName=endpoint-native.trx' --results-directory TestResults
+        dotnet test tests/Gnyida.Tests/Gnyida.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName~EndpointProtectionWindowsTests|FullyQualifiedName~LoaderPayloadWindowsTests|FullyQualifiedName~Release343WindowsTests|FullyQualifiedName~Release345WindowsTests|FullyQualifiedName~Release346WindowsTests' --logger 'trx;LogFileName=endpoint-native.trx' --results-directory TestResults
         if ($LASTEXITCODE -ne 0) { throw 'Native endpoint protection tests failed' }
         [xml]$results = Get-Content TestResults/endpoint-native.trx
         $counters = $results.TestRun.ResultSummary.Counters
@@ -206,4 +206,4 @@ jobs:
       with:
         dotnet-version: '10.0.x'
     - name: Portable audit regressions (native Windows adapters are not exercised)
-      run: dotnet test tests/Sentinel.PortableAudit.Tests/Sentinel.PortableAudit.Tests.csproj -c Release -warnaserror
+      run: dotnet test tests/Gnyida.PortableAudit.Tests/Gnyida.PortableAudit.Tests.csproj -c Release -warnaserror

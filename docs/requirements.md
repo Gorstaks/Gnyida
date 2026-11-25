@@ -1,4 +1,4 @@
-# Sentinel - Requirements
+# Gnyida - Requirements
 
 **Version: 3.7.1**
 
@@ -8,21 +8,21 @@ Primary audience: a standalone home/gaming PC owner, including a potentially tar
 
 - No unauthenticated dashboard response may contain the bearer token. `GET /` without `?token=` returns a secret-free bootstrap page. Requests must carry a loopback dashboard `Host` and, when present, the dashboard `Origin`. The query token is accepted only for `GET /` and the WebSocket upgrade. Pages send a restrictive CSP and `Referrer-Policy: no-referrer`. Request bodies are size-capped and errors do not return exception text.
 - The service must not register or start from an install directory that a non-administrator can write to (`InstallDirectoryPolicy`). Setup installs only under Program Files and does not run a recursive ACL reset on any other path.
-- `%ProgramData%\Sentinel` and its `Secure` directory are re-owned, re-ACLed and verified before an IPC key is stored. A key file that is not SYSTEM/Administrators-owned, or that another principal can write, is discarded. The pipe name is claimed with `FILE_FLAG_FIRST_PIPE_INSTANCE` and a standing instance. The client sends a signed request only to a session-0 server whose image is the installed `Sentinel.Service.exe`.
+- `%ProgramData%\Gnyida` and its `Secure` directory are re-owned, re-ACLed and verified before an IPC key is stored. A key file that is not SYSTEM/Administrators-owned, or that another principal can write, is discarded. The pipe name is claimed with `FILE_FLAG_FIRST_PIPE_INSTANCE` and a standing instance. The client sends a signed request only to a session-0 server whose image is the installed `Gnyida.Service.exe`.
 - A SUBST drive (creatable by any user) shall be dismounted and reported. It shall not authorize killing any process, its parent, or "recently started" processes, and shall not delete autostart entries, scheduled tasks or WMI subscriptions on a substring match. Those outcomes are Tier2 / LogOnly reports.
 - An ancestor-chain kill must not target an ancestor solely because it is a parent. An ancestor with unresolved identity, a valid Authenticode signature, an image under Windows/Program Files (excluding default-writable drop folders), or a known security/VPN product name under Program Files is preserved. Protected-process name checks are case-insensitive.
 - `RemoveRegistryEntry` deletes only (a) a value under the exact HKLM/HKCU Run/RunOnce or browser extension-forcelist roots, (b) a Win32 service subkey under `System\CurrentControlSet\Services` that is not a protected service, or (c) an exact `CLSID\{guid}\InprocServer32` entry. The live value/image must still match what the monitor observed, and service/COM targets must point at a user-writable location. Anything else is refused and recorded.
 - Path-based quarantine refuses a file with a reparse point in its path or more than one hard link. The `takeown`/`icacls` fallback is removed. ISO containment moves a plain `.iso`/`.img` into the vault instead of deleting it.
 - Name/path heuristics (installer, DirectX/redist, ancestry-root names) demote a detection only with a non-attacker-controlled anchor: the real Windows system directory, a Program Files image, or a valid signature. "Microsoft-signed" means an exact known Microsoft common name, not a substring. Signature-cache entries are keyed on size, timestamps and a content fingerprint.
 - Cast-device firewall blocks share the MitM posture gate and never target the gateway, DNS/DHCP servers, multicast or link-local addresses.
-- Self-protection additionally hashes every `Sentinel*` binary next to the service and checks that the registered service `ImagePath` names the running executable. ETW session enumeration uses the native `EVENT_TRACE_PROPERTIES` layout. `NtTraceEvent` prologue changes are reported. All three are Tier2 / LogOnly.
+- Self-protection additionally hashes every `Gnyida*` binary next to the service and checks that the registered service `ImagePath` names the running executable. ETW session enumeration uses the native `EVENT_TRACE_PROPERTIES` layout. `NtTraceEvent` prologue changes are reported. All three are Tier2 / LogOnly.
 - `LGPO.exe` runs only when it has a valid Microsoft Corporation signature.
-- The shipped security template must not weaken password policy (minimum length, complexity, history) or force FIPS off. Only an opted-in SentinelAutoRotate install may lower the local minimum password length to 0, and it must restore the recorded original on uninstall or failed install.
+- The shipped security template must not weaken password policy (minimum length, complexity, history) or force FIPS off. Only an opted-in GnyidaAutoRotate install may lower the local minimum password length to 0, and it must restore the recorded original on uninstall or failed install.
 - `SlidingWindowMassDeletionRule` must not count deletions inside `\AppData\Local\Temp\` or `\Windows\Temp\` toward its threshold. The exclusion is keyed on the deleted object's location, never on the deleting process's name or image. Release CI pins third-party actions to commit SHAs, pins Inno Setup and checks its signature, requires signing when a signing secret is configured, flags unsigned installers in the release notes, and accepts a manual publish only from main/master.
 
 ### Integrated NanoAV coverage (3.4.5)
 
-- Port useful scanning/reputation/socket-shell coverage into Sentinel's policy pipeline; do not run the archived autonomous engine or import its unsigned=false verdict database.
+- Port useful scanning/reputation/socket-shell coverage into Gnyida's policy pipeline; do not run the archived autonomous engine or import its unsigned=false verdict database.
 - Preserve old recovery data and migrate only owned startup/runtime artifacts; do not target unrelated names or trust a PID file.
 - Online file context never grants runtime trust or process-kill authority. Exact current malware hashes may invoke only the separate audited pinned-file containment policy.
 
@@ -80,7 +80,7 @@ Focus: transparency, safety, real-world threat detection, and blue-team educatio
 
 The system must implement two detection tiers with strictly enforced response contracts:
 
-- **Tier 1 (Behavioral):** Active response allowed when `Sentinel:ActiveResponse` is true (default **true**). `EnforceActiveResponse` (default **false**) - when true, treats disabling ActiveResponse as tampering and force-re-enables it. Default false allows lab/observe installs to stay passive.
+- **Tier 1 (Behavioral):** Active response allowed when `Gnyida:ActiveResponse` is true (default **true**). `EnforceActiveResponse` (default **false**) - when true, treats disabling ActiveResponse as tampering and force-re-enables it. Default false allows lab/observe installs to stay passive.
 - **Tier 2 (Indicator):** Log only - response action is **never** permitted regardless of configuration.
 
 ### FR-2: Tier 1 Detection Rules
@@ -138,9 +138,9 @@ The system must detect the following indicators (log only):
 | T2-09 | MOTW-strip PE / ISO / VSIX / .rdp / AppInstaller in Downloads - LogOnly (game ISOs never a kill seed) |
 | T2-10 | ClickFix encoded Run, VS Code encoded shell, RDP client LOLBin spawn - LogOnly observe fuel |
 | T2-11 | Update/servicing-surface abuse (`UpdateServicingMonitor`): a servicing actor (`TrustedInstaller`/`tiworker`/`wusa`/`dism`/`dismhost`/`expand`/`extrac32`/`pkgmgr`) spawning a shell/LOLBin/credential tool; CAB/MSU extraction to a path outside WinSxS/servicing/Temp staging (CVE-2021-40444 `..\` class); an unsigned or non-Microsoft-signed binary named as a servicing actor; a plain-HTTP or non-Microsoft WSUS/`AutoConfigURL`-style update source - all LOLBin/servicing observe fuel, never a solo kill (composes with `RegistryMonitor` service-drop + `FileActivityMonitor` writes) |
-| T2-12 | Content smuggling in a container at rest (`ArchiveContentInspector` via `FileVerdictScanner`/`FileReputationEngine`; at-rest scanning runs only when `SentinelConfig.EnableProactiveFileInspection` is enabled, off by default since 3.7.6): bounded, bomb-safe inspection of `.zip`-family archives and shallow scan of `.iso`/`.img` disk images for decompression-bomb ratios, nested archives, and embedded PE / script-host members. LogOnly `WeakObserveSeed` (file contents + names are attacker-controlled -> never a solo kill); seeds correlation so a later extract-and-detonate terminal completes a respondable chain. Fail-closed and hard-capped (container/total-decompressed <=512 MB, <=4096 entries, depth <=3, 8 s budget) so a zip bomb can never DoS the scanner |
+| T2-12 | Content smuggling in a container at rest (`ArchiveContentInspector` via `FileVerdictScanner`/`FileReputationEngine`; at-rest scanning runs only when `GnyidaConfig.EnableProactiveFileInspection` is enabled, off by default since 3.7.6): bounded, bomb-safe inspection of `.zip`-family archives and shallow scan of `.iso`/`.img` disk images for decompression-bomb ratios, nested archives, and embedded PE / script-host members. LogOnly `WeakObserveSeed` (file contents + names are attacker-controlled -> never a solo kill); seeds correlation so a later extract-and-detonate terminal completes a respondable chain. Fail-closed and hard-capped (container/total-decompressed <=512 MB, <=4096 entries, depth <=3, 8 s budget) so a zip bomb can never DoS the scanner |
 | T2-13 | Cross-filesystem execution (`CrossFilesystemExecutionMonitor`): unsigned binary loaded from network shares (SMB/UNC), WSL (`\\wsl$\`), container mounts, or mapped network drives - LogOnly observe fuel with confidence 0.35-0.65 (legitimate for development/shared builds; attacker ceiling: staging on remote system is visible once payload executes locally). Never a solo kill trigger; pairs with C2/injection/exfil for composite chains |
-| T2-14 | Stdin-staged PowerShell (`StdinStagedPowerShellRule`, 3.7.4): PowerShell whose command line runs code read from stdin/`$input` or ends in `-Command -`/`-File -` - LogOnly; a verified Sentinel management child is coalesced, never suppressed |
+| T2-14 | Stdin-staged PowerShell (`StdinStagedPowerShellRule`, 3.7.4): PowerShell whose command line runs code read from stdin/`$input` or ends in `-Command -`/`-File -` - LogOnly; a verified Gnyida management child is coalesced, never suppressed |
 | T2-15 | Known-malware executable inside an archive (3.7.4): exact SHA-256 of bounded inner PE entries via `HashReputationService` - LogOnly, archive untouched |
 | T2-16 | Redirect/privacy observations (3.7.4): brand look-alike DNS (`LookalikeDomainDetector`), browser home/search/proxy policy and default http/https handler changes (`BrowserRedirectGuard`), camera/mic use and (3.9.2) Windows-recorded screen capture outside admin-only install roots, with outbound-connection correlation (`CaptureDeviceUseMonitor`), new LAN device (`LanDeviceInventoryMonitor`) - all LogOnly |
 
@@ -188,7 +188,7 @@ The system must implement two correlation engines that fire composite detections
 - Emits `Weighted Correlation: Multi-Signal Threat` when total >= threshold (default 100), >=2 distinct categories, and independently corroborated terminal-family evidence; a high score alone is insufficient
 - Every detection receives `ScoreCardTotal`, `ScoreCardBreakdown`, `ScoreCardExplanation` metadata
 - Optional EventGraph diversity boost (0-25 pts) when `EnableGraphBoost=true`
-- Config: `Sentinel:WeightedCorrelation` (`Enabled`, `Threshold`, `MinDistinctCategories`, `EnableGraphBoost`)
+- Config: `Gnyida:WeightedCorrelation` (`Enabled`, `Threshold`, `MinDistinctCategories`, `EnableGraphBoost`)
 
 ### FR-5: Monitoring Sources
 
@@ -202,7 +202,7 @@ The system must implement two correlation engines that fire composite detections
 | Process ancestry | CreateToolhelp32Snapshot (~5s refresh) | WMI on constrained SKUs |
 | Webcam/Mic access | Process module enumeration (camera/mic DLL detection); CapabilityAccessManager consent-store use (3.7.4) | None |
 | Hash reputation | Service-only bounded HTTPS SHA256 lookups; no file uploads or reporting | Exact current malware/known-file context; failures Unknown, never runtime trust |
-| Windows Event Log trail | Application log / source Sentinel (IDs 1000-1500) | Self-disables gracefully on stripped Windows |
+| Windows Event Log trail | Application log / source Gnyida (IDs 1000-1500) | Self-disables gracefully on stripped Windows |
 | PE / URL ML scoring | Offline FastTree models (`MlModels/pe_model.zip`, `url_model.zip`) | Skipped if models absent; soft signal only |
 | WMI-Activity ETW | Microsoft-Windows-WMI-Activity events 5859-5861 (permanent consumer / binding) | `WmiPersistenceMonitor` 30s poll of filter/consumer/binding |
 | Sensitive file access | `SensitiveFileAccessMonitor` FileSystemWatcher on user profiles for credential/session stores + dev secrets + document archives; Restart Manager (`RmGetList`) owning-process attribution | None (event-driven) |
@@ -214,7 +214,7 @@ The system must implement two correlation engines that fire composite detections
 |--------|-----------|
 | Log detection + log response (`LogOnly`) | Always for Tier2; consultant signals; ActiveResponse disabled (lab); allowlist demotion; IDE host protection |
 | Kill process / process tree | Authorized high-confidence Tier1 with kill authority; no second signal is required; rate-limited (`MaxKillsPerMinute`, default 15) |
-| Quarantine / QuarantineAndKill | DPAPI machine-scope under `%ProgramData%\Sentinel\Quarantine`; refuse OS-critical paths; max 128 MB; production ACL SYSTEM+Admins |
+| Quarantine / QuarantineAndKill | DPAPI machine-scope under `%ProgramData%\Gnyida\Quarantine`; refuse OS-critical paths; max 128 MB; production ACL SYSTEM+Admins |
 | NetworkIsolate | Public C2 IP only: firewall block (COM), DNS flush, ARP entry purge (native). Skip private/LAN/link-local/multicast/CDN resolvers. Rate-limited (`MaxNetworkIsolatesPerMinute`, default 10) |
 | RemoveCert / RemoveCertAndKillAdder | Planted / high-confidence rogue certificates |
 | RemoveRegistryEntry | Malicious autorun / service / COM persistence |
@@ -225,11 +225,11 @@ The system must implement two correlation engines that fire composite detections
 
 | Source | Behavior |
 |--------|----------|
-| `Sentinel:ActiveResponse` | Default **true** in config and install |
-| `Sentinel:ChainConfirmMinSignals` | Default **2** - distinct rules on same PID within window required |
-| `Sentinel:ChainConfirmWindowSeconds` | Default **300** - rolling correlation window |
-| `Sentinel:SilentObserve` | Default **true** - notify/report confirmed chains and immediate authorized kill-grade Tier1 detections; retain Tier2 observations in logs |
-| `Sentinel:EnforceActiveResponse` | Default **false** - when true, AntiTamper force-re-enables ActiveResponse if flipped off |
+| `Gnyida:ActiveResponse` | Default **true** in config and install |
+| `Gnyida:ChainConfirmMinSignals` | Default **2** - distinct rules on same PID within window required |
+| `Gnyida:ChainConfirmWindowSeconds` | Default **300** - rolling correlation window |
+| `Gnyida:SilentObserve` | Default **true** - notify/report confirmed chains and immediate authorized kill-grade Tier1 detections; retain Tier2 observations in logs |
+| `Gnyida:EnforceActiveResponse` | Default **false** - when true, AntiTamper force-re-enables ActiveResponse if flipped off |
 | CLI `--active-response` | Optional force-enable at service start (legacy / override; not required for normal install) |
 
 **Removed (not required):** pre-kill **DeceptionEngine** / attacker-hostile deception tactics. Removed for Defender / AV compatibility; design rule is "no offensive deception tactics."
@@ -237,7 +237,7 @@ The system must implement two correlation engines that fire composite detections
 ### FR-7: Logging
 
 - Output format: JSONL (newline-delimited JSON), `System.Text.Json` only
-- Service path: `%ProgramData%\Sentinel\events.jsonl`; agent path: `%LocalAppData%\Sentinel\Agent\events.jsonl` by default. Custom agent destinations use an `agent` subdirectory.
+- Service path: `%ProgramData%\Gnyida\events.jsonl`; agent path: `%LocalAppData%\Gnyida\Agent\events.jsonl` by default. Custom agent destinations use an `agent` subdirectory.
 - Size-based rotation: 20 MB per file, up to 5 rotated files
 - Each entry must include: `type`, `timestamp`, `data` (with `ruleName`, `evidence`, `reasoning`, `confidence`, `tier`, `processName`, `processId`, `metadata`)
 - Rate limiting: max **1000** entries/second, burst of **5000**
@@ -245,7 +245,7 @@ The system must implement two correlation engines that fire composite detections
 - Graceful degradation: log file access failure must NOT crash the service
 - Self-healing: writer must retry opening the file on each write if the initial open failed
 - Contention handling: retain the active file, retry opening later and count dropped events; never rename a live writer's destination.
-- **Windows Event Log trail (v1.9.5):** critical events additionally written to Application log / source `Sentinel` (IDs 1000-1500) when available. Self-disables on barebone Windows. Config: `Sentinel:WindowsEventLog`. Never replaces JSONL as primary.
+- **Windows Event Log trail (v1.9.5):** critical events additionally written to Application log / source `Gnyida` (IDs 1000-1500) when available. Self-disables on barebone Windows. Config: `Gnyida:WindowsEventLog`. Never replaces JSONL as primary.
 
 ### FR-8: Explainability
 
@@ -298,7 +298,7 @@ The user-session Agent must provide a Settings window (tray menu + double-click)
 
 ### FR-12: Evidence packs (v1.7.7-1.7.8 / v1.9.3-1.9.4)
 
-- Automatic local evidence packs under `%ProgramData%\Sentinel\IncidentReports` on every chain-confirmed nuke
+- Automatic local evidence packs under `%ProgramData%\Gnyida\IncidentReports` on every chain-confirmed nuke
 - Reportable-grade defaults: integrity seal (SHA-256 + machine HMAC), victim affidavit, chain of custody, ZIP export, national portal helper
 - Digital coercion toolkit detections add honest technical scope + optional LE-oriented harm checkboxes
 - Does **not** auto-file with law enforcement
@@ -315,19 +315,19 @@ The user-session Agent must provide a Settings window (tray menu + double-click)
 
 - Interfaces: `IDetector`, `ITelemetryProvider`, `ICorrelationRule`, `IResponsePlugin`
 - `PluginRegistry` DI singleton - register correlation rules without editing core files
-- `RulePackLoader` - loads RSA-SHA256-signed `*.pack.json` packs from `%ProgramData%\Sentinel\rules\packs\` as `FragmentCorrelationRule` plugins; fail-closed on missing/invalid signatures; legacy HMAC packs are rejected
+- `RulePackLoader` - loads RSA-SHA256-signed `*.pack.json` packs from `%ProgramData%\Gnyida\rules\packs\` as `FragmentCorrelationRule` plugins; fail-closed on missing/invalid signatures; legacy HMAC packs are rejected
 - See `docs/RULE_PACKS.md`
 
 ### FR-15: Service<->Agent IPC (v2.0)
 
-- `ServiceAgentIpcHost` named pipe `SentinelIpc-v2` with HMAC token authentication
+- `ServiceAgentIpcHost` named pipe `GnyidaIpc-v2` with HMAC token authentication
 - Commands: `ping`, `ops`, `health` (read-only) plus `scan` / `scan_status` (on-demand audit). No ActiveResponse control over the pipe
-- HMAC token stored under `%ProgramData%\Sentinel\Secure\.ipc_token` (SYSTEM + Admins full; **Interactive Users read** - not all Authenticated Users)
+- HMAC token stored under `%ProgramData%\Gnyida\Secure\.ipc_token` (SYSTEM + Admins full; **Interactive Users read** - not all Authenticated Users)
 - Agent falls back to `ops_metrics.json` file when pipe is unavailable
 
 ### FR-16: Ops metrics (v2.0)
 
-- `OpsMetricsPublisher` writes `%ProgramData%\Sentinel\ops_metrics.json` every ~10s
+- `OpsMetricsPublisher` writes `%ProgramData%\Gnyida\ops_metrics.json` every ~10s
 - Metrics include: telemetry/sec, detections/sec, drops, composite/weighted counts, correlation latency percentiles
 - Agent Settings -> Ops page displays live metrics (prefers IPC, falls back to file)
 
@@ -336,12 +336,12 @@ The user-session Agent must provide a Settings window (tray menu + double-click)
 - Privileged Service startup applies the host hardening baseline; there is no work-first mode.
 - `RestrictivePortHardening` and `ProductPosture.AllowsProactiveHostLockdown` remain always enabled.
 - The standard-user Agent applies self-only process mitigations and delegates privileged work to the Service.
-- Inbound exception enforcement, explicit administrator approvals and rollback follow FR-11; outbound policy is preserved except Sentinel's own self-blocks.
+- Inbound exception enforcement, explicit administrator approvals and rollback follow FR-11; outbound policy is preserved except Gnyida's own self-blocks.
 - The Defender ransomware ASR rule identified in `docs/constraints.md` must never be enabled in Block against the installer.
 
 ### FR-18: MitM defense suite (v2.0.1)
 
-- `Sentinel:MitmDefense` opt-in suite for post-incident MitM attack response
+- `Gnyida:MitmDefense` opt-in suite for post-incident MitM attack response
 - Default `Enabled: false` on clean installs
 - When enabled: certificate removal still requires explicit thumbprint distrust authorization; `GhostProcessMonitor` kills invisible/empty-name PID -> Cast without the normal 2-scan wait; `CastDeviceGuard` auto-blocks rogue Cast by IOC MAC prefix and known IPs; `NullSessionGuard` blocks FCM TCP 5228; `AdvancedResponseEngine` applies the MITM-specific authorization checks
 - Config fields: `Enabled`, `RemovePlantedCerts`, `BlockFcmPushChannel`, `AutoBlockRogueCast`, `RogueCastMacPrefixes`, `KnownRogueCastIps`
@@ -357,8 +357,8 @@ The user-session Agent must provide a Settings window (tray menu + double-click)
 
 ### FR-21: Local network tamper report and VPN coexistence (v2.6.0, revised 3.6.8)
 
-- **3.6.8: the VPN shield is retired.** Sentinel no longer raises, bundles or installs a VPN. GVPN is a
-  separate project with its own installer; any VPN client may run next to Sentinel. `VpnShieldEngine`,
+- **3.6.8: the VPN shield is retired.** Gnyida no longer raises, bundles or installs a VPN. GVPN is a
+  separate project with its own installer; any VPN client may run next to Gnyida. `VpnShieldEngine`,
   `VpnShieldConfig` and `ProductPosture.AllowsVpnShield` are removed; a stale `VpnShield` key in an older
   `config.enc` is ignored. `ResponseAction.VpnShieldUp` is kept only as an `[Obsolete]` numeric slot so
   serialized enum values (events.jsonl, audit, replay) stay stable; nothing emits it and the response
@@ -511,7 +511,7 @@ Private-PE inspection shall cover eligible remote-API targets without host-name 
 
 ### Standalone product target and 3.4.0 hardening
 
-- Sentinel shall target standalone userland protection without assuming Defender or
+- Gnyida shall target standalone userland protection without assuming Defender or
   another antivirus supplies missing detection. Maintain the [capability matrix](CAPABILITY_MATRIX.md)
   with actual implementation, gaps and validation; do not claim universal product parity.
 - Runtime VBS, Credential Guard, Memory Integrity and LSASS protection shall be distinguished

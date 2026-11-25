@@ -1,4 +1,4 @@
-# Sentinel Installer Build Script
+# Gnyida Installer Build Script
 # Minimum framework-dependent installer for net48-windows.
 # Requires .NET Framework 4.8 on the target machine (installer offers download if missing).
 # Usage: .\build.ps1
@@ -9,7 +9,7 @@ param([switch]$StampOnly)
 $ErrorActionPreference = "Stop"
 
 Write-Host "==============================================" -ForegroundColor Cyan
-Write-Host "   Sentinel - Building Minimum Installer      " -ForegroundColor Cyan
+Write-Host "   Gnyida - Building Minimum Installer      " -ForegroundColor Cyan
 Write-Host "   (net48-windows, framework-dependent)       " -ForegroundColor Cyan
 Write-Host "==============================================" -ForegroundColor Cyan
 
@@ -67,8 +67,8 @@ $issContent = [System.IO.File]::ReadAllText($SetupScript)
 $issContent = $issContent -replace 'AppVersion=.*', "AppVersion=$Version"
 $issContent = $issContent -replace 'VersionInfoVersion=.*', "VersionInfoVersion=$Version.0"
 $issContent = $issContent -replace 'VersionInfoProductVersion=.*', "VersionInfoProductVersion=$Version.0"
-$issContent = $issContent -replace 'VersionInfoOriginalFileName=.*', "VersionInfoOriginalFileName=SentinelSetup-$Version.exe"
-$issContent = $issContent -replace 'OutputBaseFilename=SentinelSetup-.*', "OutputBaseFilename=SentinelSetup-$Version"
+$issContent = $issContent -replace 'VersionInfoOriginalFileName=.*', "VersionInfoOriginalFileName=GnyidaSetup-$Version.exe"
+$issContent = $issContent -replace 'OutputBaseFilename=GnyidaSetup-.*', "OutputBaseFilename=GnyidaSetup-$Version"
 [System.IO.File]::WriteAllText($SetupScript, $issContent)
 
 if ($StampOnly) {
@@ -83,8 +83,8 @@ Write-Host "Cleaning publish outputs..." -ForegroundColor Yellow
 if (Test-Path $PublishDir) {
     Remove-Item -Path $PublishDir -Recurse -Force -ErrorAction SilentlyContinue
 }
-Get-ChildItem $PSScriptRoot -Filter "SentinelSetup-*.exe" -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -ne "SentinelSetup-$Version.exe" } |
+Get-ChildItem $PSScriptRoot -Filter "GnyidaSetup-*.exe" -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne "GnyidaSetup-$Version.exe" } |
     ForEach-Object {
         Write-Host "Removing old installer $($_.Name)" -ForegroundColor Yellow
         Remove-Item $_.FullName -Force
@@ -96,15 +96,15 @@ $Dotnet = "C:\Program Files\dotnet\dotnet.exe"
 if (-not (Test-Path $Dotnet)) { $Dotnet = "dotnet" }
 
 # 2. Publish Service - framework-dependent net48 (small; uses installed .NET 4.8)
-Write-Host "Publishing Sentinel Service (net48-windows, framework-dependent)..." -ForegroundColor Yellow
-$ServiceProj = Join-Path $PSScriptRoot "..\src\Sentinel.Service\Sentinel.Service.csproj"
+Write-Host "Publishing Gnyida Service (net48-windows, framework-dependent)..." -ForegroundColor Yellow
+$ServiceProj = Join-Path $PSScriptRoot "..\src\Gnyida.Service\Gnyida.Service.csproj"
 $ServiceOut = Join-Path $PublishDir "service"
 & $Dotnet publish $ServiceProj -c Release -f net48-windows -o $ServiceOut
 if ($LASTEXITCODE -ne 0) { throw "Service publish failed" }
 
 # 3. Publish Agent - framework-dependent net48
-Write-Host "Publishing Sentinel Agent (net48-windows, framework-dependent)..." -ForegroundColor Yellow
-$AgentProj = Join-Path $PSScriptRoot "..\src\Sentinel.Agent\Sentinel.Agent.csproj"
+Write-Host "Publishing Gnyida Agent (net48-windows, framework-dependent)..." -ForegroundColor Yellow
+$AgentProj = Join-Path $PSScriptRoot "..\src\Gnyida.Agent\Gnyida.Agent.csproj"
 $AgentOut = Join-Path $PublishDir "agent"
 # Agent is published for the win-x64 RID (framework-dependent, NOT self-contained) so the
 # SDK resolves the x64 WebView2Loader.dll to the publish root. The Agent process is x64
@@ -129,35 +129,35 @@ if (Test-Path $WebView2Root) {
     }
 }
 
-# 3-AutoRotate. Publish standalone SentinelAutoRotate tool - framework-dependent net48
-Write-Host "Publishing Sentinel AutoRotate (net48-windows, framework-dependent)..." -ForegroundColor Yellow
-$AutoRotateProj = Join-Path $PSScriptRoot "..\tools\Sentinel.AutoRotate\Sentinel.AutoRotate.csproj"
+# 3-AutoRotate. Publish standalone GnyidaAutoRotate tool - framework-dependent net48
+Write-Host "Publishing Gnyida AutoRotate (net48-windows, framework-dependent)..." -ForegroundColor Yellow
+$AutoRotateProj = Join-Path $PSScriptRoot "..\tools\Gnyida.AutoRotate\Gnyida.AutoRotate.csproj"
 $AutoRotateOut = Join-Path $PublishDir "autorotate"
 & $Dotnet publish $AutoRotateProj -c Release -f net48-windows -o $AutoRotateOut
 if ($LASTEXITCODE -ne 0) { throw "AutoRotate publish failed" }
 
 # Online CVE/PoC companion; monitoring executables retain their offline policy.
-$ExploitShieldProj = Join-Path $PSScriptRoot "..\tools\Sentinel.ExploitShield\Sentinel.ExploitShield.csproj"
+$ExploitShieldProj = Join-Path $PSScriptRoot "..\tools\Gnyida.ExploitShield\Gnyida.ExploitShield.csproj"
 $ExploitShieldOut = Join-Path $PublishDir "exploitshield"
 & $Dotnet publish $ExploitShieldProj -c Release -f net48-windows -o $ExploitShieldOut
 if ($LASTEXITCODE -ne 0) { throw "ExploitShield publish failed" }
 
 
 # 3a. Icon + version.txt
-Write-Host "Deploying Sentinel.ico and version.txt..." -ForegroundColor Yellow
-$IconSource = Join-Path $PSScriptRoot "assets\Sentinel.ico"
+Write-Host "Deploying Gnyida.ico and version.txt..." -ForegroundColor Yellow
+$IconSource = Join-Path $PSScriptRoot "assets\Gnyida.ico"
 if (-not (Test-Path $IconSource)) {
-    $IconSource = Join-Path $PSScriptRoot "..\assets\Sentinel.ico"
+    $IconSource = Join-Path $PSScriptRoot "..\assets\Gnyida.ico"
 }
 if (Test-Path $IconSource) {
-    Copy-Item $IconSource -Destination (Join-Path $AgentOut "Sentinel.ico") -Force
-    Copy-Item $IconSource -Destination (Join-Path $ServiceOut "Sentinel.ico") -Force
+    Copy-Item $IconSource -Destination (Join-Path $AgentOut "Gnyida.ico") -Force
+    Copy-Item $IconSource -Destination (Join-Path $ServiceOut "Gnyida.ico") -Force
 }
 Copy-Item $VersionFile -Destination (Join-Path $AgentOut "version.txt") -Force
 Copy-Item $VersionFile -Destination (Join-Path $ServiceOut "version.txt") -Force
 
 # 3b. Offline PE/URL ML models
-$MlModelsSrc = Join-Path $PSScriptRoot "..\src\Sentinel.Core\MlModels"
+$MlModelsSrc = Join-Path $PSScriptRoot "..\src\Gnyida.Core\MlModels"
 foreach ($target in @("service", "agent")) {
     $dest = Join-Path $PublishDir "$target\MlModels"
     if (Test-Path $MlModelsSrc) {
@@ -172,7 +172,7 @@ foreach ($target in @("service", "agent")) {
 # 3c. LGPO.exe and GSecurity.inf - shipped as plain files, NOT embedded in the assembly.
 #     Embedding a PE inside a DLL triggers AV dropper heuristics. These files are
 #     placed beside the service/agent EXE and loaded at runtime from the install directory.
-$HardeningResourcesSrc = Join-Path $PSScriptRoot "..\src\Sentinel.Core\HardeningResources"
+$HardeningResourcesSrc = Join-Path $PSScriptRoot "..\src\Gnyida.Core\HardeningResources"
 foreach ($target in @("service", "agent")) {
     $dest = Join-Path $PublishDir $target
     foreach ($hardeningFile in @("LGPO.exe", "GSecurity.inf")) {
@@ -209,7 +209,7 @@ foreach ($target in @("service", "agent")) {
     Write-Host "Pruned *.pdb from $target\" -ForegroundColor Yellow
 }
 
-# GVPN is a separate project (its own repository and installer). Sentinel no longer builds,
+# GVPN is a separate project (its own repository and installer). Gnyida no longer builds,
 # bundles or installs it; setup only migrates a previously bundled copy out of {app}\GVPN.
 # Remove a stale staging folder so an old GVPN payload can never ship inside this installer.
 $GvpnOut = Join-Path $PublishDir "gvpn"
@@ -219,10 +219,10 @@ if (Test-Path $GvpnOut) { Remove-Item $GvpnOut -Recurse -Force }
 Write-Host "Signing published binaries..." -ForegroundColor Yellow
 $SignScript = Join-Path $PSScriptRoot "..\tools\sign-binaries.ps1"
 # Signing used to be skipped silently when this script was missing. It now always runs and
-# prints a prominent UNSIGNED BUILD warning (or fails with SENTINEL_REQUIRE_SIGNING=1).
+# prints a prominent UNSIGNED BUILD warning (or fails with GNYIDA_REQUIRE_SIGNING=1).
 if (-not (Test-Path $SignScript)) { throw "Signing script missing: $SignScript" }
 & $SignScript -TargetDirectory $PublishDir
-if ($LASTEXITCODE -ne 0) { throw "Binary signing failed (SENTINEL_REQUIRE_SIGNING is set)" }
+if ($LASTEXITCODE -ne 0) { throw "Binary signing failed (GNYIDA_REQUIRE_SIGNING is set)" }
 
 # 4. Locate Inno Setup Compiler
 Write-Host "Locating Inno Setup compiler..." -ForegroundColor Yellow
@@ -237,9 +237,9 @@ $DefaultIsccPaths = @(
 
 $IsccPath = $null
 # 3.7.1: an explicitly verified compiler (release CI sets this after hash + signature checks) wins.
-if ($env:SENTINEL_ISCC) {
-    if (-not (Test-Path -LiteralPath $env:SENTINEL_ISCC)) { throw "SENTINEL_ISCC points to a missing file: $env:SENTINEL_ISCC" }
-    $IsccPath = $env:SENTINEL_ISCC
+if ($env:GNYIDA_ISCC) {
+    if (-not (Test-Path -LiteralPath $env:GNYIDA_ISCC)) { throw "GNYIDA_ISCC points to a missing file: $env:GNYIDA_ISCC" }
+    $IsccPath = $env:GNYIDA_ISCC
 }
 foreach ($Path in $DefaultIsccPaths) {
     if ($IsccPath) { break }
@@ -262,24 +262,24 @@ Write-Host "Found Inno Setup at: $IsccPath" -ForegroundColor Green
 Write-Host "Compiling installer with Inno Setup..." -ForegroundColor Yellow
 # Inno Setup 7 quirk: if the output exe already exists, icon embedding may be skipped.
 # Always delete the previous output before compiling.
-$PreviousInstaller = Join-Path $PSScriptRoot "SentinelSetup-$Version.exe"
+$PreviousInstaller = Join-Path $PSScriptRoot "GnyidaSetup-$Version.exe"
 if (Test-Path $PreviousInstaller) { Remove-Item $PreviousInstaller -Force }
 & $IsccPath $SetupScript
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
 
-$InstallerPath = Join-Path $PSScriptRoot "SentinelSetup-$Version.exe"
+$InstallerPath = Join-Path $PSScriptRoot "GnyidaSetup-$Version.exe"
 if (-not (Test-Path $InstallerPath)) {
     throw "Installer not produced at $InstallerPath"
 }
 
-# 5a. Sign produced installer (SentinelSetup-*.exe lives in the installer folder)
+# 5a. Sign produced installer (GnyidaSetup-*.exe lives in the installer folder)
 & $SignScript -TargetDirectory $PSScriptRoot
-if ($LASTEXITCODE -ne 0) { throw "Installer signing failed (SENTINEL_REQUIRE_SIGNING is set)" }
+if ($LASTEXITCODE -ne 0) { throw "Installer signing failed (GNYIDA_REQUIRE_SIGNING is set)" }
 
 $sizeMb = [math]::Round((Get-Item $InstallerPath).Length / 1MB, 2)
 Write-Host "==============================================" -ForegroundColor Green
 Write-Host "Build completed successfully!" -ForegroundColor Green
-Write-Host "Installer: installer\SentinelSetup-$Version.exe ($sizeMb MB)" -ForegroundColor Green
+Write-Host "Installer: installer\GnyidaSetup-$Version.exe ($sizeMb MB)" -ForegroundColor Green
 Write-Host "Runtime:   .NET Framework 4.8 (framework-dependent)" -ForegroundColor Green
 Write-Host "==============================================" -ForegroundColor Green
 

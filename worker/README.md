@@ -1,6 +1,6 @@
-# Sentinel legacy standalone threat-report proxy
+# Gnyida legacy standalone threat-report proxy
 
-**Endpoint status (3.2.3):** Sentinel no longer calls this Worker. Online reputation, reporting and evidence-mirror transports and the compiled client credential are removed; client settings cannot restore them. This source is retained as a separately deployed compatibility component, not a required endpoint service. Deployment/testing below applies only to that independent server. No live deployment is implied.
+**Endpoint status (3.2.3):** Gnyida no longer calls this Worker. Online reputation, reporting and evidence-mirror transports and the compiled client credential are removed; client settings cannot restore them. This source is retained as a separately deployed compatibility component, not a required endpoint service. Deployment/testing below applies only to that independent server. No live deployment is implied.
 
 Cloudflare Worker that can receive signed requests from independently maintained clients and forwards them to threat intelligence platforms (MalwareBazaar, URLhaus, AbuseIPDB, VirusTotal) using server-side API keys.
 
@@ -10,16 +10,16 @@ Cloudflare Worker that can receive signed requests from independently maintained
 
 | Header | Required | Purpose |
 |--------|----------|---------|
-| `X-Sentinel-Timestamp` | Yes | Unix seconds; must be within 60 seconds |
-| `X-Sentinel-Nonce` | Yes | 16+ hex chars; unique within the window (replay rejected) |
-| `X-Sentinel-Signature` | Yes | Hex HMAC-SHA256 of `{timestamp}.{nonce}.{path}.{rawBody}` |
+| `X-Gnyida-Timestamp` | Yes | Unix seconds; must be within 60 seconds |
+| `X-Gnyida-Nonce` | Yes | 16+ hex chars; unique within the window (replay rejected) |
+| `X-Gnyida-Signature` | Yes | Hex HMAC-SHA256 of `{timestamp}.{nonce}.{path}.{rawBody}` |
 
-Signing key is the **server-side** `SENTINEL_SHARED_SECRET` (known only to independently authorized legacy clients; current Sentinel endpoints do not use it).
+Signing key is the **server-side** `GNYIDA_SHARED_SECRET` (known only to independently authorized legacy clients; current Gnyida endpoints do not use it).
 The secret is used **only** as the HMAC key and is **never** sent in a request header.
-**v1.8.1:** Agents no longer send `X-Sentinel-Auth`.
+**v1.8.1:** Agents no longer send `X-Gnyida-Auth`.
 **There is no client-supplied signing key.** Missing secret -> Worker returns 503.
 
-Historical Sentinel clients used certificate-pinned HTTPS. This is not an active connection in 3.2.3.
+Historical Gnyida clients used certificate-pinned HTTPS. This is not an active connection in 3.2.3.
 
 ## Free Tier Limits
 
@@ -36,7 +36,7 @@ Historical Sentinel clients used certificate-pinned HTTPS. This is not an active
 5. Add secrets:
 
 ```bash
-wrangler secret put SENTINEL_SHARED_SECRET   # required, >=16 chars
+wrangler secret put GNYIDA_SHARED_SECRET   # required, >=16 chars
 wrangler secret put MALWAREBAZAAR_KEY
 wrangler secret put URLHAUS_TOKEN
 wrangler secret put ABUSEIPDB_KEY
@@ -45,7 +45,7 @@ wrangler secret put VIRUSTOTAL_KEY
 
 6. Deploy: `wrangler deploy`
 
-## Current Sentinel integration
+## Current Gnyida integration
 
 None. Do not configure `ProxyEndpoint` or `ProxySharedSecret` on 3.2.3: those compatibility properties remain disabled/null. The former `--set-config` instructions do not restore transport. Review any independently deployed Worker and its credentials separately.
 
@@ -72,7 +72,7 @@ id = "<your-real-namespace-id>"
 
 No production namespace is created or deployed by local tests. The existing HMAC,
 timestamp, nonce and rate-limit checks apply to `/report/evidence`. The endpoint accepts
-the Sentinel `EvidenceSummary` JSON shape, requires a valid `ManifestSha256` and
+the Gnyida `EvidenceSummary` JSON shape, requires a valid `ManifestSha256` and
 `ReportId`, and validates optional `LedgerFile`/`LedgerSequence`/`LedgerHash` fields.
 It stores only a hashed report ID, manifest hash and optional ledger checkpoint under
 a content-addressed key for 90 days. Host/process names, raw evidence and indicators

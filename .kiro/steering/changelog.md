@@ -1,12 +1,12 @@
 ---
 inclusion: auto
-name: Sentinel Changelog
-description: Full Sentinel version history and release notes. Load this when the request involves project history, when a file/feature/module/CI step/monitor is missing, was added, integrated, retired or changed, what shipped in a given version, release notes, or "why did we change X". Load it BEFORE restoring, re-adding or removing any component.
+name: Gnyida Changelog
+description: Full Gnyida version history and release notes. Load this when the request involves project history, when a file/feature/module/CI step/monitor is missing, was added, integrated, retired or changed, what shipped in a given version, release notes, or "why did we change X". Load it BEFORE restoring, re-adding or removing any component.
 ---
 
-# Sentinel - Changelog
+# Gnyida - Changelog
 
-The complete, canonical version history and release notes for Sentinel live in
+The complete, canonical version history and release notes for Gnyida live in
 `docs/CHANGELOG.md`. It records what changed in each version (features, monitors, CVE
 coverage, behavior/posture changes, integrations, retirements, fixes). Treat it as the source
 of truth when answering questions about when or why something changed.

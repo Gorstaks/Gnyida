@@ -1,25 +1,32 @@
 # Changelog
+## [3.9.4] - 2026-11-25
+### Changed - product renamed to Gnyida
+- The product, solution, projects, namespaces, executables, installer, service names, registry values, firewall rule names, scheduled tasks, data folders, environment variables, HTTP headers, CI workflows, steering files and documentation use the name Gnyida. Earlier changelog entries were rewritten with the new name.
+- Runtime identifiers changed: service `Gnyida` and watchdog `GnyidaGuard`, Run value `GnyidaAgent`, install folder `{autopf}\Gnyida`, data folder `%ProgramData%\Gnyida`, event log source `GnyidaService`, executables `Gnyida.Service.exe`, `Gnyida.Agent.exe`, `GnyidaAutoRotate.exe`, `Gnyida.ExploitShield.exe`, installer `GnyidaSetup-<version>.exe`.
+- Clean break, no in-place upgrade: Setup does not detect or migrate an install made under the previous name, because that would require keeping the previous name in the code. Uninstall the previous release before installing 3.9.4. Its data folder, per-user settings and any leftover firewall rules are not carried over.
+- HMAC domain labels for the secure cache and locally signed dynamic rules changed with the name, so values written under the previous labels fail verification (fail closed) and are rebuilt.
+- CI signing reads the secrets `GNYIDA_SIGN_CERT_THUMBPRINT`, `GNYIDA_SIGN_DLIB` and `GNYIDA_SIGN_METADATA`.
 ## [3.9.3] - 2026-11-24
 ### Fixed - `DllUnloadEngine` per-process state, ImageLoad containment and quarantine retries
 - The per-process module cache was keyed by PID alone and kept for 3 idle minutes. Windows reuses PIDs quickly, so a new process could inherit the previous owner's state: modules already marked seen were never identity-checked, the next-to-the-exe disk-plant check was skipped, and the 20 s startup window had already elapsed. `ResolvePidCache` binds each entry to the process creation time and replaces it when the PID belongs to a different process.
 - Pruning dropped a live process's cache after 3 idle minutes. The next load re-created it with a fresh startup window (late loads counted as startup modules) and re-verified every module. `PruneStalePidCaches` now drops only exited or reused processes, runs at most every 30 s, and keeps the 3-minute idle rule only for entries whose creation time could not be read.
 - An ImageLoad identity failure re-scanned the host with `forceRemediate`. When `EnumModules` could not see the module, a disk plant next to the exe could kill the host without a proven load, against the 0.5.3 rule. The ImageLoad path now passes the observed module as the proven load and no longer forces remediation. The Tier1 response path (`UnloadInjectedDllAsync`) is unchanged.
 - A failed scan logged at Debug, and an ImageLoad check swallowed its exception, so a broken check looked clean. Both log at Warning.
-- `IsProtectedPath` compared `C:\Windows\` and `C:\Program Files` case-sensitively with a hardcoded drive, and treated `\Sentinel` anywhere in a path as protected. It is case-insensitive, uses the Windows and Program Files folders, and trusts only Sentinel's own installed binaries (`SelfPathGuard.IsSentinelSelfBinary`). Kill safety was already enforced separately by `SafeKillProcessTree`.
+- `IsProtectedPath` compared `C:\Windows\` and `C:\Program Files` case-sensitively with a hardcoded drive, and treated `\Gnyida` anywhere in a path as protected. It is case-insensitive, uses the Windows and Program Files folders, and trusts only Gnyida's own installed binaries (`SelfPathGuard.IsGnyidaSelfBinary`). Kill safety was already enforced separately by `SafeKillProcessTree`.
 - A disk plant whose quarantine `QuarantineManager` refused (for example a Microsoft-signed `dbghelp.dll` bundled with an application) was retried on every file event: six identical refusals per file in the 3.9.2 logs. Retries now wait 10 minutes (`FailedQuarantineBackoff`).
 - The plant-quarantine reasoning text said "FreeLibrary is cleanup if already mapped". The engine does not call FreeLibrary; a host that mapped a hostile module is contained (process tree) and the file quarantined. The text now says so.
 - Limit, unchanged: after the startup baseline, `MemoryBehaviorAnalyzer`'s 5 s timer only prunes; detection of later loads relies on Kernel-Process ImageLoad events. There is no periodic re-enumeration if ImageLoad delivery stops.
-- Tests in `DllUnloadEngineTests`: same process returns the same cache; a reused PID gets an empty cache (no seen modules, disk-plant check re-armed, late-load latch cleared); concurrent callers agree on one cache; live idle processes are kept, exited and reused ones dropped, unknown creation time falls back to the idle rule; `IsProtectedPath` is case-insensitive and rejects lookalikes (user-folder `Sentinel`, Temp `msiexec`, `C:\WindowsFake`).
+- Tests in `DllUnloadEngineTests`: same process returns the same cache; a reused PID gets an empty cache (no seen modules, disk-plant check re-armed, late-load latch cleared); concurrent callers agree on one cache; live idle processes are kept, exited and reused ones dropped, unknown creation time falls back to the idle rule; `IsProtectedPath` is case-insensitive and rejects lookalikes (user-folder `Gnyida`, Temp `msiexec`, `C:\WindowsFake`).
 ## [3.9.2] - 2026-11-22
 ### Added - screen capture reporting with network correlation
-- `CaptureDeviceUseMonitor` reported camera and microphone use only. Windows also records screen and window capture through the Windows.Graphics.Capture API in the same per-user CapabilityAccessManager consent store (`graphicsCaptureProgrammatic`, `graphicsCaptureWithoutBorder`), and Sentinel never read those entries.
+- `CaptureDeviceUseMonitor` reported camera and microphone use only. Windows also records screen and window capture through the Windows.Graphics.Capture API in the same per-user CapabilityAccessManager consent store (`graphicsCaptureProgrammatic`, `graphicsCaptureWithoutBorder`), and Gnyida never read those entries.
 - New rule `Privacy: Screen Capture By User-Writable App` (Tier2 / LogOnly): an app outside Program Files / System32 that is capturing the screen. On a new finding the monitor finds the running process whose OS-resolved image matches (the name only narrows the search) and reads its established outbound TCP connections. Confidence is 0.45 for capture alone, 0.60 with outbound connections, 0.65 with outbound connections from an unsigned image. The evidence names the peers. A signature is context only, never an allow.
 - It is a weak observe seed ("Privacy:" prefix): it never kills, blocks or seeds a kill chain, and ActiveResponse does not change that. Screen sharing in meeting or chat apps installed per user (Discord, Teams, Zoom) also appears; each app is reported once per user.
 - Limits: the consent store records the Windows.Graphics.Capture API only. Desktop Duplication and GDI (`BitBlt`) capture leave no record there and are not covered by this rule. The existing `Screen Capture: Graphics Capability Observation` (DXGI + D3D11 modules) is unchanged.
 - Tests: `ScreenCaptureConsentTests` (Tier2Indicator and LogOnly at every confidence, weak observe seed, no action with ActiveResponse and a forged KillProcessTree, device rule unchanged).## [3.9.1] - 2026-11-22
 ### Fixed - writer and allowlist trust granted by process name or folder name
-- `FileActivityMonitor.IsTrustedSystemWriter` trusted any writer whose process name contained `svchost`, `lsass`, `services`, `sfc`, `dism`, `trustedinstaller` and others (a dropper named `sfc_helper.exe` qualified), any image path containing `\Sentinel\`, `\Windows Defender\` or `\Microsoft Security Client\`, and a process named `system` when access was denied. It now trusts PID 4, its own PID, or an image (resolved by the OS from the PID) with a valid embedded or catalog Authenticode signature, or Sentinel's own executable in its install directory when that directory's DACL denies non-admin writes. The verdict feeds the reparse-point response path and the System32 write rule.
-- The System32 write rule also suppressed writers named `Sentinel`, `Delivery Optimization`, `AppX` or `WinStore` (an early false-positive cut). Those name checks are removed; the real writers qualify by signature. The rule stays Tier2/LogOnly.
+- `FileActivityMonitor.IsTrustedSystemWriter` trusted any writer whose process name contained `svchost`, `lsass`, `services`, `sfc`, `dism`, `trustedinstaller` and others (a dropper named `sfc_helper.exe` qualified), any image path containing `\Gnyida\`, `\Windows Defender\` or `\Microsoft Security Client\`, and a process named `system` when access was denied. It now trusts PID 4, its own PID, or an image (resolved by the OS from the PID) with a valid embedded or catalog Authenticode signature, or Gnyida's own executable in its install directory when that directory's DACL denies non-admin writes. The verdict feeds the reparse-point response path and the System32 write rule.
+- The System32 write rule also suppressed writers named `Gnyida`, `Delivery Optimization`, `AppX` or `WinStore` (an early false-positive cut). Those name checks are removed; the real writers qualify by signature. The rule stays Tier2/LogOnly.
 - `AppNetworkPolicyMonitor` verified allowlisted system stems (`svchost`, `lsass`, `sihost`, ...) only by "path starts with the Windows directory", which includes the default-writable `Tasks`, `Temp` and `tracing` folders. New `OsImageTrust` requires a signed image in a Windows location that is not a user-writable drop and whose DACL denies non-admin writes. Fails closed.
 - Writer verdicts are cached only when positive, keyed by path, write time and size. WinVerifyTrust (catalog fallback) is accepted only when the file did not change during the check.
 ### Fixed - stale-PID chain sweep stopped after ~24.9 days of uptime
@@ -59,7 +66,7 @@
 - The Threat-Intelligence provider denial (Win32 5, needs a PPL antimalware identity) is logged at Information instead of Warning. Health reporting for it is unchanged from 3.8.7.
 - Tests in `HealthVerdictRegressionTests`.## [3.8.8] - 2026-11-21
 ### Fixed - "Protection features: 1 feature stopped working" from ETW file-lane drops
-- After 3.8.5 enlarged the Kernel-File lane, one machine still dropped 324 events inside Sentinel (Windows lost 0) out of 70 million, all in the file lane. The cause was volume, not lane size: every Kernel-File Read (ID 15) on the system was copied and queued, though the only consumer, `CredentialReadTracker`, can match a read only when its FileKey was already named as a credential store.
+- After 3.8.5 enlarged the Kernel-File lane, one machine still dropped 324 events inside Gnyida (Windows lost 0) out of 70 million, all in the file lane. The cause was volume, not lane size: every Kernel-File Read (ID 15) on the system was copied and queued, though the only consumer, `CredentialReadTracker`, can match a read only when its FileKey was already named as a credential store.
 - `UnifiedEtwSession` now reads the FileKey at its fixed offset on the ETW callback and queues a Read only when `CredentialReadTracker.MayMatchRead` is true: the key is a known sensitive name, or a NameCreate/NameDelete for it is queued but not yet observed (the FIFO lane delivers the name first, so no read is lost to the race). Name events are queued as before. Detection is unchanged. Skipped reads are reported as `FileReadsNotQueued` in ETW health, not as loss.
 - This is the one payload read on the ETW callback (`EtwCollectionPolicy` comment updated). A burst of name events larger than the lane is still dropped and reported.
 - Tests in `CredentialReadTelemetryTests`: only matchable reads are admitted, a queued-but-unobserved name admits its read, non-sensitive, dropped and deleted names release admission, and the key readers reject what `Observe` rejects.
@@ -72,39 +79,39 @@
 - New observe-only signal `Comms Platform Upload from Unverified Process` (Tier2, 0.60, LogOnly): comms-platform DNS plus HTTPS from the same PID, when the process is not a verified Discord/Telegram/Slack identity (name, install path and Authenticode, unchanged). It never kills on its own and is not a `Covert Webhook:` rule. `BehavioralCorrelationEngine` accepts it as the remote leg of the credential-harvest chain only together with a Kernel-File credential-store read from the same process lifetime (creation-time pinned, 60 s window). Process name and folder still carry no trust. Known cost: an unsigned app that reads a browser credential store and talks to Discord is now contained.
 - Tests in `InfostealerChainTests`: Tier2/LogOnly contract and no solo kill, chain fires with a read, no fire without a read, marker, same PID or live lifetime, and the heuristic for Desktop versus Downloads.
 ## [3.8.5] - 2026-11-20
-### Fixed - ETW events dropped inside Sentinel during file bursts
-- On one machine 706 events were dropped inside Sentinel (Windows itself lost 0) out of 148 million processed, all in the file lane of `PartitionedEtwDispatcher`: a burst of Kernel-File events filled its 2048-event / 4 MB queue. Only that lane is now 8 times larger (16384 events / 32 MB; `fileLaneScale`), so memory stays bounded and the other lanes are unchanged. A burst larger than the new limit is still dropped and counted. Test: `ScaledFileLaneAbsorbsBurstThatOverflowsUnscaledLane`.
+### Fixed - ETW events dropped inside Gnyida during file bursts
+- On one machine 706 events were dropped inside Gnyida (Windows itself lost 0) out of 148 million processed, all in the file lane of `PartitionedEtwDispatcher`: a burst of Kernel-File events filled its 2048-event / 4 MB queue. Only that lane is now 8 times larger (16384 events / 32 MB; `fileLaneScale`), so memory stays bounded and the other lanes are unchanged. A burst larger than the new limit is still dropped and counted. Test: `ScaledFileLaneAbsorbsBurstThatOverflowsUnscaledLane`.
 ### Changed - version numbering
 - The 3.8.4 changes below have no release of their own; they ship in 3.8.5, so the one-patch-per-release rule holds.
 
 ## [3.8.4] - 2026-11-19
 ### Changed - settings window redesigned
 - New look for every page: light and dark themes that follow the Windows setting (or a choice in the sidebar), a grouped menu (Protection, Tools, System) and plain-language page names: Activity, Scan, Quarantine, Program inspector, Personal safety, Report to police, Protection health, Diagnostics, About.
-- **Overview** opens with one status in plain words, with one button for the obvious next step: *You're protected*, *Sentinel is running, with some limits*, *needs attention*, *is starting* or *isn't running*. "Protected" is shown only when the service runs, its firewall rules are in place and every feature confirmed it is collecting data. On a PC where Windows denies Sentinel the Threat-Intelligence provider, the honest state is "running, with some limits". The technical detail (task counts, collection checks) is in the status card's tooltip and on Protection health.
-- Overview cards: **Threats stopped** in the last 7 days (new `/api/summary`: only `response_result` records whose kill or quarantine Sentinel verified; failed and refused attempts are reported separately, never counted as stops), **In quarantine**, and **Last scan**. **Recent activity** lists only what Sentinel stopped or tried to stop; the thousands of observations that needed no action stay under Activity. **Things to check** lists the service, the firewall rules and the protection features, with failing features and their reasons, and discloses event loss in plain words.
-- The page moved from a C# verbatim string to `src/Sentinel.Agent/Dashboard/dashboard.html`, an embedded resource, so it can be edited and previewed as a normal file. The served page was byte-identical after the move, before the redesign.
+- **Overview** opens with one status in plain words, with one button for the obvious next step: *You're protected*, *Gnyida is running, with some limits*, *needs attention*, *is starting* or *isn't running*. "Protected" is shown only when the service runs, its firewall rules are in place and every feature confirmed it is collecting data. On a PC where Windows denies Gnyida the Threat-Intelligence provider, the honest state is "running, with some limits". The technical detail (task counts, collection checks) is in the status card's tooltip and on Protection health.
+- Overview cards: **Threats stopped** in the last 7 days (new `/api/summary`: only `response_result` records whose kill or quarantine Gnyida verified; failed and refused attempts are reported separately, never counted as stops), **In quarantine**, and **Last scan**. **Recent activity** lists only what Gnyida stopped or tried to stop; the thousands of observations that needed no action stay under Activity. **Things to check** lists the service, the firewall rules and the protection features, with failing features and their reasons, and discloses event loss in plain words.
+- The page moved from a C# verbatim string to `src/Gnyida.Agent/Dashboard/dashboard.html`, an embedded resource, so it can be edited and previewed as a normal file. The served page was byte-identical after the move, before the redesign.
 - Fixed while redesigning: the version in the sidebar showed `v2.3.1` until the service replied; Diagnostics listed the install folder as `Program Files (x86)` (setup installs to Program Files).
 ### Changed - no IE11 fallback; WebView2 is installed on demand
 - The redesigned page needs the WebView2 (Chromium) engine; the IE11 `WebBrowser` fallback is removed. On a PC without the WebView2 Runtime, the window shows a native panel with **Install WebView2**: it downloads Microsoft's Evergreen bootstrapper, runs it only if it carries a valid Authenticode signature from Microsoft, writes it to a new randomly named folder (not a fixed `%TEMP%` name another program could pre-plant), and installs per user, without an administrator prompt. Then it opens the page. The approach follows the Ceprkac browser, plus the signature and folder checks. It runs on a background thread (no async/await on the Agent STA thread, NFR-6).
 - Found while testing: the development PC had neither Edge nor the WebView2 Runtime, so its settings window had been running in the IE11 fallback.
 ### Changed - installer text, in plain words
-- Sentinel's installer messages moved to `localization/en/installer.isl` (the start of translated installers) and were rewritten in plain language. The password rotator option now reads as what it does and what it costs: it keeps the account password secret even from you, a stolen password stops working within minutes, and saved browser and Windows passwords, files encrypted with Windows, unlocking after a screen lock, and apps that use the password can be affected.
-- **Removed dangerous advice.** When the rotator's program file was missing, the uninstall error said to "remove the SentinelAutoRotate tasks, then uninstall again". Removing the tasks without first clearing the password leaves the account on the last random password, which nobody knows: a lockout. The message now says to install Sentinel again and then uninstall.
+- Gnyida's installer messages moved to `localization/en/installer.isl` (the start of translated installers) and were rewritten in plain language. The password rotator option now reads as what it does and what it costs: it keeps the account password secret even from you, a stolen password stops working within minutes, and saved browser and Windows passwords, files encrypted with Windows, unlocking after a screen lock, and apps that use the password can be affected.
+- **Removed dangerous advice.** When the rotator's program file was missing, the uninstall error said to "remove the GnyidaAutoRotate tasks, then uninstall again". Removing the tasks without first clearing the password leaves the account on the last random password, which nobody knows: a lockout. The message now says to install Gnyida again and then uninstall.
 ### Changed - games are scanned
 - Games and anti-cheat processes were skipped by every memory-reading monitor, by name or by a folder substring such as `\riot games\`. A standard user can create such a folder at a drive root, so the skip doubled as a hiding place. Games are now scanned like any other process (`NativeProcessMemory.SkipGameProcesses`, compiled in, default off). Actions that change a process (unloading a module) still leave games alone, and response immunity for signed, ACL-protected game installs is unchanged. Known cost: some Denuvo-protected titles exit when another process opens them for reading.
-### Fixed - Sentinel works the same on non-English Windows
+### Fixed - Gnyida works the same on non-English Windows
 - **Connection tables** are read from the kernel (`NativeConnectionTable`, iphlpapi) instead of parsing `netstat` output. netstat translates its state words (ESTABLISHED is HERGESTELLT on German Windows), so `ScanEngine`, the outbound allow-list monitor, the application integrity monitor and both incident reports found nothing on a non-English system. The table also covers IPv6, has no process launch per poll, and the incident snapshot now matches the PID exactly (the netstat version matched any line containing the PID's digits).
 - **Host names and URLs** are normalized the way the network client does before they are compared with the sink and brand lists (`HostNormalizer`): a trailing dot, the ideographic full stop U+3002 and fullwidth stop U+FF0E as label separators, invisible characters that IDNA drops (soft hyphen, zero-width joiner or space), fullwidth letters and `%XX`-encoded letters. Eight spellings that reach `webhook.site` were missed before. Look-alike names that map to a different host still differ.
-- **Culture-sensitive string calls.** Analyzer CA1310 is on for all projects (`.editorconfig`, `Directory.Build.props`); the 183 calls it found now use ordinal comparison. `SENTINEL_TEST_CULTURE` runs the test suite under another culture, for example `tr-TR`.
+- **Culture-sensitive string calls.** Analyzer CA1310 is on for all projects (`.editorconfig`, `Directory.Build.props`); the 183 calls it found now use ordinal comparison. `GNYIDA_TEST_CULTURE` runs the test suite under another culture, for example `tr-TR`.
 - Still open: the BitLocker status check reads English text from `manage-bde`.
 ### Fixed - tools started by full path
-- Every tool Sentinel starts (`netsh`, `sc`, `bcdedit`, `mountvol`, `schtasks`, `logman`, `secedit`, `pnputil`, `net`, `manage-bde`, Windows PowerShell, notepad) is started from the system directory by full path (`SystemTools`). A bare name is resolved through the application directory, the current directory and PATH, and the service runs as SYSTEM. `docker` is used only from Docker Desktop's install location and skipped when it is absent, never looked up on PATH. A test fails the build if a bare tool name is added.
+- Every tool Gnyida starts (`netsh`, `sc`, `bcdedit`, `mountvol`, `schtasks`, `logman`, `secedit`, `pnputil`, `net`, `manage-bde`, Windows PowerShell, notepad) is started from the system directory by full path (`SystemTools`). A bare name is resolved through the application directory, the current directory and PATH, and the service runs as SYSTEM. `docker` is used only from Docker Desktop's install location and skipped when it is absent, never looked up on PATH. A test fails the build if a bare tool name is added.
 ### Fixed - token registration leak in `WaitForExitAsync`
 - The net48 polyfill registered a callback on the caller's cancellation token and never disposed it, and never removed its `Exited` handler. A caller that passes a long-lived token in a loop added one registration per call, the leak class recorded in [MEMORY_LEAK_3.7.8.md](MEMORY_LEAK_3.7.8.md). Both are now released when the wait completes. A test shows the old implementation keeps 25 of 25 completed waits reachable and the new one none. The two awaited stdout reads in `SandboxEscapeMonitor` and two in `AntiTaoMonitors` also used to wait without a deadline; they now use `BoundedProcess.ReadOutputAsync`.
 ### Changed - memory coverage without the Threat-Intelligence provider
 - Windows grants the kernel Threat-Intelligence ETW provider only to protected anti-malware processes, so on a SYSTEM-only install it is denied (Win32 5) and every check it fed was idle: `ThreatIntelInjectionRule`, the payload scan in `EtwThreatIntelMonitor`, and the fast suspect checks in `ImageIntegrityMonitor`. Two sources now nominate processes without it: a kernel-process image-load event (available without protection) nominates the process for a module check once it is older than 20 seconds, and the periodic round-robin nominates each process it visits for the payload scan. These weak nominations read only memory pages that are already resident, so they cannot cause hard faults. `InjectionSuspectBoard` keeps the reason for each mark as flags, so a weak reason never hides a Threat-Intelligence one. Not yet measured on a running service.
 ### Fixed - test suite
-- `tests/Sentinel.Tests/AuditRegressionTests.cs` had been overwritten in this release cycle, which removed six committed regression tests. It is restored, and the new tests are in `LocaleAndLaunchAuditTests.cs`.
+- `tests/Gnyida.Tests/AuditRegressionTests.cs` had been overwritten in this release cycle, which removed six committed regression tests. It is restored, and the new tests are in `LocaleAndLaunchAuditTests.cs`.
 - `tests/dashboard-response.test.cjs` reads the new page and checks the new status card against the same rules as before: an unverified firewall, missing health data, unverified collection or a failed collector never shows "Protected", a late reply cannot erase a newer failure, and the status reply alone cannot show "Protected" before health arrives. The CSS grid ban existed only for IE11; it is replaced by a check that the IE11 fallback is gone. The test caught one real defect during the redesign: with an empty sensor list and 130 unverified collections in the totals, "Things to check" said "All running and confirmed".
 ### Testing (3.8.4)
 - Solution build in Release with `-warnaserror`: 0 warnings, 0 errors. Full suite: 3,987 passed, 9 skipped, 2 failed out of 3,998. One failure, `ProcessLaunchHygieneTests.WaitForExitAsync_LeavesNothingRegisteredOnALongLivedToken`, counted registrations before the thread-pool continuation that releases them had run; the test now waits for it and passed 5 of 5 runs. The other is the intermittent `EndpointProtectionWindowsTests.CorrelatedVictimResponseVerifiesRealExitAndPreservesUnrelatedProcess` noted since 3.8.1.
@@ -137,9 +144,9 @@ A review of process-spawn flags, string comparison, locale and encoding across `
 ### Added - `LingeringProcessMonitor`: run-to-completion utilities that never finish (observe-only)
 - Reports `schtasks`, `reg`, `whoami`, `net`, `sc`, `systeminfo` and similar tools still running after 10 minutes (30 minutes for `icacls`, `takeown`, `attrib`, `wevtutil`, `fsutil`, `vssadmin` and `gpresult`). Such a process has no sockets and a valid signature, so the ghost-process and injection monitors never examine it. It is the counterpart of `EphemeralProcessMonitor`.
 - Confidence is 0.55 from System32 or SysWOW64, and 0.75 from any other path or an unreadable one (a masquerade). Each event names the parent and says whether it has exited. Tier2, `LogOnly`, one event per process instance. Interactive and open-ended tools (`cmd`, `powershell`, `ping`, `timeout`, `netsh`, `certutil`) are not watched.
-### Fixed - SentinelAutoRotate
+### Fixed - GnyidaAutoRotate
 - `Scheduler.Run` read `schtasks.exe` stdout, then stderr, synchronously before its 60-second timeout. A hung `schtasks` blocked it forever, and a full stderr pipe could deadlock the child. Both streams are now read asynchronously, and the timeout runs before the output is collected.
-- `--install` registers a SYSTEM boot task that runs the executable it was started from, and nothing checked that location. Run from Downloads or a user profile, any user could replace the exe and gain SYSTEM at the next boot. Install now refuses unless the exe, its folder and every ancestor are owned by, and only replaceable by, SYSTEM, Administrators or TrustedInstaller. UNC paths, reparse points and unreadable ACLs are also refused. The installer path (`{autopf}\Sentinel`) passes.
+- `--install` registers a SYSTEM boot task that runs the executable it was started from, and nothing checked that location. Run from Downloads or a user profile, any user could replace the exe and gain SYSTEM at the next boot. Install now refuses unless the exe, its folder and every ancestor are owned by, and only replaceable by, SYSTEM, Administrators or TrustedInstaller. UNC paths, reparse points and unreadable ACLs are also refused. The installer path (`{autopf}\Gnyida`) passes.
 ### Memory and handle safety (rules from [MEMORY_LEAK_3.7.8.md](MEMORY_LEAK_3.7.8.md))
 - The only wait in either new monitor is a self-completing `Task.Delay`. There is no racing wait and no token registration in a loop.
 - Every process handle, `FileStream`, `Process` and `ProcessModule` is released in a `finally` block or with `using`, including on cancellation. The early `return` that skipped disposal of the remaining `Process` objects in the first `LingeringProcessMonitor` draft was removed.
@@ -153,7 +160,7 @@ A review of process-spawn flags, string comparison, locale and encoding across `
 - Not verified on an installed running service.
 ## [3.8.3] - 2026-11-19
 ### Added - Exploit Shield patch posture feed and per-cycle diff
-- Exploit Shield used to report only to its own `activity.jsonl`, so nothing it found reached Sentinel's alerts or dashboard. After each completed cycle it now writes `%ProgramData%\SentinelExploitShield\posture.json` (schema 1): every CVE-matched applicable fix with its CVEs, CISA KEV CVEs and state (`Preview`, `ManualEulaRequired`, `InteractiveUpdateSkipped`, `InstalledVerified`, `RebootPending`, or the installer's unverified status).
+- Exploit Shield used to report only to its own `activity.jsonl`, so nothing it found reached Gnyida's alerts or dashboard. After each completed cycle it now writes `%ProgramData%\GnyidaExploitShield\posture.json` (schema 1): every CVE-matched applicable fix with its CVEs, CISA KEV CVEs and state (`Preview`, `ManualEulaRequired`, `InteractiveUpdateSkipped`, `InstalledVerified`, `RebootPending`, or the installer's unverified status).
 - The report includes a diff against the previous cycle (`PostureDiff`): newly unresolved fixes, fixes resolved since then (verified installed, or no longer offered by Windows Update) and KEV CVEs newly exposed. The diff is also audited as `posture_diff`. The file is written to a temp file and replaced, and inherits the folder's Administrators/SYSTEM-only DACL. A failed write is audited as `posture_write_failed` and makes the exit code 2, without undoing an install. A corrupt previous report only resets the diff baseline.
 - New `ExploitShieldPostureMonitor` (Service, System Integrity group) reads the report every 10 minutes and raises Tier2, LogOnly, weak-observe-seed events with process id 0: `Patch Posture: Known-Exploited Vulnerability Unpatched`, `Patch Posture: Exploit Shield Cycle Changes` (counts, new fix titles, reboots pending, manual installs, preview mode), `Patch Posture: Exploit Shield Feed Degraded`, and `Patch Posture: Exploit Shield Report Stale` when no cycle has completed for 12 hours. The current state is shown once after a Service restart, then only changes.
 - Trust, fail closed: the report is ignored, with a `Report Untrusted` or `Report Unreadable` event, unless the file and folder are not reparse points, are owned by Administrators or SYSTEM, and grant no write right to anyone else, and the JSON is schema 1 and at most 4 MiB.
@@ -186,7 +193,7 @@ A review of process-spawn flags, string comparison, locale and encoding across `
 ### Added - `SystemFileAclRepairer` (hardening)
 - The monitor hands every finding under System32 or SysWOW64 to `SystemFileAclRepairer` on each scan, so a customization tool that redoes the change is repaired again. It is host hardening, gated on `ProductPosture.AllowsProactiveHostLockdown`, and is not driven by the Tier2 event (that stays LogOnly). Program Files is report-only, because legitimate apps grant Users write on their own folders.
 - Default deny: only existing loadable binaries inside the two roots, no reparse point on the file or any ancestor, and only explicit ACEs that grant a write-like right to a broad principal. A file whose grant is inherited is refused (the parent folder is the problem). A sibling folder that merely shares the `System32` prefix is refused.
-- Safety: the DACL is saved as JSON under `%ProgramData%\Sentinel\AclBackup` (ensured SYSTEM/Administrators-only by `ProgramDataGuard`) before any change. If the backup cannot be written, nothing is changed. After the change the DACL is re-read, and the backup is restored if a broad write grant remains. The removed ACE's read and execute rights are kept for the same principal. `Restore` re-applies a saved DACL after the same scope check, so a forged backup cannot point at another file. Uses the .NET ACL API, no `icacls` or string-built commands. The owner is not changed.
+- Safety: the DACL is saved as JSON under `%ProgramData%\Gnyida\AclBackup` (ensured SYSTEM/Administrators-only by `ProgramDataGuard`) before any change. If the backup cannot be written, nothing is changed. After the change the DACL is re-read, and the backup is restored if a broad write grant remains. The removed ACE's read and execute rights are kept for the same principal. `Restore` re-applies a saved DACL after the same scope check, so a forged backup cannot point at another file. Uses the .NET ACL API, no `icacls` or string-built commands. The owner is not changed.
 ### Constraints honored
 - Userland only. No new response action. The detection event is Tier2 and LogOnly; the repair is a separate scoped hardening step.
 ### Testing
@@ -196,7 +203,7 @@ A review of process-spawn flags, string comparison, locale and encoding across `
 
 ## [3.8.0] - 2026-11-18
 ### Changed - nobody holds "Debug programs"
-- `GSecurity.inf` now sets `SeDebugPrivilege=` (granted to no one) instead of Administrators only (`*S-1-5-32-544`). Administrators and anything running in an elevated session can no longer enable the privilege, so they cannot attach a debugger to or read the memory of processes they do not own. SYSTEM (including the Sentinel service) keeps the privilege as part of its token, which this policy cannot remove.
+- `GSecurity.inf` now sets `SeDebugPrivilege=` (granted to no one) instead of Administrators only (`*S-1-5-32-544`). Administrators and anything running in an elevated session can no longer enable the privilege, so they cannot attach a debugger to or read the memory of processes they do not own. SYSTEM (including the Gnyida service) keeps the privilege as part of its token, which this policy cannot remove.
 - Side effect: tools that need the privilege (attaching Visual Studio to services or elevated processes, Process Explorer's full view, some installers) stop working until an administrator re-grants it.
 - Both policy gates already accepted "no one": `V220SecurityHardeningTests.GSecurityInf_EnablesAuditingAndDoesNotOverrideGlobalUserRights` and `SecurityTemplate.Tests.ps1`.
 ### Fixed - registry key handle leak in `VolumeMountMonitor`
@@ -218,7 +225,7 @@ An audit of every equality and string comparison in `src/` found no `==` used on
 - **`TokenTheftMonitor`.** SYSTEM is identified by SID (`S-1-5-18`) instead of the account name. `LookupAccountSid` returns `DOMAIN\NAME`, so the bare `LOCAL SERVICE` / `NETWORK SERVICE` compares never matched, and `\SYSTEM` fails on localized Windows (`AUTORITE NT\Système`). LocalService and NetworkService remain out of scope, as they were in practice: including them would be a new kill-grade detection that needs its own false-positive review.
 - **False-positive fixes from names that never matched:** `PrintSpoolerMonitor` (`PrintFilterPipelineSvc`), `VolumeMountMonitor` (`TrustedInstaller`), `ParentPidSpoofDetector.IsStockWindowsConsoleHost` (`CONHOST.EXE`, `OpenConsole`), `ScriptExecutionMonitor` (`amsi.dll`), `AppNetworkPolicyMonitor` (`SVCHOST` now gets the Windows-directory check), `Rules.PrivEsc` (`Explorer.EXE` parent).
 - **Smaller fixes:** `UsbDeviceFingerprinter` parses the class GUID and compares service names case-insensitively. `PackageRuntimeMonitor` matches dev-config names, package-tree path fragments, extensions and high-risk children case-insensitively. `FileActivityMonitor` no longer adds a duplicate watcher for a differently cased path.
-- `SentinelMetrics.RecordResponseOutcome` lists `Attempted` explicitly. No counting change: an Attempted outcome is already counted through its effects.
+- `GnyidaMetrics.RecordResponseOutcome` lists `Attempted` explicitly. No counting change: an Attempted outcome is already counted through its effects.
 - Name-based exemptions that now ignore case (`explorer`, spooler children, `conhost`) are no weaker than before. Anyone who chooses the name could already choose the lowercase form.
 ### Fixed - CI security-template gate
 - `SecurityTemplate.Tests.ps1` failed the 3.7.8 build: `Shipping policy must grant SeDebugPrivilege to no one (found '*S-1-5-32-544')`. The 3.7.5 `GSecurity.inf` grants `SeDebugPrivilege` and `SeLoadDriverPrivilege` to Administrators only, and `SeBackupPrivilege` to Administrators only. 3.7.7 updated `V220SecurityHardeningTests` to accept that policy, but not this script. The script now applies the same rule: those two privileges may be held by no one or by Administrators only, `SeBackupPrivilege` by Administrators with or without Backup Operators. `SeTcbPrivilege`, `SeCreateTokenPrivilege`, `SeEnableDelegationPrivilege`, `SeTrustedCredManAccessPrivilege` and `SeCreatePermanentPrivilege` must still be granted to no one, and broad-group grants, duplicates, weakened password settings and forced-off FIPS still fail.
@@ -254,13 +261,13 @@ Full incident record, evidence and regression rules: [MEMORY_LEAK_3.7.8.md](MEMO
 ### Testing
 - New `DualLaneWaitTests` (4): the never-written lane is waited on exactly once across 500 idle-to-busy cycles (the 3.7.7 code waited 500 times); a completed wait is re-issued; a cancelled wait is reported as cancelled; completed channels report no more data.
 - Hook constraints checked: no Tier1/Tier2 rule, response contract or host mutation changed, so no new rule tests apply.
-- `Sentinel.Tests` with `-warnaserror`: 3,761 passed, 9 skipped, 0 failed. Pipeline tests including the new ones: 33 of 33.
-- **Not yet verified on a running service.** Acceptance: after 24 h of uptime, working set in the hundreds of MB and no `[SentinelHealthCheck] High memory usage`. If it still grows, follow `tools/diagnostics/heap-dump/README.md` and record the result in `MEMORY_LEAK_3.7.8.md`.
+- `Gnyida.Tests` with `-warnaserror`: 3,761 passed, 9 skipped, 0 failed. Pipeline tests including the new ones: 33 of 33.
+- **Not yet verified on a running service.** Acceptance: after 24 h of uptime, working set in the hundreds of MB and no `[GnyidaHealthCheck] High memory usage`. If it still grows, follow `tools/diagnostics/heap-dump/README.md` and record the result in `MEMORY_LEAK_3.7.8.md`.
 ## [3.7.7] - 2026-11-15
 
 ### Changed - no touch until proven malicious, remaining file readers
 
-3.7.6 listed the monitors that still read or quarantined files on their own. With `SentinelConfig.EnableProactiveFileInspection=false` (the default) they now do neither:
+3.7.6 listed the monitors that still read or quarantined files on their own. With `GnyidaConfig.EnableProactiveFileInspection=false` (the default) they now do neither:
 
 - **`LnkShortcutMonitor`** starts no shortcut watchers and no initial shortcut scan, and never quarantines a `.lnk` file. It completes as an `IMonitorStartupTask` with the policy as its reason. A process started from a shortcut is still inspected when it runs. (`LnkUncGuard` is not registered, so nothing changes there.)
 - **`ScriptExecutionMonitor`** skips the script-drop check. That check read dropped scripts and could quarantine one on content alone. The script-execution, parent-child, AMSI and SAM checks are behavioural and still run.
@@ -277,11 +284,11 @@ Full incident record, evidence and regression rules: [MEMORY_LEAK_3.7.8.md](MEMO
 
 ### Changed - no touch until proven malicious (file inspection)
 
-Owner rule: Sentinel does not open, hash, signature-check or quarantine a file just because it was created, changed or exists on disk. File content is read only for something that has already acted. Process images that run are still inspected, and on-demand and scheduled `ScanEngine` scans still work.
+Owner rule: Gnyida does not open, hash, signature-check or quarantine a file just because it was created, changed or exists on disk. File content is read only for something that has already acted. Process images that run are still inspected, and on-demand and scheduled `ScanEngine` scans still work.
 
-- **Symptom.** With Sentinel running, the NVIDIA 621.14 installer failed, and so did `pnputil /add-driver` and Device Manager. `setupapi.dev.log` showed `Error 32` on the first copy out of the staging folder `%TEMP%\{guid}\` (for example `_nvngx.dll` and `gsp_ga10x.bin`). With the Sentinel services stopped, the same package (`nvaci.inf`) staged.
-- **Cause.** Sentinel opened every freshly written file: `FileVerdictScanner` ran a PE-header probe, a hash and a signature check, the signature check holding a share-read-only lease. `FileActivityMonitor` ran a writer-lookup open, and `DriverLoadMonitor` hashed dropped `.sys` files. Setup opens its staged files exclusively, so any Sentinel handle fails that open. A test showed that plain `CopyFile` succeeds next to a Sentinel-style read handle and an exclusive open does not. Folder exclusions cannot fix this class of problem.
-- **`SentinelConfig.EnableProactiveFileInspection` (new, compiled default `false`, compiled-only).** When false:
+- **Symptom.** With Gnyida running, the NVIDIA 621.14 installer failed, and so did `pnputil /add-driver` and Device Manager. `setupapi.dev.log` showed `Error 32` on the first copy out of the staging folder `%TEMP%\{guid}\` (for example `_nvngx.dll` and `gsp_ga10x.bin`). With the Gnyida services stopped, the same package (`nvaci.inf`) staged.
+- **Cause.** Gnyida opened every freshly written file: `FileVerdictScanner` ran a PE-header probe, a hash and a signature check, the signature check holding a share-read-only lease. `FileActivityMonitor` ran a writer-lookup open, and `DriverLoadMonitor` hashed dropped `.sys` files. Setup opens its staged files exclusively, so any Gnyida handle fails that open. A test showed that plain `CopyFile` succeeds next to a Gnyida-style read handle and an exclusive open does not. Folder exclusions cannot fix this class of problem.
+- **`GnyidaConfig.EnableProactiveFileInspection` (new, compiled default `false`, compiled-only).** When false:
   - `FileVerdictScanner` starts no drive watchers and no drive walk. It completes as an `IMonitorStartupTask` with the policy as its reason, so the monitor group records it as completed instead of unavailable. Its progress stays `Unknown`; it never claims coverage.
   - `FileActivityMonitor` no longer opens a file to probe for locks before the Restart Manager writer lookup. Restart Manager queries through an attribute-only open, which is not subject to share modes. Signature fast-paths for System32 writes and for unresolved (PID 0) writers are skipped. An unresolved writer stays untrusted (fail closed). The System32 write report is Tier2 / LogOnly, so this can add log entries but no response.
   - `DriverLoadMonitor` no longer hashes `.sys` files dropped in user folders. The name-based report is unchanged, and a driver that is actually loaded is still hashed.
@@ -301,12 +308,12 @@ Owner rule: Sentinel does not open, hash, signature-check or quarantine a file j
 
 ## [3.7.4] - 2026-11-14
 ### Fixed - Avast flagged the service as `IDP.SEMS.HackTool.CobaltStrike1`
-Avast's behavior shield (not a signature) quarantined `Sentinel.Service.exe` and, in the same session, `powershell.exe` (`IDP.HELU.PSE96%s_cmd`). The chest entries are virtual (sizes of 2 TB, original file untouched). The setup `.exe` files were flagged `Win32:Malware-gen`, which is a static/ML verdict on the unsigned installer.
+Avast's behavior shield (not a signature) quarantined `Gnyida.Service.exe` and, in the same session, `powershell.exe` (`IDP.HELU.PSE96%s_cmd`). The chest entries are virtual (sizes of 2 TB, original file untouched). The setup `.exe` files were flagged `Win32:Malware-gen`, which is a static/ML verdict on the unsigned installer.
 - **`DecoyPipeMonitor` retired.** It made the SYSTEM service create named pipes with Cobalt Strike default names (`msagent_01`, `MSSE-1234-server`, `postex_ssh_0001`, `win_svc_pipe`, `ntsvcs_00`, `DserNamePipe_00`). A process that creates those pipes is what a Cobalt Strike beacon looks like at runtime, so no string handling in the PE can hide it. Real beacon pipes are still detected by `NamedPipeMonitor`, which matches those names on pipes other processes create. Only the honeypot, which caught a client probing a default name, is gone. The `decoyPipe.names` catalog section, `IsOwnDecoyPipe` and the related tests are removed.
 - **Installer:** the uninstall firewall-restore step no longer passes `-ExecutionPolicy Bypass`. `-Command` does not need it, and the flag is a common trigger for PowerShell behavior detections.
 ### Added - Avast Premium parity (first batch, all observe-only)
-Most Avast Premium features already exist in Sentinel (`WebcamHijackMonitor`, `RansomwareIoMonitor`, `CanaryFileMonitor`, `WifiSecurityMonitor`, `ArpSpoofMonitor`, `RemoteAccessMonitor`, `ScanEngine`). These three were missing:
-- **`ScheduledScanService`.** Runs the existing `ScanEngine` once every 24 h (first check 10 min after start) and records the last run in `%ProgramData%\Sentinel\scheduled-scan.json`. It takes no response action.
+Most Avast Premium features already exist in Gnyida (`WebcamHijackMonitor`, `RansomwareIoMonitor`, `CanaryFileMonitor`, `WifiSecurityMonitor`, `ArpSpoofMonitor`, `RemoteAccessMonitor`, `ScanEngine`). These three were missing:
+- **`ScheduledScanService`.** Runs the existing `ScanEngine` once every 24 h (first check 10 min after start) and records the last run in `%ProgramData%\Gnyida\scheduled-scan.json`. It takes no response action.
 - **`CaptureDeviceUseMonitor` (webcam and microphone shield).** Reads the per-user CapabilityAccessManager consent store and reports an app that is using the camera or microphone from a location outside Program Files and System32/SysWOW64. Tier2 / LogOnly. Folder names such as `Windows\Temp` or a user profile are never treated as trusted.
 - **`LanDeviceInventoryMonitor` (network inspector).** Reports a new dynamic device in the ARP table after the first baseline pass. Tier2 / LogOnly. It runs `arp.exe -a` with a fixed command line.
 - Not planned: VPN (separate GVPN project), kernel file-open blocking and a bundled browser (userland-only rule). Password manager, anti-spam and a junk cleaner are not started.
@@ -318,38 +325,38 @@ Already present, so not rebuilt: `HostsFileGuard`, `BrowserDnsPolicyGuard`, the 
 - Not done: automatic restore of a changed setting or hosts file. A user edit looks the same as a hijack, and an automatic rewrite would break the fail-closed, no-guessing rule. Browser shortcut (`.lnk`) target checks are not built.
 - **PowerShell host pipes no longer raise the high-entropy pipe note.** `PSHost.[ticks].[pid].DefaultAppDomain.powershell` was reported as a random-looking pipe name on every PowerShell session. It is now skipped only when the PID in the name equals the kernel-reported pipe owner and that owner is `powershell.exe` under `System32`/`SysWOW64\WindowsPowerShell\v1.0` or `pwsh.exe` under Program Files. The name alone grants nothing. Known-bad C2 pipe patterns are checked first and are unaffected.
 ### Added - detection for the PowerShell pattern Avast flagged
-- **What Avast flagged.** `IDP.HELU.PSE96%s_cmd` hit `powershell.exe` at 17:20:16 and 17:24:52 UTC, 9 s before and 3 s after Avast flagged the service. The only code in Sentinel that matches is `WindowsFirewallPolicyBridge`. The SYSTEM service starts a hidden `powershell.exe -Command` that runs `[ScriptBlock]::Create([Console]::In.ReadToEnd())`, which executes a script piped in through stdin. Avast's install changed firewall state, which triggers this reconciliation. This is an inference: neither Avast nor Windows logged the command line.
-- **`StdinStagedPowerShellRule`.** Evaluated on process-start telemetry, so short-lived processes are seen. It reports PowerShell whose command line builds and runs code read from stdin or `$input`, or that ends in `-Command -` / `-File -`. Tier2 / LogOnly, confidence 0.60, T1059.001. Sentinel's own firewall child still produces the report. When its kernel identity is verified by `ManagementChildRegistry` (exact image path, Authenticode, start time), repeats are coalesced and tagged `ExpectedManagementChild`. It is never suppressed.
+- **What Avast flagged.** `IDP.HELU.PSE96%s_cmd` hit `powershell.exe` at 17:20:16 and 17:24:52 UTC, 9 s before and 3 s after Avast flagged the service. The only code in Gnyida that matches is `WindowsFirewallPolicyBridge`. The SYSTEM service starts a hidden `powershell.exe -Command` that runs `[ScriptBlock]::Create([Console]::In.ReadToEnd())`, which executes a script piped in through stdin. Avast's install changed firewall state, which triggers this reconciliation. This is an inference: neither Avast nor Windows logged the command line.
+- **`StdinStagedPowerShellRule`.** Evaluated on process-start telemetry, so short-lived processes are seen. It reports PowerShell whose command line builds and runs code read from stdin or `$input`, or that ends in `-Command -` / `-File -`. Tier2 / LogOnly, confidence 0.60, T1059.001. Gnyida's own firewall child still produces the report. When its kernel identity is verified by `ManagementChildRegistry` (exact image path, Authenticode, start time), repeats are coalesced and tagged `ExpectedManagementChild`. It is never suppressed.
 - Not changed: the firewall bridge still launches PowerShell this way, so Avast can still flag it. Removing that shape means rewriting the bridge without PowerShell (for example the `HNetCfg.FwPolicy2` COM API).
 ### Added - known-malware check for executables inside archives
 - `ArchiveContentInspector` already noted that a zip contained an executable, but never identified it. It now SHA-256 hashes each executable entry, including nested zips: up to 64 entries, 64 MB each and 256 MB per archive, inside the existing 8 s budget. This budget is separate from the bomb counters, so hashing does not make a large clean archive look like a bomb. An entry that is larger than its declared size stops hashing.
 - `FileVerdictScanner` looks each hash up through `HashReputationService`. A known-malware match raises `Archive: Known-Malware Executable Inside Container` (Tier2 / LogOnly, PID 0). The archive is not touched; an extracted copy gets the normal file scan and file policy.
 - This does not add a machine-learning verdict for archive contents. A generic ML hit like Avast's `MalwareX-gen` on an unknown file will not be matched by hash.
 ### Not verified
-- Avast kept no command line or event context for either detection, so the cause is inferred from code. It was not re-tested against Avast. If it still fires, send the file to Avast as a false positive and report the new `Sentinel.Service.exe` hash.
+- Avast kept no command line or event context for either detection, so the cause is inferred from code. It was not re-tested against Avast. If it still fires, send the file to Avast as a false positive and report the new `Gnyida.Service.exe` hash.
 ### Tests
 - New `AvastParityTests` (36 cases) cover look-alike domains (Cyrillic, punycode, digit swaps, typos, brand prefix, plus genuine and unrelated domains), the browser-redirect diff, capture-device in-use and trusted-root checks, the ARP parser, the scheduled-scan due rules, stdin-staged PowerShell matches and non-matches, the PowerShell host-pipe owner/image anchors, and nested-archive executable hashing.
 - **Test fixtures no longer launch hidden encoded PowerShell.** `ProcessTreeWindowsTests`, `EndpointProtectionWindowsTests` and `Release345WindowsTests` used `powershell.exe -EncodedCommand` as a sleeper or process tree. Avast blocked those as `IDP.HELU.PSE96`, so the process-tree test failed and Avast showed repeated pop-ups. The tree is now `cmd.exe -> cmd.exe -> ping.exe`, with parent links read from the kernel process table (Toolhelp). The sleepers are `ping.exe`.
-- `Sentinel.sln` builds 0 warnings / 0 errors with `-warnaserror`. Full suite: 3,745 passed, 9 skipped, 0 failed, run on a machine with Avast active.
-- `Sentinel.Service.exe` has not been re-tested against Avast after install.
+- `Gnyida.sln` builds 0 warnings / 0 errors with `-warnaserror`. Full suite: 3,745 passed, 9 skipped, 0 failed, run on a machine with Avast active.
+- `Gnyida.Service.exe` has not been re-tested against Avast after install.
 ## [3.7.3] - 2026-11-12
 ### Fixed
 - **Service memory growth (8+ GB after ~32 h).** Three per-event caches had no upper bound:
   - `SignerTrustService` kept a verdict for every distinct path ever queried (`PruneCache` had no caller). It is now capped at 20,000 entries; evicted paths are simply re-verified.
   - `MappedModuleCache` appended an image range for every ETW image-load, with no dedupe or cap, until the process exited. It now dedupes on base address and caps at 4,096 ranges per PID.
   - `DllUnloadEngine` per-PID module path sets were never evicted for busy long-lived hosts (idle eviction is defeated by activity). They are now capped at 8,192 paths per PID.
-- The service no longer records its own image-load ranges in `MappedModuleCache`. Its loads still reach `DllUnloadEngine`, so a module injected into Sentinel stays visible. File and registry telemetry from the service's own PID was already dropped in `TelemetryFusionEngine`.
-- Diagnosis is from code analysis; no heap dump was taken. Confirm with `[SentinelHealthCheck] High memory usage` after a day of uptime.
+- The service no longer records its own image-load ranges in `MappedModuleCache`. Its loads still reach `DllUnloadEngine`, so a module injected into Gnyida stays visible. File and registry telemetry from the service's own PID was already dropped in `TelemetryFusionEngine`.
+- Diagnosis is from code analysis; no heap dump was taken. Confirm with `[GnyidaHealthCheck] High memory usage` after a day of uptime.
 ### Constraints honored
 - Userland only. No detection, tier or response behavior changed; an evicted cache entry is re-verified or re-evaluated on next use (fail closed).
 - Self image loads still reach `DllUnloadEngine`, so the self-exclusion grants no trust an attacker could use.
 ### Testing
-- `Sentinel.Core` builds 0 warnings / 0 errors with `-warnaserror`. Full suite: 3,698 passed, 9 skipped, 1 failed.
+- `Gnyida.Core` builds 0 warnings / 0 errors with `-warnaserror`. Full suite: 3,698 passed, 9 skipped, 1 failed.
 - The failure, `EndpointProtectionWindowsTests.CorrelatedVictimResponseVerifiesRealExitAndPreservesUnrelatedProcess`, is pre-existing: it fails identically on the unmodified 3.7.2 commit and passes in isolation (3/3), so it is order-dependent on state left by another test in the run.
 
 ## [3.7.2] - 2026-11-10
 ### Fixed
-- **Dashboard showed "Coverage status: Unavailable - Sensor collection health unavailable".** The 3.7.1 pipe-server identity check (`PipeServerIdentity`) used `ProcessIdToSessionId` on the service's process ID. That call needs a handle to the SYSTEM service process, which a standard or non-elevated user is denied. The check therefore failed, and the Agent refused to send every IPC request, including `health`. The server session is now read from the pipe handle with `GetNamedPipeServerSessionId`, which needs no access to the server process. The protection is unchanged: the server must be in session 0, where a standard user cannot start a process. If its image is readable, it must be the installed `Sentinel.Service.exe`.
+- **Dashboard showed "Coverage status: Unavailable - Sensor collection health unavailable".** The 3.7.1 pipe-server identity check (`PipeServerIdentity`) used `ProcessIdToSessionId` on the service's process ID. That call needs a handle to the SYSTEM service process, which a standard or non-elevated user is denied. The check therefore failed, and the Agent refused to send every IPC request, including `health`. The server session is now read from the pipe handle with `GetNamedPipeServerSessionId`, which needs no access to the server process. The protection is unchanged: the server must be in session 0, where a standard user cannot start a process. If its image is readable, it must be the installed `Gnyida.Service.exe`.
 ### Tests
 - `PipeServerIdentity_AcceptsSessionZeroServiceEvenWhenProcessCannotBeOpened` covers the unreadable-image case that 3.7.1 got wrong, and still refuses a user-session server or a session-0 server with a different image.
 
@@ -363,10 +370,10 @@ Red/blue audit remediation. A source-aware review looked for paths where an atta
   - Request bodies are capped at 16 Ki characters (DNS approval at 4 Ki).
   - API errors return `operation_failed` instead of exception text.
 - **IPC key and pipe.**
-  - `ProgramDataGuard` re-owns `%ProgramData%\Sentinel` and `Secure`, rewrites a protected DACL and verifies it, failing loudly instead of swallowing ACL errors.
+  - `ProgramDataGuard` re-owns `%ProgramData%\Gnyida` and `Secure`, rewrites a protected DACL and verifies it, failing loudly instead of swallowing ACL errors.
   - An existing `.ipc_token` is reused only if it is SYSTEM/Administrators-owned and no one else can write it; a planted key is regenerated, and the client also refuses an untrusted key file.
   - The service claims the pipe name with `FILE_FLAG_FIRST_PIPE_INSTANCE` and keeps a standing instance between clients.
-  - The client (`PipeServerIdentity`) sends a signed request only to a session-0 server whose image is the installed `Sentinel.Service.exe`.
+  - The client (`PipeServerIdentity`) sends a signed request only to a session-0 server whose image is the installed `Gnyida.Service.exe`.
 - **Install directory.**
   - The SYSTEM service runs every DLL in its folder, so `InstallDirectoryPolicy` now refuses `--install` and service start from a directory that is not admin-only (owner, write ACEs and reparse points are checked).
   - Setup hides the directory page, installs only under Program Files, and no longer runs the recursive `icacls` reset on any other path.
@@ -395,8 +402,8 @@ Red/blue audit remediation. A source-aware review looked for paths where an atta
 - **Mass-deletion false positive.** `SlidingWindowMassDeletionRule` (Tier1, kill tree) fired on `dotnet test`, because the test host cleans up hundreds of temp files in seconds. The chain kill then also took down 2-3 ancestor shells. Deletions inside `\AppData\Local\Temp\` or `\Windows\Temp\` (DOS or NT device path, no `..` segments) no longer count toward the 100-file threshold. The decision is on the deleted file's location, not the process name or image, so a renamed tool gains nothing. Deleting temp files does not destroy user data, and temp deletions do not dilute a count of real user-data deletions.
 ### Security - password policy is no longer weakened by default
 - The shipped `GSecurity.inf` set `MinimumPasswordLength = 0`, `PasswordComplexity = 0`, `PasswordHistorySize = 0` and forced FIPS mode off on every install, not only for people who opted into AutoRotate. That went beyond the AutoRotate exception in `docs/constraints.md`. Those four lines are removed, so Windows (or your administrator) keeps its own values.
-- `SentinelAutoRotate --install` now lowers only the local minimum password length to 0, and only when it is not already 0, which is the one setting a blank boot password needs. It records the original value. Uninstall, and a failed install, restore it unless an administrator has changed it since. Domain or Group Policy can still re-apply its own value; the boot reset then fails closed and is logged, as before.
-- Limit: on machines that already applied an earlier template, the old weakened values stay in effect, because a security template only changes the settings it lists and Sentinel does not know the original values. Set them in Local Security Policy if needed.
+- `GnyidaAutoRotate --install` now lowers only the local minimum password length to 0, and only when it is not already 0, which is the one setting a blank boot password needs. It records the original value. Uninstall, and a failed install, restore it unless an administrator has changed it since. Domain or Group Policy can still re-apply its own value; the boot reset then fails closed and is logged, as before.
+- Limit: on machines that already applied an earlier template, the old weakened values stay in effect, because a security template only changes the settings it lists and Gnyida does not know the original values. Set them in Local Security Policy if needed.
 - `SecurityTemplate.Tests.ps1` (the CI gate that failed the 3.7.0 build and blocked publication) is aligned with the 3.6.1 decision to ship a restrictive `[Privilege Rights]` section. It now asserts that dangerous privileges are granted to no one, that `SeBackupPrivilege` is limited to Administrators and Backup Operators, and that no broad group gets a right beyond the Windows defaults. It still rejects weakened password settings and forced-off FIPS.
 ### Security - trust no longer keyed on names
 - Attack-root aggregation stops at an `ExcludedAncestryRoots` name (svchost, explorer, ...) only when the image really is a Windows system binary, so a loader named `svchost.exe` in AppData no longer splits its own chain.
@@ -407,7 +414,7 @@ Red/blue audit remediation. A source-aware review looked for paths where an atta
 - ETW session enumeration used `LoggerNameOffset` at byte 120 (past the 120-byte x64 struct), so session names were likely never read and "critical session stopped" could not fire. `EtwTraceLayout` uses the native offsets.
 - New Tier2 / LogOnly observations:
   - `Anti-Tamper: NtTraceEvent Modified in Critical Process`
-  - `Anti-Tamper: Sentinel Companion Binary Changed` (every `Sentinel*` binary next to the service is hashed at start)
+  - `Anti-Tamper: Gnyida Companion Binary Changed` (every `Gnyida*` binary next to the service is hashed at start)
   - `Anti-Tamper: Service ImagePath Changed`
 ### CI and release
 - Third-party GitHub Actions are pinned to commit SHAs.
@@ -422,34 +429,34 @@ Red/blue audit remediation. A source-aware review looked for paths where an atta
 ## [3.7.0] - 2026-11-09
 
 ### Removed
-- **Standalone NanoAV source removed.** `modules/NanoAV` (27 files, the archived upstream source plus its `UPSTREAM.json` provenance manifest) is deleted from the repository. NanoAV coverage has been integrated into Sentinel.Core since 3.4.5, so nothing built or ran from this folder. Git history keeps the removed files.
+- **Standalone NanoAV source removed.** `modules/NanoAV` (27 files, the archived upstream source plus its `UPSTREAM.json` provenance manifest) is deleted from the repository. NanoAV coverage has been integrated into Gnyida.Core since 3.4.5, so nothing built or ran from this folder. Git history keeps the removed files.
 - `tools/validation/VerifyNanoAVSource.py` and the "Verify original NanoAV source scope" step in `build.yml`, and the matching step in `release.yml`, which hashed that folder.
-- The NanoAV project entry and its configurations from `Sentinel.sln`.
-- The `SentinelCoexistencePaths.cs` link from `Sentinel.Tests.csproj`, and the tests that exercised that standalone-coexistence helper. `NanoAvCoexistenceTests` keeps its `SelfPathGuard` runtime checks.
+- The NanoAV project entry and its configurations from `Gnyida.sln`.
+- The `GnyidaCoexistencePaths.cs` link from `Gnyida.Tests.csproj`, and the tests that exercised that standalone-coexistence helper. `NanoAvCoexistenceTests` keeps its `SelfPathGuard` runtime checks.
 
 ### Changed
 - `docs/NANOAV.md` and the project-state steering file describe the folder as removed.
 - Hardened security policy (GSecurity.inf)
 
-### Fixed - VirusTotal "stealer" / "banking trojan" / "generic trojan" verdicts on Sentinel.Core.dll
-Static AV/ML engines match a PE's string table. Sentinel.Core.dll carried the same plaintext words as the malware it detects, so its own detection data made it look like a stealer, RAT or injector. Detection behaviour is unchanged. Only where the words live has changed.
-- **Indicator data moved out of the PE.** Offensive-tool names (credential dumpers, C2 frameworks, potato/LPE tools, EDR killers, RAT families), browser and developer credential-store paths, exfil sinks (webhook, Telegram, Discord), Lazarus Dream Job IoCs, injection API names, downloader keywords and the KGB RAT marker pair now live in `src/Sentinel.Core/Indicators/indicators.txt`. The build deflates that file into the assembly (`Sentinel.Core.Indicators.bin`), and `IndicatorCatalog` reads it at runtime. This is a compressed data resource, the same way AV signature databases ship. It is not in-code string splitting, which ML engines score as evasion (see the v2.3.6 note in `NativeResolver`). Parsing fails loudly: a missing or empty section throws, so detection cannot silently disappear. All values, including significant leading and trailing spaces, case-sensitive pipe regexes and ATT&CK map order, are kept byte for byte.
+### Fixed - VirusTotal "stealer" / "banking trojan" / "generic trojan" verdicts on Gnyida.Core.dll
+Static AV/ML engines match a PE's string table. Gnyida.Core.dll carried the same plaintext words as the malware it detects, so its own detection data made it look like a stealer, RAT or injector. Detection behaviour is unchanged. Only where the words live has changed.
+- **Indicator data moved out of the PE.** Offensive-tool names (credential dumpers, C2 frameworks, potato/LPE tools, EDR killers, RAT families), browser and developer credential-store paths, exfil sinks (webhook, Telegram, Discord), Lazarus Dream Job IoCs, injection API names, downloader keywords and the KGB RAT marker pair now live in `src/Gnyida.Core/Indicators/indicators.txt`. The build deflates that file into the assembly (`Gnyida.Core.Indicators.bin`), and `IndicatorCatalog` reads it at runtime. This is a compressed data resource, the same way AV signature databases ship. It is not in-code string splitting, which ML engines score as evasion (see the v2.3.6 note in `NativeResolver`). Parsing fails loudly: a missing or empty section throws, so detection cannot silently disappear. All values, including significant leading and trailing spaces, case-sensitive pipe regexes and ATT&CK map order, are kept byte for byte.
 - **Honeypot pipe names moved out of the PE.** `DecoyPipeMonitor` creates C2-named pipes (`msagent_01`, `postex_ssh_0001`, ...). As literals, these were the strongest "this binary is C2" tell. They now come from the catalog.
 - **Firewall management script compressed.** `PolicyResources/LocalFirewallPolicy.ps1` is embedded deflated, so the DLL no longer carries a plaintext PowerShell payload. That pattern is a dropper heuristic.
-- **No `-EncodedCommand` launches.** `IsolationResponseEngine` (ISO dismount, Hyper-V stop), `VolumeMountMonitor` (VHD/ISO dismount) and `WindowsFirewallPolicyBridge` now start PowerShell with a constant `-Command`. Caller data (ISO path, VM name, drive letter) goes only through `SENTINEL_ARG_n` environment variables (`ConstantPowerShell`), so it is never parsed as code. Injection safety is the same as before, without the encoded-command launch that sandboxes score as trojan behaviour and that Sentinel's own rules flag.
+- **No `-EncodedCommand` launches.** `IsolationResponseEngine` (ISO dismount, Hyper-V stop), `VolumeMountMonitor` (VHD/ISO dismount) and `WindowsFirewallPolicyBridge` now start PowerShell with a constant `-Command`. Caller data (ISO path, VM name, drive letter) goes only through `GNYIDA_ARG_n` environment variables (`ConstantPowerShell`), so it is never parsed as code. Injection safety is the same as before, without the encoded-command launch that sandboxes score as trojan behaviour and that Gnyida's own rules flag.
 - **Prose and labels reworded** where they named malware families: the clipboard rule is now `Input Integrity: Clipboard Write-Replace (Address-Swap Pattern)`, the reasoning text uses generic terms, and the port-4444 block label is `Implant_4444`. Persisted firewall rules key on port and protocol, so nothing is orphaned. The `Infostealer: Credential Access + Outbound` rule name is unchanged; it is read from the catalog.
-- **Signing is no longer skipped silently.** `installer/build.ps1` always runs the new `tools/sign-binaries.ps1`, which signs only `Sentinel*` binaries and the installer with signtool (SHA-256 plus RFC 3161 timestamp, then verified). Configure a certificate thumbprint, a PFX, or Microsoft Trusted Signing (dlib) through environment variables. With no certificate it prints an UNSIGNED BUILD warning. With `SENTINEL_REQUIRE_SIGNING=1` it fails. An unsigned security product is still the largest single VirusTotal factor. This release is unsigned until a certificate is configured.
+- **Signing is no longer skipped silently.** `installer/build.ps1` always runs the new `tools/sign-binaries.ps1`, which signs only `Gnyida*` binaries and the installer with signtool (SHA-256 plus RFC 3161 timestamp, then verified). Configure a certificate thumbprint, a PFX, or Microsoft Trusted Signing (dlib) through environment variables. With no certificate it prints an UNSIGNED BUILD warning. With `GNYIDA_REQUIRE_SIGNING=1` it fails. An unsigned security product is still the largest single VirusTotal factor. This release is unsigned until a certificate is configured.
 
 The clipboard and keyboard listeners in `InputIntegrityGuard` are unchanged and remain Tier2/LogOnly. They only time clipboard changes and never read clipboard contents. Their API imports are behaviour that string changes can't remove, so signing is the fix there.
 
 ### Tests
-- New `IndicatorCatalogTests`: every referenced section loads non-empty; missing sections throw; quoted spaces survive parsing; kill-critical values are byte-identical; case-sensitive pipe regexes stay case-sensitive; the firewall script decompresses; `Sentinel.Core.dll` contains none of 36 flagged plaintext tokens (regression guard); and `ConstantPowerShell` never parses data as code, including a live PowerShell round-trip with a quote-breakout value.
+- New `IndicatorCatalogTests`: every referenced section loads non-empty; missing sections throw; quoted spaces survive parsing; kill-critical values are byte-identical; case-sensitive pipe regexes stay case-sensitive; the firewall script decompresses; `Gnyida.Core.dll` contains none of 36 flagged plaintext tokens (regression guard); and `ConstantPowerShell` never parses data as code, including a live PowerShell round-trip with a quote-breakout value.
 
 ## [3.6.8] - 2026-11-07
 
-Removes the GVPN bundling added in 3.6.7 and the VPN shield. Sentinel now runs correctly next to GVPN or any other VPN client, with supporting build, CI and steering tweaks.
+Removes the GVPN bundling added in 3.6.7 and the VPN shield. Gnyida now runs correctly next to GVPN or any other VPN client, with supporting build, CI and steering tweaks.
 
-### Removed - VPN is no longer part of Sentinel
+### Removed - VPN is no longer part of Gnyida
 - **GVPN is a separate project.** The installer no longer builds, ships, installs or autostarts GVPN or its bundled OpenVPN/TAP driver, and the "Start GVPN" setup task and Start-menu shortcut are gone. `installer/build.ps1` no longer builds `modules/GVPN`.
 - **Upgrade migration (path-checked):** a GVPN bundled by an older release in `{app}\GVPN` is stopped (by image path, not `taskkill /IM`), its sign-in task is removed only when it points at `{app}\GVPN\GVPN.exe`, its Run value only when it points there, and its kill-switch firewall rules only when no separate GVPN is running. `{app}\GVPN` is then removed. The `GVPN TAP` adapter and TAP driver are left for a standalone GVPN / other OpenVPN installs. Uninstall applies the same rules, so a standalone GVPN is never touched.
 - **VPN shield retired:** `VpnShieldEngine`, its RAS tunnel, `VpnShieldConfig`, `ProductPosture.AllowsVpnShield` and the shield-only `NetworkInterfaceGuard` clean/verify helpers are removed. A stale `VpnShield` key in an older `config.enc` is ignored. `ResponseAction.VpnShieldUp` stays as an `[Obsolete]` slot purely so serialized enum numbers in events.jsonl / audit / replay stay stable; it is never emitted and is handled as LogOnly.
@@ -457,7 +464,7 @@ Removes the GVPN bundling added in 3.6.7 and the VPN shield. Sentinel now runs c
 ### Changed
 - **`Network Tamper: Local MitM Chain` is a LogOnly report.** Firing rules are unchanged (>= 2 independent tamper vectors). `ResponsePolicy.IsReportOnlyNetworkTamper` keeps it LogOnly through dispatch policy, tier law and chain promotion, which previously would have rewritten a non-shield PID-0 composite to QuarantineAndKill. The tag only applies to PID 0-4 events.
 
-### Fixed - running Sentinel next to GVPN or any other VPN
+### Fixed - running Gnyida next to GVPN or any other VPN
 - **False "Local MitM Chain" on every VPN connect:** a VPN adapter appearing after startup ("New Adapter Appeared") plus its own gateway ("Additional Gateway Appeared") formed two independent legs. Tunnel interfaces are now classified by `VpnTunnelClassifier` (IANA type PPP/PROP_VIRTUAL/TUNNEL or driver description - never the user-renamable connection name; Wi-Fi never by description; Teredo/ISATAP/6to4/IP-HTTPS excluded) and their observations are tagged so they never count as LAN MitM legs.
 - **`RouteTableMonitor`:** a VPN taking the default route could fire Tier1 "New Default Route Injected" (NetworkIsolate), and a tunnel listed first could fire Tier1 "Default Gateway Changed". Tunnel routes no longer take those paths; full-traffic tunnel routes (0/0, 0/1 + 128/1) are recorded as Tier2 `VPN Tunnel: Full-Traffic Route Installed`. The LAN gateway and per-adapter gateway checks exclude tunnels. GVPN/L2TP/RAS/Wintun tunnels were previously not recognised at all.
 - **`ArpSpoofMonitor`:** baselines the LAN gateway instead of a tunnel peer (and skips loopback), so the static ARP lock no longer lands on the wrong interface.
@@ -468,10 +475,10 @@ Removes the GVPN bundling added in 3.6.7 and the VPN shield. Sentinel now runs c
 - **`VpnTunnelLeakMonitor`** (NetworkIntegrity, 20 s, observe-only Tier2/LogOnly, no mutation): `VPN Tunnel: Connected` / `Disconnected`, `IPv4 Traffic Bypasses Tunnel`, `IPv6 Traffic Bypasses Tunnel`, `Resolver Outside Tunnel`. Reported once per tunnel session. Uses OS state only; GVPN's `vpn.log` is user-writable and is never read or trusted.
 
 ### Build tooling
-- `installer/build.ps1` version stamping no longer truncates `.csproj` files. It skips files already at the target version, writes through a temp file and `File.Replace`, retries briefly on a lock, and refuses to build when a project file is empty. Previously `Set-Content` could leave `Sentinel.Service.csproj` at 0 bytes when another process held it ("Root element is missing").
+- `installer/build.ps1` version stamping no longer truncates `.csproj` files. It skips files already at the target version, writes through a temp file and `File.Replace`, retries briefly on a lock, and refuses to build when a project file is empty. Previously `Set-Content` could leave `Gnyida.Service.csproj` at 0 bytes when another process held it ("Root element is missing").
 
 ### CI
-- Remove the "Verify legacy NanoAV migration" step from Build & Test and Release, and delete `tools/validation/WindowsNanoAvMigrationSmoke.ps1`. It ran `installer/retire-nanoav.ps1`, which no longer exists: NanoAV coverage has been integrated in Sentinel.Core since 3.4.5 and there is no separate runtime to retire. `docs/NANOAV.md` marks the old migration paragraph as historical.
+- Remove the "Verify legacy NanoAV migration" step from Build & Test and Release, and delete `tools/validation/WindowsNanoAvMigrationSmoke.ps1`. It ran `installer/retire-nanoav.ps1`, which no longer exists: NanoAV coverage has been integrated in Gnyida.Core since 3.4.5 and there is no separate runtime to retire. `docs/NANOAV.md` marks the old migration paragraph as historical.
 - Fix CS8601 in `VbsScheduledTaskRuleTests`, which failed the `-warnaserror` test build. A nullable parent name was passed to the non-nullable `ProcessTelemetry.ParentProcessName`; it now uses `?? string.Empty`, the model's "no parent" value.
 
 ### Testing
@@ -487,7 +494,7 @@ Removes the GVPN bundling added in 3.6.7 and the VPN shield. Sentinel now runs c
   - scope discipline;
   - build, test and release rules: `-warnaserror` covers tests, do not re-run `release.ps1` after a manual bump, never claim unverified results.
 - `.kiro/steering/changelog.md` now says to load the changelog before restoring or removing components, and requires a section for every release.
-- Add workspace-level `E:\Gorstak\.kiro\steering\sentinel.md` (fileMatch `Sentinel/**`). It loads these rules when the workspace root is `E:\Gorstak`, where Sentinel's own steering is not picked up. That file sits outside this repository.
+- Add workspace-level `E:\Gorstak\.kiro\steering\gnyida.md` (fileMatch `Gnyida/**`). It loads these rules when the workspace root is `E:\Gorstak`, where Gnyida's own steering is not picked up. That file sits outside this repository.
 
 ## [3.6.7] - 2026-11-07
 
@@ -508,7 +515,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 - **VPN shield disabled:** `ProductPosture.AllowsVpnShield` always returned false, with GVPN as the replacement. The `VpnShieldUp` composite therefore stayed LogOnly.
 
 ### Known issues (fixed in 3.6.8)
-- A VPN connecting after Sentinel started could produce a false `Network Tamper: Local MitM Chain`, and Tier1 route/gateway alerts with NetworkIsolate authority. GVPN/L2TP/RAS tunnels were not recognised as tunnels.
+- A VPN connecting after Gnyida started could produce a false `Network Tamper: Local MitM Chain`, and Tier1 route/gateway alerts with NetworkIsolate authority. GVPN/L2TP/RAS tunnels were not recognised as tunnels.
 - Upgrade and uninstall stopped GVPN by image name (`taskkill /IM GVPN.exe`) and removed the `GVPN` task, rules and adapter by name. This also affected a standalone GVPN using the same names.
 - No changelog entry, and no tests for the new installer paths.
 
@@ -663,7 +670,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 - All 18 PPID spoofing tests pass (from v3.6.1)
 - All 20 Beaconing detector tests pass (from v3.6.1)
 - All 14 security hardening tests pass (from v3.6.1)
-- SentinelAutoRotate --force tested and verified working (from v3.6.1)
+- GnyidaAutoRotate --force tested and verified working (from v3.6.1)
 - Build: 0 Warnings, 0 Errors
 
 ## [3.6.1] - 2026-11-03
@@ -689,7 +696,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 
 - **Tier1 Self-Defense Kill Authority Restoration**: Seven critical Tier1Behavioral detections were silenced with LogOnly response (agent watchdog, binary tampering, encrypted config modification, service registration deletion, PowerShell anti-forensics, process suspension, network QoS throttling). All restored to KillProcess response per constraint "Immediate authorized Tier1 response". Tests: all pass.
 
-- **SentinelAutoRotate Password Policy Bypass**: The installer now passes `--force` flag to skip password-policy validation during install. Resolves failures on machines with strict password policies (e.g., 12-character minimum, domain Group Policy). The actual password-setting uses direct Windows API (`NetUserSetInfo`) which bypasses policy dialogs anyway. Policy check remains for manual runs to alert users to policy requirements.
+- **GnyidaAutoRotate Password Policy Bypass**: The installer now passes `--force` flag to skip password-policy validation during install. Resolves failures on machines with strict password policies (e.g., 12-character minimum, domain Group Policy). The actual password-setting uses direct Windows API (`NetUserSetInfo`) which bypasses policy dialogs anyway. Policy check remains for manual runs to alert users to policy requirements.
 
 ### Constraints Honored
 - Userland only; no kernel/driver changes
@@ -703,7 +710,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 - All 18 PPID spoofing tests pass
 - All 20 Beaconing detector tests pass
 - All 14 security hardening tests pass
-- SentinelAutoRotate --force tested and verified working
+- GnyidaAutoRotate --force tested and verified working
 - Build: 0 Warnings, 0 Errors
 
 ## [3.6.0] - 2026-11-02
@@ -732,13 +739,13 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 
 ## [3.5.5] - 2026-10-30
 
-- Fix `SentinelAutoRotate` failing during install with "SentinelAutoRotate was not enabled". The tool targets .NET Framework 4.8 but stored its state with `System.Text.Json` 8.0.5, which does not load on that runtime. The first state save threw an unhandled `FileLoadException`, so install stopped before blanking the password or registering tasks. State is now stored with `DataContractJsonSerializer` from the .NET Framework itself, and the package reference is removed. Upgrade setup now stops the watchdog and service, then repeatedly force-stops `Sentinel.Service.exe` and `Sentinel.Agent.exe` until none remain, for up to 30 seconds. It no longer copies files while a Sentinel process is still running, and it stops with a message if the processes cannot be stopped. The project is built as a Windows application, so the background session worker no longer opens a console window. The project builds with no warnings. The boot task also failed to register because Task Scheduler rejected `LogonType` `ServiceAccount` for SYSTEM. That element is now omitted for the boot task. Not yet run on a Windows machine, because running install blanks the account password.
+- Fix `GnyidaAutoRotate` failing during install with "GnyidaAutoRotate was not enabled". The tool targets .NET Framework 4.8 but stored its state with `System.Text.Json` 8.0.5, which does not load on that runtime. The first state save threw an unhandled `FileLoadException`, so install stopped before blanking the password or registering tasks. State is now stored with `DataContractJsonSerializer` from the .NET Framework itself, and the package reference is removed. Upgrade setup now stops the watchdog and service, then repeatedly force-stops `Gnyida.Service.exe` and `Gnyida.Agent.exe` until none remain, for up to 30 seconds. It no longer copies files while a Gnyida process is still running, and it stops with a message if the processes cannot be stopped. The project is built as a Windows application, so the background session worker no longer opens a console window. The project builds with no warnings. The boot task also failed to register because Task Scheduler rejected `LogonType` `ServiceAccount` for SYSTEM. That element is now omitted for the boot task. Not yet run on a Windows machine, because running install blanks the account password.
 
 ## [3.5.4] - 2026-10-30
 
-- Fix uninstall leaving `Sentinel.Service.exe` and `Sentinel.Agent.exe` behind. The fallback cleanup deleted service registrations only after killing the processes. A killed registered service counts as a crash, so SCM restarted it after 2 seconds, and its watchdog relaunched the agent, which kept the files locked. The fallback now deletes the registrations first and kills in a loop until no Sentinel process remains. The service, agent and rotator files carry `uninsrestartdelete`, so a file still locked at uninstall is removed at the next restart. Not yet reproduced or tested on a Windows machine.
-- Rebuild `SentinelAutoRotate` on the design of `PasswordRotator.ps1`. Install blanks the password of the account running setup, after checking that it is a local enabled account and that the policy allows an empty password. The boot task blanks it once per boot. The session task sets a random 48-character password every ten minutes while that account's desktop is signed in. Uninstall restores a blank password before removing the tasks. No password is stored, and no auto-logon is configured. Install and uninstall fail closed. An earlier release's tasks and its auto-logon configuration are removed during upgrade. The rotation rules are checked by a throwaway harness; the Windows-side behavior is not yet tested on a real machine.
-- Owner-approved exception to the 2.7.6 prohibition on password and auto-logon changes, scoped to the opt-in `SentinelAutoRotate` task. Recorded in `docs/constraints.md`. Documented consequences: the console accepts an empty password from boot until the first rotation about ten minutes after logon; DPAPI-protected data encrypted under the previous password may become unreadable; a locked session may not unlock until restart; services and tasks that use the account password stop working.
+- Fix uninstall leaving `Gnyida.Service.exe` and `Gnyida.Agent.exe` behind. The fallback cleanup deleted service registrations only after killing the processes. A killed registered service counts as a crash, so SCM restarted it after 2 seconds, and its watchdog relaunched the agent, which kept the files locked. The fallback now deletes the registrations first and kills in a loop until no Gnyida process remains. The service, agent and rotator files carry `uninsrestartdelete`, so a file still locked at uninstall is removed at the next restart. Not yet reproduced or tested on a Windows machine.
+- Rebuild `GnyidaAutoRotate` on the design of `PasswordRotator.ps1`. Install blanks the password of the account running setup, after checking that it is a local enabled account and that the policy allows an empty password. The boot task blanks it once per boot. The session task sets a random 48-character password every ten minutes while that account's desktop is signed in. Uninstall restores a blank password before removing the tasks. No password is stored, and no auto-logon is configured. Install and uninstall fail closed. An earlier release's tasks and its auto-logon configuration are removed during upgrade. The rotation rules are checked by a throwaway harness; the Windows-side behavior is not yet tested on a real machine.
+- Owner-approved exception to the 2.7.6 prohibition on password and auto-logon changes, scoped to the opt-in `GnyidaAutoRotate` task. Recorded in `docs/constraints.md`. Documented consequences: the console accepts an empty password from boot until the first rotation about ten minutes after logon; DPAPI-protected data encrypted under the previous password may become unreadable; a locked session may not unlock until restart; services and tasks that use the account password stop working.
 - Reduce per-tick kernel work in `AppNetworkPolicyMonitor`. The 500 ms TCP connection scan now keeps one iphlpapi table buffer per monitor and reads the IPv4 and IPv6 tables once each per tick, instead of querying the size and allocating a new buffer for each family. The buffer is reallocated only when the connection table grows, and overlapping timer passes are skipped. Connection classification, allowlist checks and alert behavior are unchanged. No CPU or memory measurement has been taken yet, so no saving is claimed.
 - Correct the `V220SecurityHardeningTests` GSecurity.inf contract. The shipped template does contain a `[Privilege Rights]` section, and the 3.5.3 note above incorrectly described it as absent. The test now asserts the intended restrictions: `SeDebugPrivilege` is granted to no one, and `SeBackupPrivilege` is limited to Administrators and Backup Operators. The template itself is unchanged.
 - Stamp the README version line, which still showed 3.5.1.
@@ -778,14 +785,14 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 ## [3.4.5] - 2026-10-25
 
 ### Changed
-- Integrate useful NanoAV scanning, online hash reputation and previously unregistered socket-shell coverage into Sentinel policy; retire the old autonomous runtime while preserving source and recovery data. Never import its poisoned unsigned-file verdict cache.
+- Integrate useful NanoAV scanning, online hash reputation and previously unregistered socket-shell coverage into Gnyida policy; retire the old autonomous runtime while preserving source and recovery data. Never import its poisoned unsigned-file verdict cache.
 - Remove blanket outbound game/client port blocks while retaining SMB/NetBIOS restrictions; preserve administrator legacy IPsec policies instead of deleting by GSecurity name.
 - Restore the owner’s inbound-only network intent: Service/Guard and Agent inbound image rules, outbound self-block retirement in local and local-GPO stores, full-filter approval identity and visible effective-policy conflicts.
 - Add high-priority overlay review, separate Tier2 privacy context and strict same-lifetime privacy/terminal correlation. Ordinary streaming, graphics and mic/webcam records cannot authorize kills.
 - Reconcile previously approved DNS profiles with original rollback preserved; monitor real IPsec, connection-security, DNS and route policy integrity. Arbitrary route/IPsec changes are not rewritten without an approved target.
 
 ### Fixed
-- Installer no longer aborts when the legacy NanoAV companion cannot be fully retired. Retiring the old companion is best-effort cleanup; the retirement script already fails closed, preserves all recovery data and never imports poisoned state regardless of its exit code, so a locked or un-unloadable legacy runtime file now logs to the setup log and the fresh Sentinel install continues instead of raising a fatal "NanoAV migration could not finish" setup error.
+- Installer no longer aborts when the legacy NanoAV companion cannot be fully retired. Retiring the old companion is best-effort cleanup; the retirement script already fails closed, preserves all recovery data and never imports poisoned state regardless of its exit code, so a locked or un-unloadable legacy runtime file now logs to the setup log and the fresh Gnyida install continues instead of raising a fatal "NanoAV migration could not finish" setup error.
 - Process-tree containment skips an incidental descendant that cannot be opened (a PID-reused slot now held by a protected process, or a child racing its own exit, which surfaces as ERROR_ACCESS_DENIED) instead of aborting the whole kill. The authorized root and every openable descendant are still terminated; the un-openable PID is neither failed nor refused. Graceful degradation per constraints.
 - Close heuristic certificate removal/adder-kill bypasses at monitor, dispatch and executor boundaries. Distinguish already-absent roots from actual removals.
 - Require fresh pinned process lifetimes and durable audit for direct socket-shell containment; do not wait for a composite or punish innocent ancestors/backing files. Keep timing, path failure and file reputation out of runtime kill authority.
@@ -813,7 +820,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 - Stop parsing detection evidence as a filesystem path. Reject malformed Windows path hints before installer heuristics and distinguish rule-evaluation failures from policy/dispatch failures in diagnostics. Regression tests exercise quoted System32 evidence through durable detection logging.
 - Isolate process/image, file, registry and other ETW work in four bounded FIFO lanes (2,048 events / 4 MiB each). Preserve per-provider ordering, filter unused event IDs before payload copying, scope file events before process lookup, and coalesce only path-less WMI registry-host hint refreshes to once per PID/second. Report filtered/coalesced counts separately from genuine lane loss.
 - Coalesce repeated intermittent ETW loss alerts and limit repeated reconciliation requests without declaring missing telemetry healthy.
-- Make Sentinel offline-isolation firewall rules idempotent. Repair duplicates only within the six exact owned names/group, refuse foreign collisions, and verify rule scope. Add a mandatory native Windows repeated-apply/duplicate-repair fixture.
+- Make Gnyida offline-isolation firewall rules idempotent. Repair duplicates only within the six exact owned names/group, refuse foreign collisions, and verify rule scope. Add a mandatory native Windows repeated-apply/duplicate-repair fixture.
 - Retry incomplete background file walks after 15 minutes while retaining watchers and skipping already indexed successful files. Surface bounded failed-path examples and exception/HRESULT details; access denial is not file absence, and a bad child directory does not abort sibling enumeration.
 - Keep enabled-token-privilege observations Tier2/LogOnly, outside credential-dump/composite authority; correct their explanation.
 
@@ -874,7 +881,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 ## [3.3.9] - 2026-10-21
 
 ### Changed
-- Add the online ExploitShield companion and default installer task: collect CISA KEV, Exploit-DB and PoC-in-GitHub metadata every four hours; match explicit CVEs to applicable Windows Update/WSUS security fixes; automatically download/install qualifying fixes with audit, metadata revalidation and installed-state read-back. Respect EULA/interactive requirements and report feed failures, unresolved fixes and pending reboots. Do not execute PoCs or generate response rules. See [scope](../tools/Sentinel.ExploitShield/README.md).
+- Add the online ExploitShield companion and default installer task: collect CISA KEV, Exploit-DB and PoC-in-GitHub metadata every four hours; match explicit CVEs to applicable Windows Update/WSUS security fixes; automatically download/install qualifying fixes with audit, metadata revalidation and installed-state read-back. Respect EULA/interactive requirements and report feed failures, unresolved fixes and pending reboots. Do not execute PoCs or generate response rules. See [scope](../tools/Gnyida.ExploitShield/README.md).
 - Add a native Windows CI/release gate for protected installation-path enforcement, scheduled-task apply action, four-hour/SYSTEM enrollment, real SYSTEM execution of the read-only WUA health check, protected audit access and idempotent removal. The fixture never downloads or installs Windows updates.
 - Extend the existing kill-authorized reverse-shell payload rule to PowerShell 7, explicitly recognized short encoded switches, and inline `-Command`/`-c` code. Require socket construction, stream read/write and command invocation in code; ignore literals and comments. Malformed encoded input stays Tier2 LogOnly.
 - Add offline Exploit-DB/CISA KEV metadata triage as a separate research tool; metadata grants no response authority.
@@ -882,14 +889,14 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 ### Validation and limits
 - Full solution Release cross-build and companion publication: 0 warnings, 0 errors. A temporary .NET 10 host exercised the compiled Core Framework assembly and exact linked companion sources: 107 related regression cases passed, 0 failed (payload variants, response policy, feed validation/degradation, orchestration and mocked WUA revalidation/install/read-back). The normal Windows xUnit runner was not executed. Online NuGet auditing was disabled for the cached build.
 - Production fetch logic retrieved and parsed live CISA KEV and Exploit-DB metadata: 26,390 distinct CVEs, including 1,754 KEV entries. GitHub API access was denied by this workspace's proxy; the run retained the two healthy sources and reported degraded coverage. Native WUA, scheduled-task/ACL and installer lifecycle validation remain outstanding; no patches were installed in this session.
-- See [payload protection scope](EXPLOIT_PAYLOAD_PROTECTION.md) and [automatic vendor-fix scope](../tools/Sentinel.ExploitShield/README.md). No claim of universal PoC blocking, original PHP exploit coverage, or installed protection. Windows runtime and installer validation remain required before release.
+- See [payload protection scope](EXPLOIT_PAYLOAD_PROTECTION.md) and [automatic vendor-fix scope](../tools/Gnyida.ExploitShield/README.md). No claim of universal PoC blocking, original PHP exploit coverage, or installed protection. Windows runtime and installer validation remain required before release.
 
 ## [3.3.8] - 2026-10-21
 
 ### Added
-- Package the supplied NanoAV as an independent EXE/COM component, preserving its own online feeds, configuration, response decisions, original bootstrap and assembly metadata. It does not enter Sentinel's response-policy pipeline. The installer builds/copies both outputs and launches the original bootstrap.
-- Preserve 17 supplied files byte-for-byte. Five original files have only Sentinel coexistence call-site changes (21 insertions / 6 deletions); add a separate identity/path helper and original/integrated hash manifest. Protect resolved Sentinel process/file targets and skip the uncheckable module-name-wide kill fallback. Unresolvable identities receive no destructive action from that helper.
-- Exempt the co-installed NanoAV image from Sentinel response, memory inspection and DLL remediation. Exempt the original ProgramData runtime copy only when identical to the installed payload. Copies with matching names elsewhere receive no general exemption.
+- Package the supplied NanoAV as an independent EXE/COM component, preserving its own online feeds, configuration, response decisions, original bootstrap and assembly metadata. It does not enter Gnyida's response-policy pipeline. The installer builds/copies both outputs and launches the original bootstrap.
+- Preserve 17 supplied files byte-for-byte. Five original files have only Gnyida coexistence call-site changes (21 insertions / 6 deletions); add a separate identity/path helper and original/integrated hash manifest. Protect resolved Gnyida process/file targets and skip the uncheckable module-name-wide kill fallback. Unresolvable identities receive no destructive action from that helper.
+- Exempt the co-installed NanoAV image from Gnyida response, memory inspection and DLL remediation. Exempt the original ProgramData runtime copy only when identical to the installed payload. Copies with matching names elsewhere receive no general exemption.
 
 ### Validation and scope
 - Fix the Command Prompt `installer\build` entry point: the old batch implementation omitted NanoAV publication. `build.bat` now delegates arguments and exit status to the canonical `build.ps1`, including NanoAV outputs and x64 Agent publication. Windows CI exercises this entry point with `-StampOnly`.
@@ -897,7 +904,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 - Refresh NanoAV's bootstrap marker during installation/upgrade so its unchanged installer updates the copied DLL and current-user startup entry instead of retaining an older unpatched copy. Preserve NanoAV's data and response rules.
 - Windows CI reported `0x80070241` when xUnit tried to load the NanoAV EXE as a test dependency. Tests now compile the same path helper source used by NanoAV instead of loading its complete executable. Original NanoAV source/manifest and Windows signature enforcement are unchanged; native Windows rerun remains required.
 - Full solution cross-build and original EXE/COM DLL publication pass. Eighteen portable coexistence tests pass; one Windows installed-path test is unrun on Linux. Existing 25 dashboard and 8 Worker checks pass. The supplied build's warning-level setting is retained for NanoAV.
-- Sentinel desktop-monitor settings are unchanged. Document the [privacy review](PRIVACY_REVIEW_2026-10-21.md) and explicit [NanoAV online-policy exception, source scope and retained defects](NANOAV.md). The original process-start/cache/lifetime and unscheduled polling behavior is not repaired. Native runtime, actual online-provider access, persistence and installer lifecycle remain unverified here; packaging is not proof those behaviors work.
+- Gnyida desktop-monitor settings are unchanged. Document the [privacy review](PRIVACY_REVIEW_2026-10-21.md) and explicit [NanoAV online-policy exception, source scope and retained defects](NANOAV.md). The original process-start/cache/lifetime and unscheduled polling behavior is not repaired. Native runtime, actual online-provider access, persistence and installer lifecycle remain unverified here; packaging is not proof those behaviors work.
 
 ## [3.3.7] - 2026-10-20
 
@@ -910,7 +917,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 ### Changed
 - Distinguish running tasks, completed startup operations, standby fallback, unavailable sources, and collection progress. The offline ThreatFox loader and retired-feed firewall cleanup are startup tasks, not continuous online monitors. WMI/snapshots paused while process ETW works are shown on standby.
 - Keep the main dashboard attention state visible for collection errors, including delayed status replies. Label collection without progress instrumentation as unverified, expose per-sensor reasons and cumulative ETW loss counters, and retain the full registered roster.
-- Add [monitor-health documentation](monitor-health.md) and `tools/Test-SentinelSensorHealth.ps1` for read-only diagnostics with an optional benign DNS probe.
+- Add [monitor-health documentation](monitor-health.md) and `tools/Test-GnyidaSensorHealth.ps1` for read-only diagnostics with an optional benign DNS probe.
 
 ### Validation and limits
 - Windows CI for the implementation passed: 3,059 native Framework tests passed, 1 skipped, 0 failed; warnings-as-errors build had 0 warnings and 0 errors. DNS repair/restoration and local/Group Policy firewall smoke checks passed, along with 25 dashboard tests, Worker tests, and firewall-policy regressions. Release publication independently retests the exact merged commit.
@@ -925,7 +932,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 - Fix a `NullReferenceException` that aborted every firewall-policy reconciliation pass (the "firewall policy needs attention" state). `ProcessModule.get_FileName()` can throw a bare NRE on an unreadable main-module handle (exited, protected, or cross-bitness process), which the exception filter did not catch, so the exception escaped and left the policy perpetually "not verified" while looping errors. Reading the main-module path is now isolated and the NRE is caught in both child-registration paths; an unresolved path fails closed and grants no exemption.
 
 ### Changed
-- Enable the Windows DNS Client Operational analytic channel on `DnsQueryMonitor` start. The channel ships disabled by default, which left the DNS-layer detections (DGA, rapid-query, covert-mesh and webhook-sink correlation) without telemetry. Sentinel runs as SYSTEM and legitimately owns this source, so it enables the channel through the managed EventLog configuration API - never `wevtutil`/shell, which `EtwProviderTamperMonitor` flags and which would build a shell command string. This is a proactive host mutation and gates on the always-on hardening posture (`ProductPosture.AllowsProactiveHostLockdown`); if it cannot be enabled the monitor degrades to cache-based detection rather than failing.
+- Enable the Windows DNS Client Operational analytic channel on `DnsQueryMonitor` start. The channel ships disabled by default, which left the DNS-layer detections (DGA, rapid-query, covert-mesh and webhook-sink correlation) without telemetry. Gnyida runs as SYSTEM and legitimately owns this source, so it enables the channel through the managed EventLog configuration API - never `wevtutil`/shell, which `EtwProviderTamperMonitor` flags and which would build a shell command string. This is a proactive host mutation and gates on the always-on hardening posture (`ProductPosture.AllowsProactiveHostLockdown`); if it cannot be enabled the monitor degrades to cache-based detection rather than failing.
 
 ### Validation and limits
 - Full Release cross-build: zero warnings/errors. Full portable test suite passes (3028 passed, 1 pre-existing Windows-native DNS smoke test skipped), including the new default-deny seam test for the DNS-channel host mutation. No detection tier or response contract changed: the watchdog's existing "Anti-Tamper: Monitor Crashed/Killed" detection remains Tier2/Tier1 LogOnly and only its firing condition narrowed. No new kill, quarantine, certificate-removal or driver-file authority is added.
@@ -952,7 +959,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 - Replace the service host's unguarded default EventLog logger with a bounded diagnostic JSONL sink. Keep the existing guarded critical-only Windows Event Log trail; diagnostic sink and formatting errors cannot escape to detection threads.
 - Back off unavailable-session recreation from 5 to 60 seconds. Coalesce repeated ETW visibility failures into change alerts and five-minute reminders, require 30 seconds of stable samples before recovery, and compare native/dispatch loss counters independently. Include loss counters in degradation evidence.
 - Normalize native driver paths using the actual Windows root and directory boundaries. Label SYSTEM-token observations with unknown images as weak context rather than proven token theft.
-- Label encoded PowerShell without socket command-loop evidence as an observation. Coalesce three weak observation classes only for signed, exact-image, live firewall-helper children launched by Sentinel; behavioral detections remain armed and unknown/reused PIDs receive no exemption.
+- Label encoded PowerShell without socket command-loop evidence as an observation. Coalesce three weak observation classes only for signed, exact-image, live firewall-helper children launched by Gnyida; behavioral detections remain armed and unknown/reused PIDs receive no exemption.
 - Preserve process-rule command line, image and parent metadata. Make dedup admission atomic and separate weaker versus stronger tiers/actions.
 
 ### Windows CI corrections
@@ -1047,7 +1054,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 ### Fixed
 - Probed Edge WebView2 Runtime availability upfront via non-throwing `CoreWebView2Environment.GetAvailableBrowserVersionString()` prior to control construction or initialization.
 - Gracefully degrades directly to the legacy IE11 `WebBrowser` control when the WebView2 Runtime is not installed, eliminating unobserved task exception spam (`Couldn't find a compatible Webview2 Runtime installation`) in `agent_crash.log`.
-- Explicitly reports WebView2 unavailability to `%ProgramData%\Sentinel\agent_runtime.log` and marks the dashboard window title with `(legacy browser — WebView2 unavailable)`.
+- Explicitly reports WebView2 unavailability to `%ProgramData%\Gnyida\agent_runtime.log` and marks the dashboard window title with `(legacy browser — WebView2 unavailable)`.
 ### Validation
 - Clean build (0 warnings, 0 errors) and full test suite passing (2,902 tests passed, 1 skipped).
 
@@ -1103,7 +1110,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 - The one-shot legacy-sidecar purge regression now scans only its temporary fixture, rather than every fixed drive on the runner. It verifies marker skipping, forced removal, repeat-call idempotence and preservation of original/out-of-scope files.
 - Process-tree termination now waits for the pinned process handle even when TerminateProcess reports access denied during an already-pending exit. Only a signaled handle verifies exit; persistent denial and timeouts remain incomplete.
 - Monitor-group startup tests wait for explicit start notifications with a bounded deadline instead of assuming startup completes in 200ms. Cleanup runs after failed assertions too.
-- Prevented Sentinel's pipe-owner inspection from generating C2 alerts against its own decoys, using kernel-reported PIDs rather than process names.
+- Prevented Gnyida's pipe-owner inspection from generating C2 alerts against its own decoys, using kernel-reported PIDs rather than process names.
 - Certificate trust-marker heuristics are now Tier2 review-only findings. Only explicit thumbprint distrust policy may remove certificates, block them or quarantine associated files; the remediator enforces this at its entry point.
 - Separated agent logs and audit chains from the service log. Event files accept one writer and no longer rename a live writer's file on contention; lost writes remain counted. Dashboard history/live events and tray notifications read both sources.
 - Observed both WebView2 environment and initialization task failures before falling back to the legacy browser.
@@ -1148,10 +1155,10 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 ### Fixed
 - **`FileVerdictScanner` self-scanning loop (primary RAM cause).**
   `FileVerdictScanner` watched every fixed drive recursively with no exclusion for
-  Sentinel's own directories. Files written by the service — `events.jsonl`,
+  Gnyida's own directories. Files written by the service — `events.jsonl`,
   `audit-*.jsonl`, `scan_index.dat`, ADS verdict tags, and the install-dir binaries —
   were picked up by the drive-root `FileSystemWatcher` and queued for scanning, creating
-  a feedback loop. Added `IsSentinelOwnPath()` which excludes `%ProgramData%\Sentinel\`
+  a feedback loop. Added `IsGnyidaOwnPath()` which excludes `%ProgramData%\Gnyida\`
   and the install directory (resolved from `AppContext.BaseDirectory` at startup, not a
   hardcoded string). The exclusion is applied in `OnFileCreated`, `OnFileRenamed`,
   `ScanNewFileAsync`, and `TraverseDirectoryAsync`.
@@ -1179,7 +1186,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
   `BehavioralCorrelationEngine` and `WeightedCorrelationEngine` previously held all
   in-progress chain state in memory; a service crash mid-confirmation silently lost
   the chain with no record that a kill was pending. `IncidentJournal` writes each
-  state transition atomically to `%ProgramData%\Sentinel\Incidents\incident-<id>.json`
+  state transition atomically to `%ProgramData%\Gnyida\Incidents\incident-<id>.json`
   (temp-write + `File.Replace`, flushed to disk). States: `Seeding → Confirming →
   Sealed(Executed|Abandoned|Interrupted)`. On service restart, `RecoverOpenJournals()`
   finds any unsealed journal and emits a `Tier2/LogOnly` `"Incident: Interrupted Chain
@@ -1214,11 +1221,11 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 
 ## [3.1.8] - 2026-10-16
 ### Added
-- **`SentinelAutoRotate` standalone tool** (`tools/Sentinel.AutoRotate/`). Keeps a local
+- **`GnyidaAutoRotate` standalone tool** (`tools/Gnyida.AutoRotate/`). Keeps a local
   Windows account password unknown to any human while maintaining passwordless autologon.
   Fully decoupled from the EDR — no `ProjectReference` in either direction, no DI wiring.
-  - `--install` (admin): registers two SYSTEM scheduled tasks (`SentinelAutoRotateStartup`
-    on boot, `SentinelAutoRotate` every 10 minutes), enables autologon for the active
+  - `--install` (admin): registers two SYSTEM scheduled tasks (`GnyidaAutoRotateStartup`
+    on boot, `GnyidaAutoRotate` every 10 minutes), enables autologon for the active
     console session account, sets `ConsentPromptBehaviorAdmin=5`.
   - `--rotate` (SYSTEM): determines the active account via `WTSQuerySessionInformation`,
     generates a ≥20-char cryptographically random password (`RandomNumberGenerator`, never
@@ -1233,14 +1240,14 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 
 ### Fixed
 - **`installer/build.bat` missing AutoRotate publish step.** `setup.iss` line 35 requires
-  `publish\autorotate\SentinelAutoRotate.exe` but `build.bat` only published `service` and
+  `publish\autorotate\GnyidaAutoRotate.exe` but `build.bat` only published `service` and
   `agent`, causing Inno Setup to fail with "Source file does not exist" on every `build.bat`
-  invocation. Added step 4d to publish `tools\Sentinel.AutoRotate\Sentinel.AutoRotate.csproj`
+  invocation. Added step 4d to publish `tools\Gnyida.AutoRotate\Gnyida.AutoRotate.csproj`
   to `publish\autorotate\` before Inno Setup runs. `build.ps1` already had this step; the
   `.bat` is now consistent.
 
 ### Changed
-- `setup.iss` `[Tasks]` exposes opt-in "Enable SentinelAutoRotate" (unchecked by default,
+- `setup.iss` `[Tasks]` exposes opt-in "Enable GnyidaAutoRotate" (unchecked by default,
   with explicit warning about autologon implications). `[Run]` invokes `--install` only when
   the task is selected. `CurUninstallStepChanged` calls `--uninstall` before file removal.
 
@@ -1391,7 +1398,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 
 ### Changed
 - **`forum.hr` removed from all default block lists.** Removed from `RuntimeBlocklistService.DefaultSeedDomains`
-  and `SentinelConfig.RiskyPairingOrigins`. The reverse shell detection layer added in v3.1.2
+  and `GnyidaConfig.RiskyPairingOrigins`. The reverse shell detection layer added in v3.1.2
   (`NetworkFacingParentShellRule`, `RawSocketRedirectRule`, network-layer elevation in
   `NetworkMonitor`) now covers the post-exploitation callback threat class that justified the
   domain block. A domain block is the wrong primitive for that threat (the attacker just uses a
@@ -1416,7 +1423,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 
 ## [3.0.9] - 2026-10-13
 ### Added
-- **Reflexive-loop guard in `TelemetryFusionEngine` (ingestion self-exclusion).** `FeedEvent` now drops any event whose `ProcessId` is Sentinel's own PID *before* it enters any accumulator (per-PID chain, `EventGraph`, or the derived `FusedTelemetryContext`). The Service runs as SYSTEM and continuously scans other processes (`OpenProcess` / `ReadProcessMemory` / handle enumeration) and writes its own logs, quarantine, and diagnostics; without this guard that self-generated activity could be re-ingested and re-scored, a self-amplifying A->B->A loop that keeps every bounded buffer saturated and drives per-event `FusedTelemetryContext` allocation churn (the practical cause of runaway RAM, not an unbounded map). The `AdvancedResponseEngine` already self-excludes via `SelfPathGuard`, but that is a response-stage gate that runs *after* ingestion/accumulation; this closes the loop at the single ingestion choke point, mirroring the `owningPid == myPid` filter the network scanners already use. The self-PID is cached once (constant for the process lifetime) rather than resolved per event on the hot path. A dropped self-event still returns a valid empty context so callers that forward it to the detection engine do not NRE; it carries no event history and promotes nothing.
+- **Reflexive-loop guard in `TelemetryFusionEngine` (ingestion self-exclusion).** `FeedEvent` now drops any event whose `ProcessId` is Gnyida's own PID *before* it enters any accumulator (per-PID chain, `EventGraph`, or the derived `FusedTelemetryContext`). The Service runs as SYSTEM and continuously scans other processes (`OpenProcess` / `ReadProcessMemory` / handle enumeration) and writes its own logs, quarantine, and diagnostics; without this guard that self-generated activity could be re-ingested and re-scored, a self-amplifying A->B->A loop that keeps every bounded buffer saturated and drives per-event `FusedTelemetryContext` allocation churn (the practical cause of runaway RAM, not an unbounded map). The `AdvancedResponseEngine` already self-excludes via `SelfPathGuard`, but that is a response-stage gate that runs *after* ingestion/accumulation; this closes the loop at the single ingestion choke point, mirroring the `owningPid == myPid` filter the network scanners already use. The self-PID is cached once (constant for the process lifetime) rather than resolved per event on the hot path. A dropped self-event still returns a valid empty context so callers that forward it to the detection engine do not NRE; it carries no event history and promotes nothing.
 - **Distinct-PID cap on `_processChains` (`MaxTrackedPids`, LRU shed on insert).** The per-chain FIFO (`MaxEventsPerChain`) and the 15s/2min cleanup already bound each chain and drop empties, but nothing bounded the *number* of chains between cleanup passes - a burst of distinct PIDs could spike RAM in that window. `FeedEvent` now sheds the least-recently-touched chain (`EvictOldestChain`, keyed on each chain's most-recent event timestamp) when a brand-new PID would exceed the cap, so a burst cannot outrun the periodic cleanup. Covered by new tests in `TelemetryFusionEngineTests`. The fusion layer remains PASSIVE (never blocks, kills, or mutates telemetry); this is a bounded-memory hardening only, no change to detection or response authority.
 
 ### Changed
@@ -1429,20 +1436,20 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
   - **`InstallerHeuristics`** (-> 97.8% line / 93.0% branch). Added tests for the four previously-untested public allow-gates — `IsDirectXOrRuntimeRedist`, `IsPortableDownloadOrArchiveTool`, `IsOfflineImageWorkPath`, `IsBenignPortableWorkContext` — covering both the allow side and the anti-evasion deny side (e.g. a non-tool binary inside a folder named `uups` gets no blanket bypass).
   - **`RulePackLoader` / `FragmentCorrelationRule`** (loader -> 51.6% line; rule -> 92.3% line / 77.8% branch). New fail-closed signature tests prove rejection of legacy HMAC packs, missing/invalid-base64/well-formed-but-untrusted RSA signatures, empty packs, and nonexistent files. The pure composite-correlation logic is covered: all-fragments-present fires `Tier1Behavioral` + `QuarantineAndKill` with `ChainConfirmed`, a missing fragment or below-floor signal count does not fire, matching is case-insensitive, and confidence is clamped into the `[0.85, 0.97]` band.
   - **`IsoOriginResolver`** (-> 40.3% line / 45.0% branch). Covered the deterministic fail-closed paths of this read-only resolver: null/empty/garbage image paths and system-drive paths are not treated as mounted ISOs, invalid drive letters yield empty/null, system PIDs (<=4) resolve to null, and every well-formed drive-letter spelling returns safely without throwing.
-- Net result: full suite **2696 -> 2784 tests, all green**; `Sentinel.Core` coverage **39.69% -> 40.05% line, 37.53% -> 37.85% branch**. Build remains 0W/0E. No production code changed - this release only adds regression protection to existing behavior.
+- Net result: full suite **2696 -> 2784 tests, all green**; `Gnyida.Core` coverage **39.69% -> 40.05% line, 37.53% -> 37.85% branch**. Build remains 0W/0E. No production code changed - this release only adds regression protection to existing behavior.
 
 ### Changed
 - Version stamp 3.0.7 -> 3.0.8.
 
 ## [3.0.7] - 2026-10-11
 ### Changed
-- **Repository URLs updated from the old `github.com/CroatiaSecurity` org to `github.com/psihijatrija`.** Corrected the two actual GitHub URLs: the `LICENSE` copyright line (`github.com/psihijatrija/Sentinel`) and the 2.3.6 changelog porting link (`github.com/psihijatrija/GorstaksProtection`). Non-URL `CroatiaSecurity/C datasets` references (ML trainer docs) and the compiled Worker HMAC shared-secret constant in `Models.cs` (which must byte-match the Worker env `SENTINEL_SHARED_SECRET` per FR-11) are intentionally left unchanged.
+- **Repository URLs updated from the old `github.com/CroatiaSecurity` org to `github.com/psihijatrija`.** Corrected the two actual GitHub URLs: the `LICENSE` copyright line (`github.com/psihijatrija/Gnyida`) and the 2.3.6 changelog porting link (`github.com/psihijatrija/GorstaksProtection`). Non-URL `CroatiaSecurity/C datasets` references (ML trainer docs) and the compiled Worker HMAC shared-secret constant in `Models.cs` (which must byte-match the Worker env `GNYIDA_SHARED_SECRET` per FR-11) are intentionally left unchanged.
 - Version stamp 3.0.6 -> 3.0.7.
 
 ## [3.0.6] - 2026-10-11
 ### Added
-- **Agent dashboard now runs on Edge/Chromium (WebView2) with graceful fallback.** `AgentDashboardForm` prefers the `Microsoft.Web.WebView2` control (modern CSS grid/flexbox/JS, no IE11 quirks) instead of the legacy WinForms `WebBrowser` with its `FEATURE_BROWSER_EMULATION` IE11 shim. WebView2 is initialized without `await` on the Agent STA thread (NFR-6) via the `CoreWebView2InitializationCompleted` event; the per-user browser profile lives under `%LocalAppData%\Sentinel\WebView2` (the install dir may be read-only for the interactive user). The embedded host is locked down: DevTools off, default context menus off, accelerator keys off, `NewWindowRequested` suppressed. **Graceful degradation (NFR-2):** if the Edge WebView2 Runtime is missing, the managed assemblies can't construct the control, or init otherwise fails, the form falls back to the legacy `WebBrowser` so Settings always renders instead of crashing. The installer publishes the Agent for the `win-x64` RID (framework-dependent) so the correct-bitness `WebView2Loader.dll` (verified x64, `Machine=0x8664`) lands at the publish root — a no-RID publish dropped the x86 loader and WebView2 would have silently fallen back forever.
-- **Code-coverage instrumentation (`coverlet.msbuild`) + `coverage.ps1` + CI step.** The test project gains `coverlet.msbuild` (MSBuild integration, since the VSTest `--collect` collector does not support .NET Framework targets) with cobertura output and sensible include/exclude defaults (`[Sentinel.Core]*`, generated/compiler code excluded). A new root `coverage.ps1` runs the suite instrumented and prints the line/branch summary (baseline ~39.7% line / 37.5% branch on `Sentinel.Core`), and the `Build & Test` workflow gains a `Coverage` step that uploads the cobertura report as a CI artifact so regressions are visible. Not threshold-gated yet; the number is now measurable and repeatable. Coverage artifacts write under the already-gitignored `TestResults/`.
+- **Agent dashboard now runs on Edge/Chromium (WebView2) with graceful fallback.** `AgentDashboardForm` prefers the `Microsoft.Web.WebView2` control (modern CSS grid/flexbox/JS, no IE11 quirks) instead of the legacy WinForms `WebBrowser` with its `FEATURE_BROWSER_EMULATION` IE11 shim. WebView2 is initialized without `await` on the Agent STA thread (NFR-6) via the `CoreWebView2InitializationCompleted` event; the per-user browser profile lives under `%LocalAppData%\Gnyida\WebView2` (the install dir may be read-only for the interactive user). The embedded host is locked down: DevTools off, default context menus off, accelerator keys off, `NewWindowRequested` suppressed. **Graceful degradation (NFR-2):** if the Edge WebView2 Runtime is missing, the managed assemblies can't construct the control, or init otherwise fails, the form falls back to the legacy `WebBrowser` so Settings always renders instead of crashing. The installer publishes the Agent for the `win-x64` RID (framework-dependent) so the correct-bitness `WebView2Loader.dll` (verified x64, `Machine=0x8664`) lands at the publish root — a no-RID publish dropped the x86 loader and WebView2 would have silently fallen back forever.
+- **Code-coverage instrumentation (`coverlet.msbuild`) + `coverage.ps1` + CI step.** The test project gains `coverlet.msbuild` (MSBuild integration, since the VSTest `--collect` collector does not support .NET Framework targets) with cobertura output and sensible include/exclude defaults (`[Gnyida.Core]*`, generated/compiler code excluded). A new root `coverage.ps1` runs the suite instrumented and prints the line/branch summary (baseline ~39.7% line / 37.5% branch on `Gnyida.Core`), and the `Build & Test` workflow gains a `Coverage` step that uploads the cobertura report as a CI artifact so regressions are visible. Not threshold-gated yet; the number is now measurable and repeatable. Coverage artifacts write under the already-gitignored `TestResults/`.
 
 ### Changed
 - Version stamp 3.0.5 -> 3.0.6.
@@ -1467,7 +1474,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 
 ## [3.0.3] - 2026-10-10
 ### Added
-- **Hardened quarantine removal** (`QuarantineManager.QuarantineFileAtomicAsync(..., hardenedRemoval: true)`) — mirrors the PowerShell `Antivirus.ps1` DLL remover. When the original cannot be deleted in place because it is mapped into a live process (delete lock) or its ACL denies delete, Sentinel now terminates the holder processes (`SafeKillProcessTree`, which still spares its own binaries and BSOD-critical processes) and seizes ownership (managed ACL first, `takeown`/`icacls` as fallback), then retries the delete — so a locked hostile module leaves disk immediately instead of only being scheduled for delete-on-reboot. Opt-in per call; the default callers (signed installers, routine detections) keep the conservative retry-then-reboot behavior unchanged.
+- **Hardened quarantine removal** (`QuarantineManager.QuarantineFileAtomicAsync(..., hardenedRemoval: true)`) — mirrors the PowerShell `Antivirus.ps1` DLL remover. When the original cannot be deleted in place because it is mapped into a live process (delete lock) or its ACL denies delete, Gnyida now terminates the holder processes (`SafeKillProcessTree`, which still spares its own binaries and BSOD-critical processes) and seizes ownership (managed ACL first, `takeown`/`icacls` as fallback), then retries the delete — so a locked hostile module leaves disk immediately instead of only being scheduled for delete-on-reboot. Opt-in per call; the default callers (signed installers, routine detections) keep the conservative retry-then-reboot behavior unchanged.
 
 ### Changed
 - **Aggressive unsigned-module sweep now covers every loadable-module extension**, not just `.dll`/`.winmd`. `AggressiveUnsignedDllSweepMonitor` enumerates each drive once and quarantines any unsigned module in `ModuleIdentity.ModuleExtensions` (`.dll`, `.winmd`, `.ocx`, `.cpl`, `.ax`, `.node`, `.drv`, `.acm`, `.tsp`, `.mui`, `.efi`), using hardened removal so locked modules are removed on sight. `DllUnloadEngine` mapped-DLL remediation also uses hardened removal (closes the "re-quarantined the same mapped DLL forever" path).
@@ -1478,7 +1485,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 
 ## [3.0.2] - 2026-10-08
 ### Fixed
-- **`AcousticThreatMonitor` unregistered — no longer runs.** Once activated in 3.0.1, its WASAPI-loopback Goertzel analysis of the live audio *output* stream and its session-muting (`SimpleAudioVolume.Mute`) degraded legitimate playback: a user reported YouTube audio breaking up/stuttering and ear discomfort immediately after installing 3.0.1, and stopping the Sentinel service resolved it. The thresholds were too aggressive and the muting too blunt for normal content. The monitor's `AddHostedService<AcousticThreatMonitor>()` registration in the Agent composition root has been removed, reverting it to its prior dead-but-compiled state; the class and its detection logic remain in the tree untouched, pending a redesign (opt-in, lighter-weight, far narrower thresholds) before it is ever re-enabled.
+- **`AcousticThreatMonitor` unregistered — no longer runs.** Once activated in 3.0.1, its WASAPI-loopback Goertzel analysis of the live audio *output* stream and its session-muting (`SimpleAudioVolume.Mute`) degraded legitimate playback: a user reported YouTube audio breaking up/stuttering and ear discomfort immediately after installing 3.0.1, and stopping the Gnyida service resolved it. The thresholds were too aggressive and the muting too blunt for normal content. The monitor's `AddHostedService<AcousticThreatMonitor>()` registration in the Agent composition root has been removed, reverting it to its prior dead-but-compiled state; the class and its detection logic remain in the tree untouched, pending a redesign (opt-in, lighter-weight, far narrower thresholds) before it is ever re-enabled.
 
 ## [3.0.1] - 2026-10-07
 ### Added
@@ -1515,7 +1522,7 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 
 ### Fixed
 - **Git/GitHub toolchain no longer tripped by the PPID-spoofing rule.** Added `git-remote-http`, `gh`, `git-credential-manager`, and `git-credential-manager-core` to the `AllowlistService` development-process set (which already held `git`/`git-remote-https`) so the normal git transport-helper and `gh -> git` spawn chains are recognized. The `ParentPidSpoofDetector` call site still requires a valid Authenticode/signer signature before skipping the KillProcess response, so names alone never self-authorize.
-- **PowerShell script-block rule no longer treats the bare product name "Sentinel" as a malicious signature.** The `Script: Malicious PowerShell Script Block` rule matched the substring "Sentinel", so any benign script referencing the product (e.g. `$env:ProgramData\Sentinel`, diagnostics, `push.ps1`) had its process tree killed. Narrowed to genuine service-tamper commands (`Stop-Service Sentinel`, `sc.exe stop Sentinel`, `Set-Service Sentinel`, etc.). Genuine attack-tool signatures (Mimikatz, AMSI, download cradles, injection APIs) are unchanged, and real Sentinel-shutdown attempts still escalate to Tier1.
+- **PowerShell script-block rule no longer treats the bare product name "Gnyida" as a malicious signature.** The `Script: Malicious PowerShell Script Block` rule matched the substring "Gnyida", so any benign script referencing the product (e.g. `$env:ProgramData\Gnyida`, diagnostics, `push.ps1`) had its process tree killed. Narrowed to genuine service-tamper commands (`Stop-Service Gnyida`, `sc.exe stop Gnyida`, `Set-Service Gnyida`, etc.). Genuine attack-tool signatures (Mimikatz, AMSI, download cradles, injection APIs) are unchanged, and real Gnyida-shutdown attempts still escalate to Tier1.
 - **Torrent/P2P clients are no longer killed by the C2/beaconing response.** `BeaconingDetector` now consults the existing `BulkTransferNoise` allowlist (qbittorrent, utorrent, bittorrent, transmission[-qt/-daemon], deluge[d/-gtk], tixati, vuze, azureus, frostwire, aria2c, and other known clients). A recognized client's statistical-beacon detection is demoted to Tier2 + LogOnly (so the "Tier2 never acts" rule guarantees no kill and no NetworkIsolate); the detection is still logged.
 
 ### Changed
@@ -1524,13 +1531,13 @@ Written after release from the v3.6.6..v3.6.7 diff (single commit `e151a3c`); th
 ## [2.9.7] - 2026-10-04
 
 ### Added
-- **Opt-in aggressive unsigned-DLL sweep** (`AggressiveUnsignedDllSweepMonitor`, gated behind `SentinelConfig.EnableAggressiveUnsignedDllSweep`, compiled default **false**). Walks ready Fixed/Removable/Network drives plus a System32 pass for `*.dll`/`*.winmd`, skips OS-critical/system/GAC/install/quarantine paths, verifies Authenticode, and quarantines unsigned candidates via the existing encrypted-vault `QuarantineManager`. Routed through SystemIntegrity (not Critical); no shelling out, no process-kill.
+- **Opt-in aggressive unsigned-DLL sweep** (`AggressiveUnsignedDllSweepMonitor`, gated behind `GnyidaConfig.EnableAggressiveUnsignedDllSweep`, compiled default **false**). Walks ready Fixed/Removable/Network drives plus a System32 pass for `*.dll`/`*.winmd`, skips OS-critical/system/GAC/install/quarantine paths, verifies Authenticode, and quarantines unsigned candidates via the existing encrypted-vault `QuarantineManager`. Routed through SystemIntegrity (not Critical); no shelling out, no process-kill.
 - **IDS command-line detection rule** (`IdsCommandLineRule`, Tier2Indicator / LogOnly). Matches process command lines against 18 compiled LOLBin/evasion patterns (certutil download, encoded PowerShell, bitsadmin, mshta remote, etc.). Observe-only; never triggers a response.
 - **Pseudo-HIPS Phase 1** (userland, within hard constraints):
   - *Audit-first ASR tier* in `HardeningModule` — new lockout-capable ASR rules ship in Audit (`2`) before enforcement; `c1db55ab` stays out of Block, Safe-Mode-reboot rule excluded.
   - *Self-process mitigations* via `SetProcessMitigationPolicy` (CFG, DEP, strict-handle, extension-point-disable, image-load policy); `BlockNonMicrosoftBinaries` gated on a signed build. All fail-soft.
   - *Terminal-class fast lane* in `DetectionEngine` — a priority `Channel<T>` routes `IsAttackClassTerminal` events to response ahead of the normal queue; Tier2-never-acts and the mandatory pre-action audit are preserved.
-- **SentinelAutoRotate** — a standalone net48 tool (fully decoupled from the EDR runtime; no project references in either direction) that rotates a local account's password to a strong random value every 10 minutes and keeps the host auto-logged-in via the LSA `DefaultPassword` secret. Bundled in the installer behind an **unchecked-by-default** opt-in checkbox with a label stating the autologon + machine-recoverable-credential tradeoff. Never blanks the password.
+- **GnyidaAutoRotate** — a standalone net48 tool (fully decoupled from the EDR runtime; no project references in either direction) that rotates a local account's password to a strong random value every 10 minutes and keeps the host auto-logged-in via the LSA `DefaultPassword` secret. Bundled in the installer behind an **unchecked-by-default** opt-in checkbox with a label stating the autologon + machine-recoverable-credential tradeoff. Never blanks the password.
 
 ### Changed
 - **Quarantine git allowlist is now signer-based.** Replaced the hardcoded list of absolute `git.exe` paths in `QuarantineManager` with a trusted-publisher check (valid Authenticode signature + signer in a `TrustedPublishers` set, e.g. `Johannes Schindelin`). Path-independent and not attacker-controllable, per the "no attacker-controllable trust" constraint.
@@ -1567,7 +1574,7 @@ DPAPI override, or planted file can turn them off:
   `AutoBlockRogueCast` within the suite are likewise hardwired `true`.
 - **`MitmDefense.KnownRogueCastIps` seeded with `192.168.1.100`** (was empty) - the confirmed
   attacker relay is blocked by default. `RogueCastMacPrefixes` already carried `B0-B3-69`.
-- **`SentinelConfig.legacy chain-wait mode` => always `false`** (no-op setter). Response fires on
+- **`GnyidaConfig.legacy chain-wait mode` => always `false`** (no-op setter). Response fires on
   single high-confidence Tier1 signals; observe mode can no longer be selected by config,
   override, or planted file. The `config.legacy chain-wait mode = true` lines in the Agent/Service
   host startup were removed. Tradeoff: higher false-positive-action risk, accepted for a
@@ -1575,7 +1582,7 @@ DPAPI override, or planted file can turn them off:
   (unchanged invariant). The observe-mode branches remain in `AdvancedResponseEngine` /
   `ResponsePolicy` as unreachable dead code; a full removal of the concept is deferred to a
   separate, test-covered refactor.
-- **`SentinelConfig.ThreatIntelProactiveFirewall` and `SentinelConfig.BlockFcmPushChannel` =>
+- **`GnyidaConfig.ThreatIntelProactiveFirewall` and `GnyidaConfig.BlockFcmPushChannel` =>
   always `true`** (no-op setters).
 - **`VpnShieldConfig.Enabled` => always `true`** (no-op setter). Configure a trusted
   `ProviderProfile` for the shield to actually raise a tunnel on a confirmed network-tamper
@@ -1583,7 +1590,7 @@ DPAPI override, or planted file can turn them off:
 
 ### Removed - stale plaintext `appsettings.json`
 
-Both `src/Sentinel.Agent/appsettings.json` and `src/Sentinel.Service/appsettings.json` are
+Both `src/Gnyida.Agent/appsettings.json` and `src/Gnyida.Service/appsettings.json` are
 deleted. They violated the "no plaintext config on disk" design (all operational defaults are
 compiled; per-deployment overrides live in DPAPI-encrypted `config.enc`). They were already
 inert at runtime - the host strips every `JsonConfigurationSource` via
@@ -1620,7 +1627,7 @@ removed (`ResponsePolicyTests.Inline_Host_Mutation_Blocked_While_Observing`, the
 
 ### Fixed - false positives on legitimate Windows Update workers and case-sensitive self-protection path checks
 
-Three false positives observed in production telemetry (`%ProgramData%\Sentinel\events.jsonl`)
+Three false positives observed in production telemetry (`%ProgramData%\Gnyida\events.jsonl`)
 are corrected. None weakened detection coverage; each was a trusted-path/name gap.
 
 - **Token Theft: Non-Service Process with SYSTEM Token** was killing `MoUsoCoreWorker.exe`
@@ -1670,7 +1677,7 @@ evaluation, so detection correctness is unchanged. The index is:
   read can be skipped, so it is deliberately unsigned (unlike verdict payloads).
 - **Batched** - writes accumulate in memory and flush on a 60s timer / at a 200-entry
   threshold / on dispose, so the fix never reintroduces per-file write amplification.
-- Persisted under `ProgramData\Sentinel\Secure\scan_index.dat`.
+- Persisted under `ProgramData\Gnyida\Secure\scan_index.dat`.
 
 The inter-file walk delay was also raised from 50 ms to 200 ms to further lower the walk's
 steady-state I/O footprint. New/renamed files still take the immediate fast path, so
@@ -1678,8 +1685,8 @@ first-execution tagging latency is unaffected.
 
 ### Changed - test host no longer shadow-copies assemblies
 
-Added `tests/Sentinel.Tests/xunit.runner.json` with `shadowCopy: false` so the net48 test
-host runs `Sentinel.Core.dll` in place instead of copying it into `%LocalAppData%\Temp`.
+Added `tests/Gnyida.Tests/xunit.runner.json` with `shadowCopy: false` so the net48 test
+host runs `Gnyida.Core.dll` in place instead of copying it into `%LocalAppData%\Temp`.
 
 ## [2.9.1] - 2026-09-27
 
@@ -1713,7 +1720,7 @@ this closes the narrower file-drop gap. Covered by `SecurityFileScopeTests`.
 
 ### Added - ETW-TI call-stack (STACKWALK) telemetry and unbacked-return-frame detection
 
-Sentinel already enabled the Microsoft-Windows-Threat-Intelligence (ETW-TI) provider but
+Gnyida already enabled the Microsoft-Windows-Threat-Intelligence (ETW-TI) provider but
 discarded the single most valuable thing it can carry: the call stack captured at the
 moment a sensitive syscall fires. This release consumes it.
 
@@ -1766,7 +1773,7 @@ the earlier operator-config-only `EnforcedDomainBlocks`/`EnforcedIpBlocks` array
 - Domain entries are normalized to a bare lowercase host (scheme/port/path/leading-dot stripped) so
   config and runtime entries dedupe identically. IP entries refuse loopback / broadcast / `Any` /
   invalid addresses, so a caller can never self-inflict a lockout.
-- `HostsFileGuard` now enforces the **union** of `SentinelConfig.EnforcedDomainBlocks` /
+- `HostsFileGuard` now enforces the **union** of `GnyidaConfig.EnforcedDomainBlocks` /
   `EnforcedIpBlocks` and the runtime blocklist. Domains get a hosts-file line (apex + `www`) plus a
   wildcard NRPT rule (apex + all subdomains -> `0.0.0.0`); IPs get inbound + outbound Windows Firewall
   rules. Enforcement remains gated on `ProductPosture.AllowsProactiveHostLockdown`
@@ -1811,7 +1818,7 @@ the escalation is *proven*. This directly targets the physical-access / planted-
   holding the token - behavioral, not name/path-based.
 - **CLFS exploitation footprint sensor (`ClfsExploitationMonitor`, new).** CLFS (`clfs.sys`) is one
   of the most-exploited kernel LPE primitives - CVE-2025-29824 was an in-the-wild ransomware 0-day,
-  alongside CVE-2025-32706 / -60709 / -62470 and CVE-2026-40407 - and Sentinel had **zero** coverage.
+  alongside CVE-2025-32706 / -60709 / -62470 and CVE-2026-40407 - and Gnyida had **zero** coverage.
   Userland cannot see the malformed IOCTL, but it can see the footprint: a CLFS Base Log File
   (`.blf`) dropped into a user-writable staging path, outside the legitimate CLFS/TxR trees
   (`System32\config`, `System32\SMI`, TxR journals - the non-attacker-controllable anchor). Emitted
@@ -1862,7 +1869,7 @@ tell the user to update a vulnerable driver and can NEVER authorize a response.
 
 ### Added - Container-content inspection + isolation-environment containment wired (ISO / Docker / VM)
 
-Closes a real detection blind spot and a class of dead-response-code where Sentinel could *see* an
+Closes a real detection blind spot and a class of dead-response-code where Gnyida could *see* an
 isolation-hosted threat but never *contain* it.
 
 **Bounded, bomb-safe archive / disk-image content inspection.** New `ArchiveContentInspector` walks
@@ -1880,7 +1887,7 @@ unbounded amount; hitting a cap flags the container as un-vetted (fail closed), 
 - `FileVerdictScanner` now inspects `.zip/.iso/.img` (and the appx/msix/vsix/nupkg/jar family) and
   emits an **observe-tier** detection - `Content Smuggling: Decompression Bomb in Container` /
   `Payload in Disk Image` / `Payload in Archive`. These are **Tier2 / LogOnly / `WeakObserveSeed`**:
-  a container's contents and file names are attacker-controlled, so per Sentinel's constraints they
+  a container's contents and file names are attacker-controlled, so per Gnyida's constraints they
   can NEVER self-authorize a response. They seed correlation so that if the payload is later
   extracted and detonated, the behavioral terminal (reverse shell / C2 / credential theft / bomb
   expansion in the PseudoSandbox) completes a chain that can be responded to.
@@ -1949,7 +1956,7 @@ leg the correlation layer can chain to raise the protective VPN shield.
   raise the shield; a lone signal does not.
 
 **Constraint compliance / honest ceiling:** observe + record + corroborate, not prevention. Adding a
-route or a gateway is a legitimate admin/DHCP operation; Sentinel does not block or revert it (the
+route or a gateway is a legitimate admin/DHCP operation; Gnyida does not block or revert it (the
 existing Tier1 default-route/gateway/`/32`-netmgmt responses are unchanged). These fixes remove the
 silent blind spots so the manipulation is visible, durably recorded, and able to corroborate a
 man-in-the-middle chain. Tier2/observe-only; no new kill authority, no new host mutation.
@@ -1961,7 +1968,7 @@ man-in-the-middle chain. Tier2/observe-only; no new kill authority, no new host 
 
 Closes a silent coverage gap. When a network adapter appears on the host after startup - a USB
 Ethernet dongle, a second Wi-Fi NIC, or an overlay/VPN virtual adapter (WireGuard / Tailscale /
-OpenVPN) - Windows surfaces no user-visible event, and Sentinel previously did not record it either.
+OpenVPN) - Windows surfaces no user-visible event, and Gnyida previously did not record it either.
 `NetworkInterfaceGuard` baselined physical adapters only to *re-enable* one that went down; it never
 diffed for **additions**, and the route monitor deliberately excludes virtual adapters. So the
 on-host first step of "adding a second network path" went unobserved.
@@ -1983,7 +1990,7 @@ on-host first step of "adding a second network path" went unobserved.
 
 **Constraint compliance / honest ceiling:** this is observe + record + corroborate, not prevention.
 A local admin can always add a network adapter - that is a legitimate OS operation requiring exactly
-the privilege the attacker would already have (threat-model B1). Sentinel cannot and does not try to
+the privilege the attacker would already have (threat-model B1). Gnyida cannot and does not try to
 block it; it makes the addition **visible and durably recorded**, and lets it corroborate a
 man-in-the-middle chain so the protective tunnel can rise. Tier2/observe-only; no kill authority,
 no new host mutation.
@@ -2092,13 +2099,13 @@ and legacy chain-wait mode invariants are byte-for-byte the same code paths, jus
 
 ### Added - Command-line obfuscation lexical scorer (state-of-the-art LOLBin coverage)
 
-New soft-signal scorer that detects the *shape* of command-line obfuscation, closing Sentinel's
+New soft-signal scorer that detects the *shape* of command-line obfuscation, closing Gnyida's
 biggest modern blind spot. Current tradecraft increasingly avoids dropping malware and instead
 lives off signed, trusted binaries (LOLBins) launched with obfuscated command lines that defeat
 signature/regex matching - the dominant pattern in recent threat reporting and research
 (CrowdStrike 2026 Global Threat Report summary; arXiv:2408.02637 "Command-line Obfuscation
 Detection using Small Language Models"; ACL/NLPAICS 2026 work on command-line obfuscation under
-extreme class imbalance). Sentinel already matched LOLBin abuse by regex (`Rules.cs`,
+extreme class imbalance). Gnyida already matched LOLBin abuse by regex (`Rules.cs`,
 `ScriptExecutionMonitor`) and anchored canonical paths (`LolbinCanonicalPaths`); it had no
 statistical/lexical analysis of the command line itself. This adds exactly that, as a soft signal.
 
@@ -2116,7 +2123,7 @@ statistical/lexical analysis of the command line itself. This adds exactly that,
   model ships. Graceful-degrade and null-on-empty, consistent with the PE/URL scorers.
 - **`CommandLineObfuscationSignal`** enrichment signal - lets any monitor with a command line
   publish the score onto the `ContextBus` for the correlation engines and `ChainTracer`.
-- **Trainer** - `Sentinel.MlTrainer` gains optional `cmdline_model.zip` training from a
+- **Trainer** - `Gnyida.MlTrainer` gains optional `cmdline_model.zip` training from a
   `CommandLineDataSet.csv[.zip]` (`commandline,label`); it skips gracefully with a message when the
   dataset is absent, and the packaging copy is `Exists`-guarded.
 - Tests: 5 new cases in `MlFeatureTests` (encoded-PowerShell detection, download-cradle detection,
@@ -2187,7 +2194,7 @@ plus the password stored as an LSA secret), set `DisableCAD=1`, disabled the scr
 and pinned UAC to consent-only. The net effect was to remove the interactive authentication boundary
 rather than strengthen it: a machine that boots straight to the desktop with no credential entry,
 never locks, and whose elevation prompt never asks for a password. That combination is an access /
-persistence mechanism and conflicts with Sentinel's hard constraints (userland-only, no persistence
+persistence mechanism and conflicts with Gnyida's hard constraints (userland-only, no persistence
 tricks, no self-hiding, never trust a signal an attacker controls). In practice the rotation also
 failed silently (ADSI `SetPassword` requires privileges the running context often lacks, and the
 exception was swallowed at Debug level), leaving accounts in a blank-password state - the worst of
@@ -2199,8 +2206,8 @@ remote sessions), and `BuiltinAdminGuard`, combined with OS-level "deny network 
 user-rights hardening for privileged local accounts. Credential secrecy is not achieved by rotating
 the interactive login password.
 
-- Deleted `PasswordRotationGuard` class from `Sentinel.Core/Monitors/CredentialProtectionMonitors.cs`.
-- Removed its `MonitorGroup` entry and `AddSingleton` registration from `Sentinel.Service/Program.cs`.
+- Deleted `PasswordRotationGuard` class from `Gnyida.Core/Monitors/CredentialProtectionMonitors.cs`.
+- Removed its `MonitorGroup` entry and `AddSingleton` registration from `Gnyida.Service/Program.cs`.
 - Updated `docs/design.md`, `docs/THREAT_MODEL.md`, and `docs/architecture-council.md` to drop the
   monitor and the retired `Install-PasswordRotator.ps1` council row.
 
@@ -2241,7 +2248,7 @@ control of a browser), keying on **behavior, never on the domain**.
   `BrowserControlChannel` (a browser is the driven server = remote-control/session-theft shape,
   escalated even when the client is signed/in-path), `UntrustedController` (script-host or
   user-writable client), or `DataHandoff` (signed/in-path client -> non-browser app; observe-first).
-- New `SentinelConfig.RiskyPairingOrigins` (seeded with `forum.hr` as an example) is an **aggravator
+- New `GnyidaConfig.RiskyPairingOrigins` (seeded with `forum.hr` as an example) is an **aggravator
   only**: a domain match never fires a detection or action on its own - it only raises confidence /
   nudges an already-established behavioral signal, and can never promote a benign `DataHandoff` to
   kill grade. This deliberately avoids domain-identity trust as a verdict.
@@ -2253,13 +2260,13 @@ default - nothing is blocked unless the operator populates the lists; no domain 
 Both gate on `ProductPosture.AllowsProactiveHostLockdown` (`MayEnforceConfiguredBlocks` seam +
 default-deny test) and self-heal on startup and every `HostsFileGuard` scan.
 
-- `SentinelConfig.EnforcedDomainBlocks` - each domain is blocked via the proven forum.hr path: a
+- `GnyidaConfig.EnforcedDomainBlocks` - each domain is blocked via the proven forum.hr path: a
   hosts-file line (apex + `www`) **plus** a wildcard NRPT rule (leading-dot suffix -> `0.0.0.0`,
   apex + all subdomains) under the GP-managed policy hive, with a stable per-domain rule GUID
   (`NrptRuleGuidForDomain`). Because `BrowserDnsPolicyGuard` keeps DoH disabled, these blocks are
   authoritative for Chromium/Firefox browsers too (matching the observed forum.hr behavior).
-- `SentinelConfig.EnforcedIpBlocks` - each IP is blocked with inbound + outbound Windows Firewall
-  rules (`Sentinel-EnforcedIpBlock-*`). Loopback / broadcast / `Any` / invalid addresses are refused.
+- `GnyidaConfig.EnforcedIpBlocks` - each IP is blocked with inbound + outbound Windows Firewall
+  rules (`Gnyida-EnforcedIpBlock-*`). Loopback / broadcast / `Any` / invalid addresses are refused.
   NRPT cannot match a raw IP, so IP blocking is a separate firewall mechanism.
 - Input hardening: `NormalizeBlockDomain` strips scheme/port/path/leading-dot; firewall args are
   fixed-shape with the IP validated first (no untrusted interpolation into a shell).
@@ -2545,11 +2552,11 @@ The dedicated forum.hr surveillance monitor added in v1.7.6 proved useless again
 forum.hr drive-by reinfection - it watched non-browser DNS/TCP to the domain but never
 prevented the browser-delivered compromise. Removed entirely:
 
-- Deleted `src/Sentinel.Core/ForumHrWatchMonitor.cs`.
+- Deleted `src/Gnyida.Core/ForumHrWatchMonitor.cs`.
 - Removed its DI registration and NetworkIntegrity monitor-group entry in `Program.cs`.
 - Removed the `ForumHrWatchMonitor` field, constructor parameter, and `RecordDnsQuery` feed
   from `DnsQueryMonitor`.
-- Deleted `tests/Sentinel.Tests/V176FeatureTests.cs` (tested only the removed monitor).
+- Deleted `tests/Gnyida.Tests/V176FeatureTests.cs` (tested only the removed monitor).
 
 ### Changed - forum.hr blocked again at the hosts-file level (restores pre-v1.7.6 policy)
 
@@ -2576,7 +2583,7 @@ also installs a wildcard Name Resolution Policy Table rule that blocks the entir
 - NRPT rule under the GP-managed policy hive
   `HKLM\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient\DnsPolicyConfig` (the authoritative
   override the DNS client honors - same hive `BrowserDnsPolicyGuard` and `AdBlocker.ps1` use),
-  with a stable Sentinel-owned GUID.
+  with a stable Gnyida-owned GUID.
 - `Name` = `.forum.hr` (leading-dot suffix) matches the apex **and every subdomain**.
 - `GenericDNSServers` = `0.0.0.0` sinkholes all resolutions; `Version`=2, `ConfigOptions`=0x8.
 - Applied on startup and re-asserted on every periodic scan; repaired if removed or altered,
@@ -2595,7 +2602,7 @@ legacy chain-wait mode, but it must still be *mapped* somewhere.
 
 `StateReconciliationMonitor` (SystemIntegrity group, 5-min cadence, 30s boot-settle) keeps a
 **reboot-durable** baseline (`ModuleBaselineStore`, `System.Text.Json` under
-`%ProgramData%\Sentinel\baseline`, SYSTEM+Admins ACL) of the loaded-module set of a fixed list of
+`%ProgramData%\Gnyida\baseline`, SYSTEM+Admins ACL) of the loaded-module set of a fixed list of
 long-lived, low-churn processes (`explorer`, `winlogon`, `services`, `lsass`, `csrss`, `dwm`,
 `sihost`, `taskhostw`, `runtimebroker`). Each pass diffs the live set against the baseline and runs
 new modules through **attribution**: a delta is suppressed if it has a trusted load position
@@ -2707,7 +2714,7 @@ Closes a real userland gap: a malicious **Layered Service Provider** is a DLL re
 Winsock2 catalog that Windows loads into *every* process that opens a socket - a system-wide,
 driverless network hook that can inspect, redirect, or exfiltrate all host traffic. It is classic
 userland persistence + traffic hijack (WebHancer / New.Net / CommonName and modern
-re-implementations), squarely in Sentinel's scope, and no existing monitor enumerated the catalog.
+re-implementations), squarely in Gnyida's scope, and no existing monitor enumerated the catalog.
 
 The new `WinsockLspIntegrityMonitor` (NetworkIntegrity group, 10-minute poll, 20s startup delay)
 reads `HKLM\SYSTEM\CurrentControlSet\Services\WinSock2\Parameters` and walks the current protocol
@@ -2723,7 +2730,7 @@ and namespace catalogs, resolving each provider DLL (namespace `LibraryPath`; pr
 - **LSP chain gap** - a `Num_Catalog_Entries` count with a missing indexed entry (the "broken
   Internet access" shape HijackThis flags as O10).
 
-Sentinel deliberately does **not** rewrite the Winsock catalog inline - a wrong edit breaks all
+Gnyida deliberately does **not** rewrite the Winsock catalog inline - a wrong edit breaks all
 host networking; repair (`netsh winsock reset` + reboot) stays a human decision. The monitor is
 explainability and correlation fuel only.
 
@@ -2769,7 +2776,7 @@ versioning, build, stamping, commit, or push.
 ### Added - Update/servicing-surface abuse observation (`UpdateServicingMonitor`)
 
 Answers a real question - "can something malicious ride in through the Windows update / CAB
-servicing path?" - without pretending to do something Sentinel cannot. Sentinel deliberately does
+servicing path?" - without pretending to do something Gnyida cannot. Gnyida deliberately does
 **not** try to validate whether an update is genuine: that is impossible from userland, and a truly
 Microsoft-signed, CDN-delivered payload (Flame-tier certificate forgery) is invisible to any
 userland tool. Instead, honoring the behavioral-signals-only constraint, the new
@@ -2814,7 +2821,7 @@ adding any function:
   the install root (`AppContext.BaseDirectory`, `HardeningModule.ApplyLgpoSecurityPolicy`), never
   from `HardeningResources\`, so that whole subfolder was dead weight (~0.9 MB per tree).
 - **Debug symbols (`*.pdb`).** Framework-dependent `dotnet publish` includes `.pdb` files by
-  default; `Sentinel.Core.pdb` alone shipped in both trees (~1 MB total). Debug symbols have no
+  default; `Gnyida.Core.pdb` alone shipped in both trees (~1 MB total). Debug symbols have no
   place in an end-user release installer.
 
 `installer/build.ps1` now prunes both from each publish tree after publishing and before the
@@ -2878,7 +2885,7 @@ paths; detection tiers, response contracts, and the legacy chain-wait mode law a
 ### Added - Protective VPN-shield remediation for confirmed local network tampering
 
 Closes a path-level gap: when the local network is actively under a man-in-the-middle attack,
-Sentinel could detect and clean the tampering, but the user's traffic was exposed on the hostile
+Gnyida could detect and clean the tampering, but the user's traffic was exposed on the hostile
 path during the window between detection and cleanup. The VPN shield encrypts and reroutes traffic
 off the compromised path *while* the network is cleaned, then drops the tunnel once the path is
 verified clean.
@@ -2893,7 +2900,7 @@ verified clean.
   `IVpnTunnel` abstraction so the orchestration is unit-tested without dialing.
 - **Fail-safe by design.** If the network cannot be *verified* clean (or verification errors), the
   tunnel STAYS UP. On `MaxShieldSeconds` expiry the incident is escalated and the tunnel is held -
-  Sentinel never silently drops an unverified-clean shield.
+  Gnyida never silently drops an unverified-clean shield.
 - **Trusted provider preferred; VPN Gate is a caveated last resort.** `VpnShieldConfig.ProviderProfile`
   (a paid Proton/Mullvad or corporate RAS entry) is always preferred. VPN Gate public relays are a
   fallback only when `UseVpnGateFallback` is set and no trusted profile exists - and the incident log
@@ -2912,7 +2919,7 @@ verified clean.
   (rogue WPAD/PAC auto-proxy), and `WiFiDeauth` / `WiFiEvilTwin` (deauth flood and evil-twin BSSID
   change). A single vector never self-confirms; WPAD (a `WeakObserveSeed`) also continues to feed the
   existing `WPAD Proxy Hijack Chain`.
-- **Config.** `VpnShieldConfig` on `SentinelConfig.VpnShield` (default `Enabled=false`), with
+- **Config.** `VpnShieldConfig` on `GnyidaConfig.VpnShield` (default `Enabled=false`), with
   `ProviderProfile`, `UseVpnGateFallback`, `VpnGateEntryName`, `VerifyIntervalSeconds`,
   `CleanSweepsRequired`, `MaxShieldSeconds`. `ProductPosture.AllowsVpnShield` gates the whole path.
 
@@ -2932,7 +2939,7 @@ network-tamper chain plus explicit `VpnShield.Enabled` opt-in.
 Closes the largest remaining real-world gap for a personal user's data: the modern infostealer
 kill chain (RedLine / Lumma / Vidar class) that never touches LSASS. These stealers read the
 browser credential/session SQLite stores and developer secret files directly, optionally package
-the victim's documents into an archive, then exfiltrate. Sentinel could see the outbound leg and
+the victim's documents into an archive, then exfiltrate. Gnyida could see the outbound leg and
 the LSASS-based path, but had no *attributed, correlatable* signal for the file-access legs of the
 general case.
 
@@ -2976,12 +2983,12 @@ category mapping. Full suite green (2257 passed / 0 failed).
 
 ### Added - Durable evidence survival (threat-model B1)
 
-Makes attack evidence - and the act of stopping Sentinel itself - survive a local-admin
+Makes attack evidence - and the act of stopping Gnyida itself - survive a local-admin
 suppression, without pretending userland can prevent that suppression. This is the first roadmap
 Theme 1 item (`docs/ROADMAP.md`), implemented as spec `.kiro/specs/durable-evidence-survival/`.
 
 - **Stop classification (alert-before-suppression).** New `ShutdownContext` process-lifetime signal
-  records when a stop is *expected* - cooperative SCM stop (`SentinelService.StopAsync`), OS
+  records when a stop is *expected* - cooperative SCM stop (`GnyidaService.StopAsync`), OS
   shutdown (`IHostApplicationLifetime.ApplicationStopping`), upgrade, or uninstall. The
   `AntiTamperGuard` exit hook (`WriteLastGasp`) now classifies: an expected stop is logged as a
   `SERVICE_STOP_EXPECTED` lifecycle event; an unexpected exit (e.g. `taskkill`, or a stop that never
@@ -2990,11 +2997,11 @@ Theme 1 item (`docs/ROADMAP.md`), implemented as spec `.kiro/specs/durable-evide
 - **Off-host evidence mirror (opt-in, default off).** New
   `AutoIncidentReporting.MirrorEvidenceOffHost`. When enabled, each chain-confirmed evidence pack
   also uploads a signed `EvidenceSummary` via a new `/report/evidence` route on the existing
-  HMAC-signed ThreatReporting proxy, so a local admin who suppresses Sentinel cannot also erase the
+  HMAC-signed ThreatReporting proxy, so a local admin who suppresses Gnyida cannot also erase the
   proof. Fail-closed (FR-11: skipped silently without a >=16-char secret), never transmits file
   contents or secrets, and carries the machine-bound manifest HMAC only as an origin proof.
 - **Audit log now sits beside the events log.** `JsonlEventLogger`'s append-only `audit-*.jsonl`
-  is written in the same directory as `events.jsonl` (ProgramData\Sentinel in production, or the
+  is written in the same directory as `events.jsonl` (ProgramData\Gnyida in production, or the
   supplied custom directory) so the audit trail travels with the log and is testable.
 
 ### Honest ceiling
@@ -3028,7 +3035,7 @@ detection, and pins that every conditional null-sibling branch stays non-termina
 
 ### Added
 
-- `tests/Sentinel.Tests/TerminalFamilyMigrationParityTests.cs` - 43 parity/safety guards for the
+- `tests/Gnyida.Tests/TerminalFamilyMigrationParityTests.cs` - 43 parity/safety guards for the
   typed-family migration (see `docs/typed-family-migration.md` "Test guards"). Emit shapes mirror
   the actual tagged sites; new tagged sites must add a shape to `TaggedTerminalShapes`.
 
@@ -3082,7 +3089,7 @@ actual v2.5.5 runtime behaviour:
   was missing 14+ solo-confirm paths added in v2.5.2-v2.5.6. "ADS verdict is the only
   Councilor whose signal alone authorizes a kill" corrected. ASCII diagram cleaned.
 - `docs/design.md`: version header 2.3.0 -> 2.5.6; `ProductInfo.Version` table updated.
-- `src/Sentinel.Core/ResponsePolicy.cs`: `KillGradeTerminalFamilies` doc explains Exfil
+- `src/Gnyida.Core/ResponsePolicy.cs`: `KillGradeTerminalFamilies` doc explains Exfil
   and BYOVD intentional omission; `ExcludedAncestryRoots` doc explains svchost/explorer
   blind spot and the accepted tradeoff; `IsAttackClassTerminal` doc updated.
 
@@ -3094,9 +3101,9 @@ to assert always-on semantics. `V212WorkFirstTests`, `V175FeatureTests`, and
 **ML model zips removed from installer.** `pe_model.zip` + `url_model.zip` added ~2MB to
 the installer. `MlThreatScorer` already degrades gracefully to null scoring when models are
 absent - all callers null-check the return value. The `<None Include>` entries in
-`Sentinel.Core.csproj` are commented out (easy to restore). Pre-built zips removed from
+`Gnyida.Core.csproj` are commented out (easy to restore). Pre-built zips removed from
 `publish/agent/MlModels/` and `publish/service/MlModels/`. Source copies in
-`src/Sentinel.Core/MlModels/` are now gitignored. `tools/Sentinel.MlTrainer/README.md`
+`src/Gnyida.Core/MlModels/` are now gitignored. `tools/Gnyida.MlTrainer/README.md`
 added to document model provenance, algorithm parameters, and the train/test split.
 
 **Docs folder reorganised.** Root-level technical docs moved to `docs/`:
@@ -3105,10 +3112,10 @@ added to document model provenance, algorithm parameters, and the train/test spl
 `README.md`, `CHANGELOG.md`, and `LICENSE` remain at root (GitHub convention).
 
 **Release hygiene.** `TestResults/` added to `.gitignore`; stale `fail.trx` and `v193.trx`
-artifacts removed. `src/Sentinel.Core/MlModels/*.zip` added to `.gitignore`. Version
+artifacts removed. `src/Gnyida.Core/MlModels/*.zip` added to `.gitignore`. Version
 strings unified across `ProductInfo.Version`, all three `<Version>` csproj tags,
 `setup.iss`, `version.txt` (both publish dirs), and five test files that asserted "2.5.4".
-Tripled `<None Include>` entries for MlModels in `Sentinel.Core.csproj` fixed.
+Tripled `<None Include>` entries for MlModels in `Gnyida.Core.csproj` fixed.
 
 ### Changed
 
@@ -3117,23 +3124,23 @@ Tripled `<None Include>` entries for MlModels in `Sentinel.Core.csproj` fixed.
 - `ResponsePolicy.ExcludedAncestryRoots` - added doc comment explaining svchost/explorer blind spot and accepted tradeoff.
 - `WebDashboardService` - hardened mode display: dead `"disabled (work-first)"` ternary branch replaced with `"ENABLED (always-on)"`.
 - `ProductInfo.Version` -> `2.5.6`.
-- `Sentinel.Core.csproj`, `Sentinel.Service.csproj`, `Sentinel.Agent.csproj` - `<Version>` 2.5.5 -> 2.5.6.
-- `Sentinel.Core.csproj` - MlModels `<None Include>` commented out; ML.NET version skew comment added.
-- `installer/setup.iss` - all version strings 2.5.5 -> 2.5.6; output filename `SentinelSetup-2.5.6.exe`.
+- `Gnyida.Core.csproj`, `Gnyida.Service.csproj`, `Gnyida.Agent.csproj` - `<Version>` 2.5.5 -> 2.5.6.
+- `Gnyida.Core.csproj` - MlModels `<None Include>` commented out; ML.NET version skew comment added.
+- `installer/setup.iss` - all version strings 2.5.5 -> 2.5.6; output filename `GnyidaSetup-2.5.6.exe`.
 - `publish/*/version.txt` - 2.5.5 -> 2.5.6.
 - `docs/constraints.md` - version header 2.5.4 -> 2.5.6; `EnforceActiveResponse` clause fixed; OBSERVE/WORK-FIRST hardening gate corrected; `ALLOCVM_REMOTE` added to exceptions; Campaign-IOC filename carve-out row added.
 - `docs/architecture-council.md` - fully regenerated President's Law table (Tier A + Tier B); "only Councilor" claim corrected; ASCII diagram cleaned; Last updated note updated to v2.5.6.
 - `docs/design.md` - version header 2.3.0 -> 2.5.6; `ProductInfo.Version` table 2.5.4 -> 2.5.6.
 - `README.md` - version badge 2.5.4 -> 2.5.6; hardening description updated; installer download link updated; docs table paths updated.
-- `.gitignore` - added `TestResults/`, `src/Sentinel.Core/MlModels/*.zip`.
-- `tools/Sentinel.MlTrainer/README.md` - new file documenting model provenance, algorithm, training data requirements, and update policy.
+- `.gitignore` - added `TestResults/`, `src/Gnyida.Core/MlModels/*.zip`.
+- `tools/Gnyida.MlTrainer/README.md` - new file documenting model provenance, algorithm, training data requirements, and update policy.
 
 ### Fixed
 
-- `tests/Sentinel.Tests/ProductPostureTests.cs` - all four tests updated for v2.5.5+ always-on hardening model.
-- `tests/Sentinel.Tests/V212WorkFirstTests.cs` - `DefaultConfig_DoesNotLockdownUsbOrMitm` updated.
-- `tests/Sentinel.Tests/V175FeatureTests.cs` - removed no-op `RestrictivePortHardeningEnabled = false` setter call.
-- `tests/Sentinel.Tests/V208SecurityHardeningTests.cs`, `V220SecurityHardeningTests.cs`, `V228WmiHardeningTests.cs`, `WeightedCorrelationEngineTests.cs`, `V212WorkFirstTests.cs` - stale `"2.5.4"` version assertions updated to `"2.5.6"`.
+- `tests/Gnyida.Tests/ProductPostureTests.cs` - all four tests updated for v2.5.5+ always-on hardening model.
+- `tests/Gnyida.Tests/V212WorkFirstTests.cs` - `DefaultConfig_DoesNotLockdownUsbOrMitm` updated.
+- `tests/Gnyida.Tests/V175FeatureTests.cs` - removed no-op `RestrictivePortHardeningEnabled = false` setter call.
+- `tests/Gnyida.Tests/V208SecurityHardeningTests.cs`, `V220SecurityHardeningTests.cs`, `V228WmiHardeningTests.cs`, `WeightedCorrelationEngineTests.cs`, `V212WorkFirstTests.cs` - stale `"2.5.4"` version assertions updated to `"2.5.6"`.
 
 
 ## [2.5.5] - 2026-09-07
@@ -3143,7 +3150,7 @@ Hardening always-on, privilege tightening, new BYOVD drivers, WSL fingerprint de
 **Hardening is now unconditional.** The `RestrictivePortHardening` config toggle has been
 removed. IPSec port lockdown, ASR Block rules, RPC/DCOM firewall, remote session guard,
 registry hardening, credential hardening (LSASS PPL, WDigest off), browser hardening,
-and LGPO security policy now run on every Sentinel startup with no config gate. The
+and LGPO security policy now run on every Gnyida startup with no config gate. The
 work-first observe-only default is retired. `IPSecIntegrityGuard` and `AsrPolicyGuard`
 always self-heal; `RemoteSessionGuard` always enforces. The dashboard toggle is replaced
 with a static "Hardening Status: always active" panel.
@@ -3182,7 +3189,7 @@ detect WSL presence before pivoting to `/mnt/c/Users/` credential harvesting.
 - `HardeningModule.ApplyAsrRules` - work-first release branch removed; always enforces Block mode.
 - `ProductPosture.AllowsProactiveHostLockdown` - always returns `true`.
 - `ProductPosture.TryProactiveHostLockdown` - always succeeds (denyReason = "").
-- `SentinelConfig.RestrictivePortHardening` - getter always returns `true`, setter is no-op, marked `[Obsolete]`.
+- `GnyidaConfig.RestrictivePortHardening` - getter always returns `true`, setter is no-op, marked `[Obsolete]`.
 - `EncryptedConfigStore.ApplyOverrides` - `RestrictivePortHardening` case is now a silent no-op.
 - `Program.cs` - early config read block and DI sync line removed.
 - `IPSecIntegrityGuard` - work-first branch removed; always self-heals IPSec on startup and every 30s.
@@ -3196,7 +3203,7 @@ detect WSL presence before pivoting to `/mnt/c/Users/` credential harvesting.
 - `WslMonitor.SuspiciousPatterns` - added `/proc/version`, `cat /proc/version`, `is_wsl`, `get_wu()`.
 - `GSecurity.inf` (both publish/service and publish/agent copies) - privilege tightening applied.
 - `ProductInfo.Version` -> `2.5.5`
-- Installer -> `SentinelSetup-2.5.5.exe`
+- Installer -> `GnyidaSetup-2.5.5.exe`
 
 ### Fixed (post-release patches)
 
@@ -3212,9 +3219,9 @@ detect WSL presence before pivoting to `/mnt/c/Users/` credential harvesting.
   entries only - DLL quarantines no longer seed the reinfection hash table.
   `ScanRunningProcessesAsync` also now skips processes at protected install paths
   (Program Files, WindowsApps, Chrome, Edge, dotnet).
-- **Upgrade "Access is denied" on `Sentinel.Service.exe`** (`installer/setup.iss`) -
-  `StopExistingService` now calls `sc stop Sentinel` and `sc stop SentinelGuard` with a
-  2-second SCM wait before `taskkill`, and renames `Sentinel.Core.dll` to `.old` alongside
+- **Upgrade "Access is denied" on `Gnyida.Service.exe`** (`installer/setup.iss`) -
+  `StopExistingService` now calls `sc stop Gnyida` and `sc stop GnyidaGuard` with a
+  2-second SCM wait before `taskkill`, and renames `Gnyida.Core.dll` to `.old` alongside
   the EXE. Total pre-rename wait increased from ~1.8s to ~4.5s, giving the service process
   time to fully release file handles before Inno overwrites them.
 
@@ -3233,7 +3240,7 @@ by the non-system ancestor PID. `GetAttackRootPid` walks the ancestry cache
 and `EvaluateBuffer` applies the same minSignals + terminal-confidence test
 against the root buffer in parallel with the existing per-PID buffer.
 `SweepStalePidBuffers` and `ResetForTests` cover both dictionaries.
-`SetAncestryCache()` wired in `SentinelService` and Agent at startup.
+`SetAncestryCache()` wired in `GnyidaService` and Agent at startup.
 
 **PowerShell EtwEventWrite patching detected (`EtwProviderTamperMonitor`).**
 `GetCriticalEtwProcesses` now includes all running `powershell.exe` and
@@ -3251,8 +3258,8 @@ HMAC is in the binary. `config.enc` cannot disable detection, blank the HMAC,
 or redirect the proxy. Uninstall is the off switch.
 
 Threat-Intelligence Event IDs actually fire (remote alloc/write/APC),
-targeted RWX/unmapped-thread scan on those PIDs only, `SentinelGuard`
-watchdog service restarts Sentinel after `sc stop`, SCM crash-restart,
+targeted RWX/unmapped-thread scan on those PIDs only, `GnyidaGuard`
+watchdog service restarts Gnyida after `sc stop`, SCM crash-restart,
 beacon re-arm, IPv6 persist, WFP resubscribe, Interactive-only IPC,
 ScriptHosts LOLBins, dedup prune.
 
@@ -3271,10 +3278,10 @@ ScriptHosts LOLBins, dedup prune.
 - `ThreatReportingConfig.ProxySharedSecret` compiled in; disk cannot replace it.
 - `ThreatIntelInjectionRule` maps `ThreatIntel_EventId_N` remote IDs (no longer drops them).
 - `EtwThreatIntelMonitor` scans TI-suspect PIDs only (not a 5s full-system walk).
-- `SentinelGuard` companion service + SCM failure restart.
+- `GnyidaGuard` companion service + SCM failure restart.
 - Beacon `HasFired` re-arms after 15 minutes; TCP persist includes IPv6.
 - `ProductInfo.Version` -> `2.5.4`
-- Installer -> `SentinelSetup-2.5.4.exe`
+- Installer -> `GnyidaSetup-2.5.4.exe`
 
 
 ## [2.5.3] - 2026-09-06
@@ -3311,7 +3318,7 @@ scheduled tasks, PID 0, statistical C2 beacon.
   + ClickFix, TCP classic malware ports, Known-C2 pipes, tunneling tools
   -> Tier1 `KillProcessTree`.
 - `ProductInfo.Version` -> `2.5.3`
-- Installer -> `SentinelSetup-2.5.3.exe`
+- Installer -> `GnyidaSetup-2.5.3.exe`
 
 
 ## [2.5.2] - 2026-09-06
@@ -3335,7 +3342,7 @@ emit these rules. PID 0 DNS stays observe.
 - `ResponsePolicy.IsCovertChannelTerminal` - solo chain-confirm for those
   rules when PID > 4.
 - `ProductInfo.Version` -> `2.5.2`
-- Installer -> `SentinelSetup-2.5.2.exe`
+- Installer -> `GnyidaSetup-2.5.2.exe`
 
 
 ## [2.5.1] - 2026-09-06
@@ -3352,7 +3359,7 @@ Patch on 2.5.0 webhook DNS events.
 ### Changed
 
 - `ProductInfo.Version` -> `2.5.1`
-- Installer -> `SentinelSetup-2.5.1.exe`
+- Installer -> `GnyidaSetup-2.5.1.exe`
 
 
 ## [2.5.0] - 2026-09-06
@@ -3375,7 +3382,7 @@ Webhook-shaped exfil without TLS intercept.
 ### Changed
 
 - `ProductInfo.Version` -> `2.5.0`
-- Installer -> `SentinelSetup-2.5.0.exe`
+- Installer -> `GnyidaSetup-2.5.0.exe`
 
 
 ## [2.4.9] - 2026-09-06
@@ -3395,7 +3402,7 @@ Patch on the 2.4.8 protocol coverage.
 ### Changed
 
 - `ProductInfo.Version` -> `2.4.9`
-- Installer -> `SentinelSetup-2.4.9.exe`
+- Installer -> `GnyidaSetup-2.4.9.exe`
 
 
 ## [2.4.8] - 2026-09-06
@@ -3441,7 +3448,7 @@ counters are WeakObserveSeed.
 - `EtwEventDispatcher` now feeds UDP send/recv into `TelemetryFusionEngine`
   (previously TCP connect/accept only).
 - `ProductInfo.Version` -> `2.4.8`
-- Installer -> `SentinelSetup-2.4.8.exe`
+- Installer -> `GnyidaSetup-2.4.8.exe`
 
 
 ## [2.4.7] - 2026-09-05
@@ -3471,7 +3478,7 @@ Two cache bugs introduced in v2.4.6.
 ### Changed
 
 - `ProductInfo.Version` -> `2.4.7`
-- Installer -> `SentinelSetup-2.4.7.exe`
+- Installer -> `GnyidaSetup-2.4.7.exe`
 
 
 ## [2.4.6] - 2026-09-05
@@ -3512,7 +3519,7 @@ SLA.
 ### Added
 
 - `--pagefault-watch <pid> [seconds]` - sample a live process
-  `HardFaultCount` (LatencyMon-equivalent) without starting Sentinel.
+  `HardFaultCount` (LatencyMon-equivalent) without starting Gnyida.
 
 ### Not claimed
 
@@ -3523,15 +3530,15 @@ SLA.
 ### Changed
 
 - `ProductInfo.Version` -> `2.4.6`
-- Installer -> `SentinelSetup-2.4.6.exe`
-- `installer/build.ps1` deletes leftover `SentinelSetup-*.exe` except the
+- Installer -> `GnyidaSetup-2.4.6.exe`
+- `installer/build.ps1` deletes leftover `GnyidaSetup-*.exe` except the
   current version. Upgrade ACL unlock stays in `setup.iss`.
 
 
 ## [2.4.5] - 2026-09-05
 
 LatencyMon was attributing 1000+ hard pagefaults per few minutes to
-`Sentinel.Service` (PID working set ~1.6 GB). Isolated scan kernels
+`Gnyida.Service` (PID working set ~1.6 GB). Isolated scan kernels
 (module enum, Hell's Gate RPM, Authenticode) produced **0** hard faults.
 The live service was being trimmed as a background process, then ETW
 callbacks faulted those pages back from disk.
@@ -3553,18 +3560,18 @@ callbacks faulted those pages back from disk.
 
 ### Added
 
-- `--pagefault-diag` on `Sentinel.Service.exe` - LatencyMon-equivalent
+- `--pagefault-diag` on `Gnyida.Service.exe` - LatencyMon-equivalent
   `HardFaultCount` attribution of the real scan kernels (no monitors, no kill).
 
 ### Changed
 
 - `ProductInfo.Version` -> `2.4.5`
-- Installer -> `SentinelSetup-2.4.5.exe`
+- Installer -> `GnyidaSetup-2.4.5.exe`
 
 
 ## [2.4.4] - 2026-09-04
 
-Uninstall left `Sentinel.Service` and `Sentinel.Agent` running. Inno
+Uninstall left `Gnyida.Service` and `Gnyida.Agent` running. Inno
 `CurUninstallStepChanged` only cleaned IPSec/firewall rules; process stop
 lived only on the install path.
 
@@ -3572,7 +3579,7 @@ lived only on the install path.
 
 - Call `--uninstall-cleanup` before file removal.
 - `taskkill /F` Service and Agent; sleep so handles release.
-- Remove SentinelAgent autorun registry key on uninstall.
+- Remove GnyidaAgent autorun registry key on uninstall.
 - Drop `[UninstallRun]` - uninstall sequence is stop -> kill -> cleanup.
 
 
@@ -3609,7 +3616,7 @@ installed* binary, which on 2.4.0/2.4.1 only stops the service.
 ### Changed
 
 - `ProductInfo.Version` -> `2.4.2`
-- Installer -> `SentinelSetup-2.4.2.exe`
+- Installer -> `GnyidaSetup-2.4.2.exe`
 - 2.4.0 and 2.4.1 remain published and unmodified.
 
 
@@ -3620,7 +3627,7 @@ Post-install tray visibility on GSecurity-provisioned hosts, plus the leftover
 
 ### Added
 
-- **`InstallBootstrap.TryRunShowAllTrayIcons`** - after `Sentinel.Service.exe --install`,
+- **`InstallBootstrap.TryRunShowAllTrayIcons`** - after `Gnyida.Service.exe --install`,
   run the `ShowAllTrayIcons` scheduled task so a newly created NotifyIconSettings
   entry is visible without a re-logon. Silent no-op if the task is missing
   (machines not provisioned via the GSecurity ISO).
@@ -3634,19 +3641,19 @@ Post-install tray visibility on GSecurity-provisioned hosts, plus the leftover
 ### Changed
 
 - `ProductInfo.Version` -> `2.4.1`
-- Installer -> `SentinelSetup-2.4.1.exe`
+- Installer -> `GnyidaSetup-2.4.1.exe`
 - 2.4.0 remains published and unmodified.
 
 
 ## [2.4.0] - 2026-09-03
 
-AV false-positive elimination pass. `Sentinel.Core.dll` was being quarantined by Kaspersky
+AV false-positive elimination pass. `Gnyida.Core.dll` was being quarantined by Kaspersky
 immediately on build - blocking the installer. Root cause: offensive tool name strings
 (`mimikatz`, `sekurlsa`, `meterpreter`, etc.) and AMSI function names (`AmsiScanBuffer`,
 `AmsiOpenSession`) appeared as contiguous literals in the PE string table, triggering
 Kaspersky's ML heuristics regardless of context. No detection logic was removed.
 
-### Fixed (AV / Kaspersky false positive - `Sentinel.Core.dll` quarantined on build)
+### Fixed (AV / Kaspersky false positive - `Gnyida.Core.dll` quarantined on build)
 
 - **`AmsiIntegrityCheck` removed** (`V217Hardening.cs`, `Program.cs`) - the class carried
   `"AmsiScanBuffer"`, `"AmsiOpenSession"`, and `"amsi.dll"` as verbatim PE string-table
@@ -3673,7 +3680,7 @@ Kaspersky's ML heuristics regardless of context. No detection logic was removed.
     replaced with a registry presence check (`HKLM\SYSTEM\CurrentControlSet\Control\WMI`).
     The `NativeMethods` inner class with all three declarations removed entirely.
 
-- **`PeExportResolver`** (new file, `src/Sentinel.Core/PeExportResolver.cs`) - pure C# PE
+- **`PeExportResolver`** (new file, `src/Gnyida.Core/PeExportResolver.cs`) - pure C# PE
   export table walker using `Marshal.Read*` on known PE structure offsets. Resolves named
   exports from already-loaded modules without any `GetProcAddress` P/Invoke declaration in
   IL. Handles PE32 and PE32+; forward exports return `IntPtr.Zero` safely.
@@ -3685,7 +3692,7 @@ Kaspersky's ML heuristics regardless of context. No detection logic was removed.
 ### Changed
 
 - `ProductInfo.Version` -> `2.4.0`
-- Installer -> `SentinelSetup-2.4.0.exe`
+- Installer -> `GnyidaSetup-2.4.0.exe`
 - `docs/VIRUSTOTAL.md` - updated with v2.4.0 policy notes.
 
 
@@ -3697,8 +3704,8 @@ Installer release for VirusTotal re-check after the 2.3.6 **4/72** (then 2.3.9 f
 
 - **`NativeResolver`** - plain `[DllImport]` (no `GetProcAddress` bootstrap for inspection APIs).
 - **Split-string Concat** detection vocab removed (`Rules`, `FileReputationEngine`, monitors).
-- **Quarantine vault** - `SENQ` magic + `.senq` under `%ProgramData%\Sentinel\Quarantine`; no Hidden|System zero-byte stubs after DLL quarantine.
-- **Installer slim-down** - Inno no longer embeds `sc create`, HKLM Run, SafeBoot, `taskkill`, or `icacls`. Post-copy work is `Sentinel.Service.exe --install` / `--prepare-upgrade` via `InstallBootstrap` (native SCM APIs). Full `VersionInfo*` retained.
+- **Quarantine vault** - `SENQ` magic + `.senq` under `%ProgramData%\Gnyida\Quarantine`; no Hidden|System zero-byte stubs after DLL quarantine.
+- **Installer slim-down** - Inno no longer embeds `sc create`, HKLM Run, SafeBoot, `taskkill`, or `icacls`. Post-copy work is `Gnyida.Service.exe --install` / `--prepare-upgrade` via `InstallBootstrap` (native SCM APIs). Full `VersionInfo*` retained.
 - **Composite display** - `Active Mass-Encryption Chain` (was `Active Ransomware Chain`).
 - **`JsonlEventLogger.DisposeAsync`** - acquire audit semaphore before Release (CI dispose cascade).
 
@@ -3708,12 +3715,12 @@ Installer release for VirusTotal re-check after the 2.3.6 **4/72** (then 2.3.9 f
 
 ### Changed
 
-- `version.txt` / installer -> **2.3.9** (`SentinelSetup-2.3.9.exe`)
+- `version.txt` / installer -> **2.3.9** (`GnyidaSetup-2.3.9.exe`)
 
 
 ## [2.3.8] - 2026-09-03
 
-Combines Grok Bot hardening (CIRCL/MB SPKI pins, MOTW/WPAD host-wide fuel) with AV false-positive follow-up after VirusTotal **4/72** on `SentinelSetup-2.3.6.exe`. Policy shift for imports/strings: **transparency over evasion**.
+Combines Grok Bot hardening (CIRCL/MB SPKI pins, MOTW/WPAD host-wide fuel) with AV false-positive follow-up after VirusTotal **4/72** on `GnyidaSetup-2.3.6.exe`. Policy shift for imports/strings: **transparency over evasion**.
 
 ### Added
 
@@ -3725,7 +3732,7 @@ Combines Grok Bot hardening (CIRCL/MB SPKI pins, MOTW/WPAD host-wide fuel) with 
 
 - **`NativeResolver`** - plain `[DllImport]` (no `GetProcAddress` bootstrap). Dynamic resolution of `OpenProcess` / `ReadProcessMemory` was an ML evasion signal.
 - **Split-string detection vocab** - removed `string.Concat` / `S()` / `A()` helpers; contiguous literals are honest EDR vocabulary.
-- **Quarantine vault** - `SENQ` magic + `.senq` under `%ProgramData%\Sentinel\Quarantine`; legacy DPAPI blobs still restore; `.meta` decrypt fixed.
+- **Quarantine vault** - `SENQ` magic + `.senq` under `%ProgramData%\Gnyida\Quarantine`; legacy DPAPI blobs still restore; `.meta` decrypt fixed.
 - **Installer** - VersionInfo synced; fewer `icacls` trees; `VersionInfoOriginalFileName` set.
 - **Composite display name** - `Active Mass-Encryption Chain` (was `Active Ransomware Chain`).
 - **`DllUnloadEngine`** - no zero-byte Hidden|System stub after quarantine.
@@ -3754,7 +3761,7 @@ AV false positive elimination: sensitive Win32/NT APIs moved out of the PE impor
 ### Changed
 
 - `ProductInfo.Version` -> `2.3.7`
-- Installer -> `SentinelSetup-2.3.7`
+- Installer -> `GnyidaSetup-2.3.7`
 
 
 ## [2.3.6] - 2026-09-01
@@ -3763,25 +3770,25 @@ Detection quality improvements ported from [GorstaksProtection](https://github.c
 
 ### Fixed
 
-- **AV false positive on `Sentinel.Core.dll`** (Kaspersky, confirmed via `report.rpt`) - two patterns in the DLL were causing legitimate EDR code to be flagged as malware:
+- **AV false positive on `Gnyida.Core.dll`** (Kaspersky, confirmed via `report.rpt`) - two patterns in the DLL were causing legitimate EDR code to be flagged as malware:
   - **`NativeProcessMemory.cs`** previously resolved Win32 API names at runtime by concatenating string fragments (`J("Open","Process")`, `J("QueueUser","APC")`, etc.) to avoid static string scanning - a technique modern ML-based AV engines now specifically detect as evasion. All API calls are now declared with standard `[DllImport]` attributes, making the binary fully transparent and auditable by security scanners.
-  - **`HardeningModule.cs`** previously embedded `LGPO.exe` as an assembly resource and extracted it to `%ProgramData%\Sentinel\HardeningTemp\` at runtime - the classic "PE dropped from DLL resource" dropper pattern. `LGPO.exe` and `GSecurity.inf` are now shipped as plain files in the installation directory and loaded directly from there.
-- **Installer AV triggers reduced** - `SentinelSetup-*.exe` Pascal script now uses `taskkill /F /IM` instead of PowerShell `-ExecutionPolicy Bypass` + `Stop-Process -Force` for process termination during upgrades. The `ResetInstallDirAcls` procedure is reduced from 8 `takeown`/`icacls` calls to 2 targeted `icacls` calls (no recursive `takeown`), eliminating the "ACL-stripping rootkit installer" heuristic profile.
+  - **`HardeningModule.cs`** previously embedded `LGPO.exe` as an assembly resource and extracted it to `%ProgramData%\Gnyida\HardeningTemp\` at runtime - the classic "PE dropped from DLL resource" dropper pattern. `LGPO.exe` and `GSecurity.inf` are now shipped as plain files in the installation directory and loaded directly from there.
+- **Installer AV triggers reduced** - `GnyidaSetup-*.exe` Pascal script now uses `taskkill /F /IM` instead of PowerShell `-ExecutionPolicy Bypass` + `Stop-Process -Force` for process termination during upgrades. The `ResetInstallDirAcls` procedure is reduced from 8 `takeown`/`icacls` calls to 2 targeted `icacls` calls (no recursive `takeown`), eliminating the "ACL-stripping rootkit installer" heuristic profile.
 
 ### Added
 
-- **`ThreatFoxFeedService`** - new background service that queries the [ThreatFox API](https://threatfox-api.abuse.ch/api/v1/) every 6 hours and maintains a unified in-memory IOC store covering SHA-256 hashes, IP addresses, and **domain names** (all indicator types in one `ConcurrentDictionary`). Each entry carries `malware_family` and `confidence_level` from ThreatFox. SHA-256 hits are pushed directly into `IoCScanner` so `FileReputationEngine` detections are enriched with malware-family metadata. On startup, loads a bundled offline snapshot (`%ProgramData%\Sentinel\threatfox-bundle.json.gz`) so detections work from first launch without waiting for the live network - if the bundle is absent the service starts empty and seeds itself on the first refresh. Registered in the `NetworkIntegrity` monitor group alongside `ThreatIntelFeedBlocker`.
+- **`ThreatFoxFeedService`** - new background service that queries the [ThreatFox API](https://threatfox-api.abuse.ch/api/v1/) every 6 hours and maintains a unified in-memory IOC store covering SHA-256 hashes, IP addresses, and **domain names** (all indicator types in one `ConcurrentDictionary`). Each entry carries `malware_family` and `confidence_level` from ThreatFox. SHA-256 hits are pushed directly into `IoCScanner` so `FileReputationEngine` detections are enriched with malware-family metadata. On startup, loads a bundled offline snapshot (`%ProgramData%\Gnyida\threatfox-bundle.json.gz`) so detections work from first launch without waiting for the live network - if the bundle is absent the service starts empty and seeds itself on the first refresh. Registered in the `NetworkIntegrity` monitor group alongside `ThreatIntelFeedBlocker`.
 - **`DnsQueryMonitor` - ThreatFox domain IOC check** - `ProcessDnsQuery` now runs an O(1) domain lookup against `ThreatFoxFeedService` before the existing heuristics. A hit emits rule `SENT-TF-001` ("DNS: ThreatFox Known-Malicious Domain") at Tier1 / `NetworkIsolate`, carrying `malware_family` in the detection metadata.
 - **`SlidingWindowRansomwareRule` (SENT-SW-001)** - fires when a single process writes or renames files with more than 50 unique extensions within a 30-second sliding window. Complementary to the existing shadow-copy / `.locked`-extension single-event rule; catches encryption loops that use arbitrary extensions. Confidence 0.90 -> Tier1 / `KillProcessTree`. Uses per-PID `ConcurrentDictionary` state with idle-entry eviction every 1,000 evaluations to prevent unbounded memory growth. Ported from GorstaksProtection `RansomwareBehaviorRule` (GRS-004).
 - **`SlidingWindowMassDeletionRule` (SENT-SW-002)** - fires when a single process deletes more than 100 files within a 10-second window. Consistent with wiper malware or ransomware destroying shadow copies / backups prior to encryption. Confidence 0.85 -> Tier1 / `KillProcessTree`. Same idle-eviction pattern as above. Ported from GorstaksProtection `MassFileDeletionRule` (GRS-008).
 - **`FullPathParentChildRule` (SENT-003)** - detects Office apps, browsers, and PDF readers spawning shells or scripting engines, with **full-path verification of the parent binary**. The existing `AttackToolsRule` matches by process name only, which an attacker can spoof by naming malware `winword.exe`. This rule additionally checks that the parent's binary path contains a known legitimate install-directory fragment (e.g. `\\microsoft office\\`) before firing - a `winword.exe` living in `C:\Temp\` is rejected. Covers Word, Excel, PowerPoint, Outlook, OneNote, Access, LibreOffice, Chrome, Edge, Brave, Opera, Vivaldi, Firefox, Acrobat, and script-chain parents (`wscript.exe`, `cscript.exe`). Confidence 0.75 -> Tier2 / `LogOnly` (feeds correlation engine; kill requires chain confirmation). Ported from GorstaksProtection `SuspiciousParentChildRule` (GRS-006).
 - **`RuleId` field on `DetectionEvent`** - new nullable `string? RuleId` property enables stable per-rule identifiers (`SENT-SW-001`, `SENT-003`, `SENT-TF-001`) for deduplication, action mapping, and audit correlation. Legacy rules leave it null; backward-compatible.
-- **Pre-action audit log in `JsonlEventLogger`** - separate append-only daily-rotating file (`%ProgramData%\Sentinel\audit-YYYY-MM-DD.jsonl`) written before every kill or block action via `LogAuditBeforeActionAsync` / `LogAuditActionOutcomeAsync`. 90-day retention with automatic pruning. SYSTEM + Admins ACL (no interactive-user read). Mandatory pre-action write enforced structurally - the audit entry always comes first. Ported from GorstaksProtection `GorstaksLogger.LogAuditBeforeAction`.
+- **Pre-action audit log in `JsonlEventLogger`** - separate append-only daily-rotating file (`%ProgramData%\Gnyida\audit-YYYY-MM-DD.jsonl`) written before every kill or block action via `LogAuditBeforeActionAsync` / `LogAuditActionOutcomeAsync`. 90-day retention with automatic pruning. SYSTEM + Admins ACL (no interactive-user read). Mandatory pre-action write enforced structurally - the audit entry always comes first. Ported from GorstaksProtection `GorstaksLogger.LogAuditBeforeAction`.
 
 ### Changed
 
 - `ProductInfo.Version` -> `2.3.6`
-- Installer -> `SentinelSetup-2.3.6`
+- Installer -> `GnyidaSetup-2.3.6`
 
 ## [2.3.5] - 2026-08-31
 
@@ -3797,7 +3804,7 @@ Delivery-vector coverage: script-class droppers missing Mark-of-the-Web, and the
 
 - Ceprkac (separate repo): credential autofill reworked - fills on first page load without a manual refresh, and handles Google's two-step (email page -> separate password page) flow. See the Ceprkac changelog.
 - `ProductInfo.Version` -> `2.3.5`
-- Installer -> `SentinelSetup-2.3.5`
+- Installer -> `GnyidaSetup-2.3.5`
 
 ## [2.3.4] - 2026-08-31
 
@@ -3810,7 +3817,7 @@ Full loadable-module-extension coverage for the DLL/module unloader.
   - Search-order hijack names (`dbghelp`/`version`/`winmm`/...) remain the classic `.dll` `SideloadTargets` set - those specific names are only ever sideloaded as `.dll`.
 - **Ceprkac parity** (separate repo): `InjectedModuleCleaner` now keeps bundled `Microsoft.*.winmd` / `System.*.winmd` (WinUI/WinRT) and matches sideload hijack base names against any loadable-module extension.
 - `ProductInfo.Version` -> `2.3.4`
-- Installer -> `SentinelSetup-2.3.4`
+- Installer -> `GnyidaSetup-2.3.4`
 
 ## [2.3.3] - 2026-08-31
 
@@ -3827,10 +3834,10 @@ Content-smuggling detection, resilience on stripped-down Windows, and a stronger
 
 ### Changed
 
-- **Graceful degradation on heavily stripped-down Windows** - Sentinel no longer crashes when an OS facility is missing. `WmiProcessMonitor` probes WMI before touching `System.Management` (falls back to fast-poll only); `UsbDeviceFingerprinter` guards its first `setupapi` P/Invoke; and all six monitor groups now resolve members through `SafeMonitorResolver`, skipping any monitor that cannot be constructed (with a warning) instead of faulting host startup.
+- **Graceful degradation on heavily stripped-down Windows** - Gnyida no longer crashes when an OS facility is missing. `WmiProcessMonitor` probes WMI before touching `System.Management` (falls back to fast-poll only); `UsbDeviceFingerprinter` guards its first `setupapi` P/Invoke; and all six monitor groups now resolve members through `SafeMonitorResolver`, skipping any monitor that cannot be constructed (with a warning) instead of faulting host startup.
 - **`.winmd` false-positive hardening** - the reputation engine recognizes metadata-only modules (`.winmd`, `\WinMetadata\`, or a PE with no entry point + a CLR data directory) and no longer treats their (by-design) lack of Authenticode signature as elevated risk.
 - `ProductInfo.Version` -> `2.3.3`
-- Installer -> `SentinelSetup-2.3.3`
+- Installer -> `GnyidaSetup-2.3.3`
 
 ## [2.3.2] - 2026-08-28
 
@@ -3838,9 +3845,9 @@ Dashboard reliability fixes: the monitor health panel and the live event stream 
 
 ### Fixed
 
-- **Dashboard: "0/0 monitors running"** - the `MonitorRegistry` that feeds the dashboard's Service Status (`/api/health`, `/api/ops`) was never populated. Monitors are started by `MonitorGroup` hosted services and by the `SentinelService` start loop, but neither registered the monitors with the registry (the `StartupSequencer`/`SentinelOrchestrator` path that would have registered them is not wired into the service startup). Detections and quarantine counts still appeared because they read from `events.jsonl` and the quarantine folder directly, which made the `0/0` count especially misleading.
+- **Dashboard: "0/0 monitors running"** - the `MonitorRegistry` that feeds the dashboard's Service Status (`/api/health`, `/api/ops`) was never populated. Monitors are started by `MonitorGroup` hosted services and by the `GnyidaService` start loop, but neither registered the monitors with the registry (the `StartupSequencer`/`GnyidaOrchestrator` path that would have registered them is not wired into the service startup). Detections and quarantine counts still appeared because they read from `events.jsonl` and the quarantine folder directly, which made the `0/0` count especially misleading.
   - `MonitorGroup` now takes an optional `MonitorRegistry`, registers each monitor up front, and marks it Started / Failed / Stopped through its lifecycle. It also heartbeats running monitors on every health-check tick.
-  - `SentinelService` now registers its `IMonitor` implementations and the constructor-injected singleton monitors (WMI, File, Network, LSASS canary, etc.), marks them started/failed, and heartbeats them from the keep-alive loop.
+  - `GnyidaService` now registers its `IMonitor` implementations and the constructor-injected singleton monitors (WMI, File, Network, LSASS canary, etc.), marks them started/failed, and heartbeats them from the keep-alive loop.
   - Each monitor group reports a `MonitorCategory` for accurate grouping in the health view.
 - **Dashboard: Events page stuck on "Connected - waiting for events..."** - the WebSocket stream only broadcasts events appended *after* the browser connects (the file watcher seeks to end-of-file on open), and the frontend never loaded existing history. The page therefore stayed empty even when detections were already logged.
   - Added `loadEventHistory()` (seeds the event buffer from `/api/events`), invoked on WebSocket open and whenever the Events page is opened.
@@ -3850,7 +3857,7 @@ Dashboard reliability fixes: the monitor health panel and the live event stream 
 - `MonitorGroupConfig` gains a `Category` property (defaults to `SystemIntegrity`).
 - `SystemIntegrity` and `Peripheral` monitor-group health-check intervals lowered to 45s so heartbeats stay well inside the registry watchdog's 3-minute critical timeout.
 - `ProductInfo.Version` -> `2.3.2`
-- Installer -> `SentinelSetup-2.3.2`
+- Installer -> `GnyidaSetup-2.3.2`
 
 ## [2.3.1] - 2026-08-26
 
@@ -3862,7 +3869,7 @@ Critical fix for game interference (Football Manager / Denuvo titles crashing on
 - **Game Protection: Second-chance path check** - after `FindExecutable` resolves a binary to a known game directory (e.g. `D:\Steam\steamapps\common\...`), detection is now suppressed via `IsGameOrAntiCheatPath`.
 - **Dashboard: Events not loading after agent restart** - stale bearer token in browser sessionStorage caused silent 401 failures. Server now embeds current token directly in served HTML. Added `Cache-Control: no-store`.
 - **Dashboard: Ops metrics showing zero** - frontend referenced non-existent field names (`EventsPerSecond`, `DetectionsPerMinute`, `DropRate`). Aligned with actual backend `OpsMetricsSnapshot` fields (`TelemetryPerSecond`, `DetectionsPerSecond`, `CorrelationLatencyMsP50`).
-- **Dashboard: Ops fallback not wrapped** - file-read fallback for `/api/ops` was not wrapping JSON in `{ok, ops}` envelope, causing frontend to show "Unable to reach Sentinel Service."
+- **Dashboard: Ops fallback not wrapped** - file-read fallback for `/api/ops` was not wrapping JSON in `{ok, ops}` envelope, causing frontend to show "Unable to reach Gnyida Service."
 - **Metrics: DetectionsTotal always zero** - `DetectionEngine.EmitAsync()` (used by all monitors) was not calling `_metrics.RecordDetection()`. Only rule-evaluated detections were counted.
 - **Dashboard: Auth failure UX** - added visible 401 error message ("Reopen from tray icon") instead of silent empty state.
 
@@ -3895,7 +3902,7 @@ Unified web dashboard replaces the WinForms settings window. Opening Settings fr
 - **`WebDashboardService`** re-enabled as a hosted service - serves REST API, WebSocket events, and the HTML dashboard on localhost.
 - **`TrayIconService`** simplified - passes launch URL to the dashboard form instead of report config and quarantine manager.
 - `ProductInfo.Version` -> `2.2.9`
-- Installer -> `SentinelSetup-2.2.9`
+- Installer -> `GnyidaSetup-2.2.9`
 
 ### Removed
 
@@ -3922,7 +3929,7 @@ WMI is a first-class persistence and policy-overwrite surface again. Consumer *n
 - `ResponsePolicy` kill-grade families include `WmiPersistence`. Name-only new consumers stay observe fuel (0.75). Executable consumers are a terminal leg under legacy chain-wait mode.
 - Kernel-Registry ETW records the last WMI-host writer (`WmiHostRegistryHint`) so policy-tree changes can be attributed without a key path in the payload.
 - `ProductInfo.Version` -> `2.2.8`
-- Installer -> `SentinelSetup-2.2.8`
+- Installer -> `GnyidaSetup-2.2.8`
 
 ### Tests
 
@@ -3938,7 +3945,7 @@ Module identity unload is standing product law. The 5-second system-wide scan wa
 - **`ProductPosture.ModuleIdentityUnloadAlwaysOn`** - constant `true`. No `Enable`/`Disable` config switch may be added.
 - **`DllUnloadEngine`** - emit metadata `PermanentRule=ModuleIdentityUnload`. Stale comment claiming unload waited for chain confirmation is gone.
 - **Hijack names next to the exe** (`dbghelp.dll`, `version.dll`, `winmm.dll`, ...) are plants even when Microsoft-signed. DLL search order loads the local copy first; signature does not make it the OS module. The real `System32` copy stays keep-tree.
-- **Hijack-name plants are quarantined on drop** (file only). No process kill (0.5.3). No same-name 0-byte stub (that would still win search order). Re-drops are caught again. Game folders are included for *disk* quarantine; Sentinel still does not `VM_READ` a running game (Denuvo). Not module-count (2.2.5). Not "every unsigned DLL" (plugins, catalog-signed System32).
+- **Hijack-name plants are quarantined on drop** (file only). No process kill (0.5.3). No same-name 0-byte stub (that would still win search order). Re-drops are caught again. Game folders are included for *disk* quarantine; Gnyida still does not `VM_READ` a running game (Denuvo). Not module-count (2.2.5). Not "every unsigned DLL" (plugins, catalog-signed System32).
 
 ### Tests
 
@@ -3973,7 +3980,7 @@ Module identity is the EDR backbone again. Kiro left a 45-second *count* and a s
 
 ## [2.2.4] - 2026-08-24
 
-Generic CVE-class coverage so the next Patch Tuesday does not require a named campaign pack. Sentinel still cannot patch kernel races. It now hunts the *userland shape* of new EoP/RCE/SFB bugs, matches Windows OS-class KEV entries, and toasts when the latest Patch Tuesday CU is missing.
+Generic CVE-class coverage so the next Patch Tuesday does not require a named campaign pack. Gnyida still cannot patch kernel races. It now hunts the *userland shape* of new EoP/RCE/SFB bugs, matches Windows OS-class KEV entries, and toasts when the latest Patch Tuesday CU is missing.
 
 ### Added
 
@@ -3990,9 +3997,9 @@ Generic CVE-class coverage so the next Patch Tuesday does not require a named ca
 ### Changed
 
 - **CVE Shield** matches Windows OS-class KEV (WorkstationOs) instead of requiring a process named "Windows". Server roles (SharePoint/Exchange/DNS Server) match only if installed. Process-spawn rules are LogOnly legacy chain-wait mode. Synthetic PoC salt hashes are gone (security theater). KEV catalog is cached under ProgramData.
-- `V217Hardening.cs` namespace is `Sentinel.Core` like every other monitor file (folder `Monitors/` is layout only - not a second type universe).
+- `V217Hardening.cs` namespace is `Gnyida.Core` like every other monitor file (folder `Monitors/` is layout only - not a second type universe).
 - `ProductInfo.Version` -> `2.2.4`
-- Installer -> `SentinelSetup-2.2.4`
+- Installer -> `GnyidaSetup-2.2.4`
 
 ### Tests
 
@@ -4001,7 +4008,7 @@ Generic CVE-class coverage so the next Patch Tuesday does not require a named ca
 
 ## [2.2.3] - 2026-08-24
 
-August 2026 Patch Tuesday userland coverage. Sentinel still cannot patch kernel races (`afd.sys`). It now hunts the Lazarus campaign around the exploited zero-day, tells you when the KEV CU is missing, and watches LegacyHive + Cloud Files / ShieldBreak primitives.
+August 2026 Patch Tuesday userland coverage. Gnyida still cannot patch kernel races (`afd.sys`). It now hunts the Lazarus campaign around the exploited zero-day, tells you when the KEV CU is missing, and watches LegacyHive + Cloud Files / ShieldBreak primitives.
 
 ### Added
 
@@ -4026,7 +4033,7 @@ August 2026 Patch Tuesday userland coverage. Sentinel still cannot patch kernel 
 
 - `IoCScanner.AddHashes` unions indicators. `CveShieldHardener` uses it so dummy PoC salts no longer wipe campaign hashes.
 - `ProductInfo.Version` -> `2.2.3`
-- Installer -> `SentinelSetup-2.2.3`
+- Installer -> `GnyidaSetup-2.2.3`
 
 ### Tests
 
@@ -4040,7 +4047,7 @@ August 2026 Patch Tuesday userland coverage. Sentinel still cannot patch kernel 
 - **Settings is the built-in WinForms dashboard again.** Tray **Settings** / double-click opens `AgentDashboardForm` (Overview, Events, Report to Police, Quarantine, Safety, Ops, Tools, About). It no longer launches a browser or `http://localhost:19845`. That path showed *"We can't open this 'http' link"* on machines with no working `http` protocol association.
 - `WebDashboardService` is not started. The HTTP listener is unused.
 - `ProductInfo.Version` -> `2.2.2`
-- Installer -> `SentinelSetup-2.2.2`
+- Installer -> `GnyidaSetup-2.2.2`
 
 
 ## [2.2.1] - 2026-08-23
@@ -4052,7 +4059,7 @@ August 2026 Patch Tuesday userland coverage. Sentinel still cannot patch kernel 
 ### Changed
 
 - `ProductInfo.Version` -> `2.2.1`
-- Installer -> `SentinelSetup-2.2.1`
+- Installer -> `GnyidaSetup-2.2.1`
 
 
 ## [2.2.0] - 2026-08-23
@@ -4063,23 +4070,23 @@ Honest remediations from a full source red-team. Several items previously marked
 
 - **Dashboard auth is real now (RT-2026-M3, actually).** Referer is no longer accepted as proof of origin. The bearer token is **not** embedded in `GET /`. The tray opens `http://localhost:19845/?token=...`; JS stores it in `sessionStorage` and strips the query. `/api/*` and `/ws/events` require that token. CSRF is issued only to authenticated callers.
 - **V217 monitors now run.** `AmsiIntegrityCheck`, `HoneypotDllMonitor`, `EdrKillerDetectionMonitor`, `DecoyPipeMonitor`, `KernelModuleAuditMonitor`, and `TokenPrivilegeAuditMonitor` are registered in MonitorGroups. They were dead code in 2.1.8 despite being advertised.
-- **Honeypot DLLs no longer sit next to Sentinel.exe.** Decoys live in `honeypot\` so `version.dll` / `winhttp.dll` cannot sideload or DoS the service itself.
+- **Honeypot DLLs no longer sit next to Gnyida.exe.** Decoys live in `honeypot\` so `version.dll` / `winhttp.dll` cannot sideload or DoS the service itself.
 - **EDR-killer names are observe fuel**, not President's Law kills. Rename bypasses name lists; we stopped pretending otherwise.
 - **Game-path reputation skip no longer matches user-writable substrings.** `%AppData%\steamapps\common\` is not Steam. Reputation skip requires a game tree that is **not** under a user profile / Temp / Downloads / Desktop.
 - **ChainTracer no longer treats all of `C:\Windows\` as OS-critical.** System32/SysWOW64 only, case-insensitive. `Windows\Temp` can be quarantined.
-- **Agent watchdog** matches the install-dir image path (a dummy `Sentinel.Agent` in Temp no longer blinds relaunch), passes `lpApplicationName` to `CreateProcessAsUser`, pins Authenticode publisher to the Service binary, and refuses unsigned pairs in Release.
+- **Agent watchdog** matches the install-dir image path (a dummy `Gnyida.Agent` in Temp no longer blinds relaunch), passes `lpApplicationName` to `CreateProcessAsUser`, pins Authenticode publisher to the Service binary, and refuses unsigned pairs in Release.
 - **DriverLoadMonitor** scans interactive user profiles (not SYSTEM's LocalAppData), uses Event 7045 process id when `> 4`, widens the drop window, and no longer ships a corrupted EneIo64 hash. Pre-existing RTCore64/WinRing0 at start is **logged**, not silently trusted.
 - **BrowserC2Guard** scans each interactive user's Chrome/Edge/Brave extension tree.
 - **GSecurity.inf (kiosk / Hardened Mode)** no longer sets password length 0, complexity off, all audit off, FIPS off, or Authenticode off. FIPS is left untouched. Password length 12 + complexity; logon/account/policy audit on.
 - **Worker:** `RATE_LIMITER` is actually called **after** HMAC. Unauth flood has a separate cheaper cap. MalwareBazaar `/report/hash` is an honest lookup + comment on known samples (ingest still needs the file).
 - **EncryptedConfigStore** writes an `SCFG2` HMAC envelope. Leftover `disk JSON config` cannot turn `legacy chain-wait mode` off.
-- **FileVerdictAds** no longer grants Administrators FullControl on `%ProgramData%\Sentinel\Secure`.
+- **FileVerdictAds** no longer grants Administrators FullControl on `%ProgramData%\Gnyida\Secure`.
 - **President's Law** no longer includes DnsAnomaly / NetworkAnomaly.
 
 ### Changed
 
 - `ProductInfo.Version` -> `2.2.0`
-- Installer -> `SentinelSetup-2.2.0`
+- Installer -> `GnyidaSetup-2.2.0`
 - IPC docs: `scan` / `scan_status` are real (on-demand audit), not "read-only ping/ops/health only"
 - Docs brought in line with runtime: `THREAT_MODEL.md`, `design.md`, `constraints.md`, `requirements.md`, `SECURITY.md`, `SECURITY_AUDIT.md`, `SECURITY_AUDIT_2026.md`, `architecture-council.md`, `worker/README.md`, `docs/VIRUSTOTAL.md`, `README.md`
 
@@ -4164,7 +4171,7 @@ Honest remediations from a full source red-team. Several items previously marked
 
 ### Added
 
-- **Remote Message (msg.exe) RPC Probe Detection** (extension to `RpcLateralMonitor`) - Detects `msg /server:` usage as an RPC access probe and social engineering vector. Added `msg` to suspicious lateral movement parent processes. If msg.exe successfully delivers a message to a remote host, it confirms ports 135/445 are open with valid credentials - the same channel used for WMI execution, PsExec, remote service install, and full lateral movement. Sentinel now flags this reconnaissance step before the real attack chain begins.
+- **Remote Message (msg.exe) RPC Probe Detection** (extension to `RpcLateralMonitor`) - Detects `msg /server:` usage as an RPC access probe and social engineering vector. Added `msg` to suspicious lateral movement parent processes. If msg.exe successfully delivers a message to a remote host, it confirms ports 135/445 are open with valid credentials - the same channel used for WMI execution, PsExec, remote service install, and full lateral movement. Gnyida now flags this reconnaissance step before the real attack chain begins.
 
 
 ## [2.1.5] - 2026-08-21
@@ -4196,7 +4203,7 @@ Honest remediations from a full source red-team. Several items previously marked
 
 ### Added
 
-- **Web Dashboard** - Sentinel Settings now opens a modern web-based dashboard at `http://localhost:19845/` instead of the WinForms `AgentDashboardForm`. Dark theme, real-time event stream via WebSocket, pipeline metrics, quarantine management, and system scan - all in the browser.
+- **Web Dashboard** - Gnyida Settings now opens a modern web-based dashboard at `http://localhost:19845/` instead of the WinForms `AgentDashboardForm`. Dark theme, real-time event stream via WebSocket, pipeline metrics, quarantine management, and system scan - all in the browser.
 
 - **One-Time System Scan** - New `ScanEngine` performs a comprehensive point-in-time security audit: running process reputation + staging-path check, persistence mechanisms (Run keys, scheduled tasks, startup folder, services, IFEO, Winlogon), certificate store audit (non-standard root/trusted publisher CAs), malicious LNK shortcut patterns, unsigned executables in staging paths, and network state (listeners from staging paths). Triggered from the dashboard or via IPC (`scan` / `scan_status` operations).
 
@@ -4225,7 +4232,7 @@ Honest remediations from a full source red-team. Several items previously marked
 
 - **Unmapped thread starts require a compact private executable page (<=16 KB)** - V8 / QtWebEngine / OBS JIT threads in large regions are ignored. No process-name skip.
 
-- **SelfPathGuard prefix hole closed** - only the known product PE names under the install dir are self. `Sentinel.Update.exe` planted there is not immortal.
+- **SelfPathGuard prefix hole closed** - only the known product PE names under the install dir are self. `Gnyida.Update.exe` planted there is not immortal.
 
 - **ThreatIntelInjectionRule** ignores synthetic `ThreatIntel_EventId_*` labels (they never contain API names) and skips game/creator install trees.
 
@@ -4241,7 +4248,7 @@ Honest remediations from a full source red-team. Several items previously marked
 
 ### Changed
 
-- README states Sentinel is built to **battle hackers** on gaming / creator / high-profile hosts, and that browsing plus Steam / Xbox / Store / DirectX / OBS installs are work, not incidents. Game/creator path list expanded (OBS, Streamlabs, Xbox/Game Bar, Gaming Services).
+- README states Gnyida is built to **battle hackers** on gaming / creator / high-profile hosts, and that browsing plus Steam / Xbox / Store / DirectX / OBS installs are work, not incidents. Game/creator path list expanded (OBS, Streamlabs, Xbox/Game Bar, Gaming Services).
 
 - `ProductInfo.Version` and SECURITY.md supported-version table stamped **2.1.2**.
 
@@ -4281,7 +4288,7 @@ Expands userland coverage for campaigns that lead to local privilege escalation 
 
 Still legacy chain-wait mode / work-first. Kernel bugs require Windows Update.
 
-All notable changes to Sentinel are documented in this file.
+All notable changes to Gnyida are documented in this file.
 
 ## [2.0.9] - 2026-08-12
 
@@ -4300,9 +4307,9 @@ Thorough source audit with attacker and defender perspectives for gaming PCs and
 #### Critical / High
 
 - **SPKI certificate pinning (fix)** - `ProxyAuthHelper` now hashes true SubjectPublicKeyInfo (DER) for pin matching, plus cert DER and legacy `GetPublicKey()` candidates for CA rotation. Prior code claimed SPKI but hashed raw key material only.
-- **Threat proxy replay (nonce)** - Client and Cloudflare Worker use `timestamp.nonce.path.body` HMAC; Worker requires `X-Sentinel-Nonce`, 60s window (was 5 min), and in-isolate nonce replay cache.
+- **Threat proxy replay (nonce)** - Client and Cloudflare Worker use `timestamp.nonce.path.body` HMAC; Worker requires `X-Gnyida-Nonce`, 60s window (was 5 min), and in-isolate nonce replay cache.
 - **Rule pack trust root lock** - External `rulepack_pubkey.xml` is **ignored**. Only the embedded RSA public key verifies packs (prevents admin-writable key swap -> false chain-nukes).
-- **SafeKill plant resistance** - `HardeningModule.SafeKillProcessTree` excludes only `SelfPathGuard.IsSentinelSelfBinary` (known product names under install final path). Arbitrary PE planted under the install directory is no longer immortal.
+- **SafeKill plant resistance** - `HardeningModule.SafeKillProcessTree` excludes only `SelfPathGuard.IsGnyidaSelfBinary` (known product names under install final path). Arbitrary PE planted under the install directory is no longer immortal.
 - **Installer ACL race reduced** - Setup unlocks only product binaries for replace; no recursive `takeown`/`icacls` on the full tree.
 
 #### Medium
@@ -4314,7 +4321,7 @@ Thorough source audit with attacker and defender perspectives for gaming PCs and
 
 #### Docs / product honesty
 
-- README positions Sentinel for **real attackers**, gamers, and high-profile targets without overclaiming kernel invincibility.
+- README positions Gnyida for **real attackers**, gamers, and high-profile targets without overclaiming kernel invincibility.
 - SECURITY.md / THREAT_MODEL attack surface updated for v2.0.8.
 
 #### Tests
@@ -4338,12 +4345,12 @@ Behavioral monitors still observe everything - if an actual attack uses a game p
 
 ### Changed - HostsFileGuard Refactored to Monitor-Only Mode
 
-The `HostsFileGuard` no longer enforces a hardcoded hosts file. Users may freely edit their Windows hosts file without Sentinel overwriting it.
+The `HostsFileGuard` no longer enforces a hardcoded hosts file. Users may freely edit their Windows hosts file without Gnyida overwriting it.
 
 #### What was removed
-- **Embedded ad-blocking hosts baseline** - the ~100-entry ad/tracker blocklist (doubleclick, google-analytics, hotjar, taboola, etc.) has been entirely removed. Ad-blocking is not Sentinel's responsibility.
-- **Full-file overwrite enforcement** - Sentinel no longer overwrites the hosts file with a hardcoded SHA-256 baseline on every change.
-- **Directory purging** - Sentinel no longer deletes files from `drivers\etc` (hosts.ics, etc.).
+- **Embedded ad-blocking hosts baseline** - the ~100-entry ad/tracker blocklist (doubleclick, google-analytics, hotjar, taboola, etc.) has been entirely removed. Ad-blocking is not Gnyida's responsibility.
+- **Full-file overwrite enforcement** - Gnyida no longer overwrites the hosts file with a hardcoded SHA-256 baseline on every change.
+- **Directory purging** - Gnyida no longer deletes files from `drivers\etc` (hosts.ics, etc.).
 
 #### What was added
 - **Suspicious modification detection** - monitors the hosts file for malware indicators:
@@ -4371,15 +4378,15 @@ Comprehensive security hardening release addressing all findings from an interna
 
 - **CRIT-1: IPC nonce replay prevention** - `ServiceAgentIpcHost` now tracks used nonces server-side via `ConcurrentDictionary` (bounded to 2048 entries, pruned on window expiry). Replay within the 60-second timestamp window returns `auth_replay` error.
 - **CRIT-2: Asymmetric rule pack signing** - Switched from HMAC-SHA256 (symmetric key on endpoint) to RSA-SHA256 asymmetric signature verification. Only the public key exists on the endpoint; the private signing key is kept offline. Legacy HMAC-signed packs are explicitly rejected. External key rotation supported via `rulepack_pubkey.xml`.
-- **CRIT-3: EnforceActiveResponse defaults to true** - Both the compiled `SentinelConfig` default and disk JSON config now ship with `EnforceActiveResponse: true`. AntiTamperGuard force-re-enables ActiveResponse if disabled.
+- **CRIT-3: EnforceActiveResponse defaults to true** - Both the compiled `GnyidaConfig` default and disk JSON config now ship with `EnforceActiveResponse: true`. AntiTamperGuard force-re-enables ActiveResponse if disabled.
 
 #### High Severity Fixes
 
-- **HIGH-1: Process-specific DPAPI entropy** - `SecureCacheStore` key derivation now includes SHA-256 of the Sentinel executable itself. Attacker with SYSTEM cannot forge cache entries without the exact binary. Domain label bumped to `sentinel-secure-cache-hmac-v4`.
+- **HIGH-1: Process-specific DPAPI entropy** - `SecureCacheStore` key derivation now includes SHA-256 of the Gnyida executable itself. Attacker with SYSTEM cannot forge cache entries without the exact binary. Domain label bumped to `gnyida-secure-cache-hmac-v4`.
 - **HIGH-2: Removed wildcard CORS** - Cloudflare Worker `Access-Control-Allow-Origin` set to empty string; methods restricted to POST/OPTIONS. Non-browser agents don't need CORS.
 - **HIGH-3: Certificate pinning** - `ProxyAuthHelper.CreatePinnedHttpClient()` implements public key pinning against Cloudflare intermediate CA certificates. FileReputationEngine's VT proxy client uses the pinned client.
 - **HIGH-4: Removed FIPS enforcement** - FIPS Algorithm Policy disable removed from both installer (registry entries) and AntiTamperGuard (`EnforceFipsDisabled` + `ApplyFipsSecurityDatabaseOverride` methods deleted). An EDR must not weaken system cryptographic posture.
-- **HIGH-5: Scoped ReleaseUserWorkSurface** - No longer re-enables RemoteRegistry or removes ASR rules Sentinel didn't set. Only Sentinel-created artifacts (IPSec "GSecurity", "Sentinel-*" firewall rules, known ASR GUIDs) are removed.
+- **HIGH-5: Scoped ReleaseUserWorkSurface** - No longer re-enables RemoteRegistry or removes ASR rules Gnyida didn't set. Only Gnyida-created artifacts (IPSec "GSecurity", "Gnyida-*" firewall rules, known ASR GUIDs) are removed.
 
 #### Medium Severity Fixes
 
@@ -4399,9 +4406,9 @@ Comprehensive security hardening release addressing all findings from an interna
 
 ### Major Enhancement - Eliminated disk JSON config Attack Surface
 
-- **New `EncryptedConfigStore`** - DPAPI machine-scope encrypted config at `%ProgramData%\Sentinel\Secure\config.enc`. Physical access attacker must break DPAPI to read/modify configuration.
-- **All operational defaults compiled into binary** via `SentinelConfig`/`ThreatReportingConfig` property initializers (including `ProxyEndpoint`).
-- **`--set-config Key=Value` CLI** - Secrets managed via `Sentinel.Service.exe --set-config ProxySharedSecret=value`.
+- **New `EncryptedConfigStore`** - DPAPI machine-scope encrypted config at `%ProgramData%\Gnyida\Secure\config.enc`. Physical access attacker must break DPAPI to read/modify configuration.
+- **All operational defaults compiled into binary** via `GnyidaConfig`/`ThreatReportingConfig` property initializers (including `ProxyEndpoint`).
+- **`--set-config Key=Value` CLI** - Secrets managed via `Gnyida.Service.exe --set-config ProxySharedSecret=value`.
 - **Installer no longer ships disk JSON config** - if the file appears on disk, AntiTamperGuard emits a Tier1 "Unauthorized disk JSON config" detection.
 - **AntiTamperGuard** now monitors `config.enc` integrity (hash baseline + change detection).
 
@@ -4424,7 +4431,7 @@ Major test infrastructure expansion. Adds comprehensive unit tests for all previ
 
 ### Security - IPC token ACL race fix (RT-MED-1)
 
-- **`ServiceAgentIpc.EnsureServerToken()`** - Fixed TOCTOU race where the IPC token file was briefly world-readable between `File.WriteAllBytes` and `LockTokenAcl`. Token is now written to a temp file with a pre-configured `FileSecurity` descriptor (SYSTEM full, Admins full, AuthenticatedUsers read) via the `FileStream` constructor, then atomically renamed into place. Parent directory (`%ProgramData%\Sentinel\Secure\`) is also ACL-locked before token creation.
+- **`ServiceAgentIpc.EnsureServerToken()`** - Fixed TOCTOU race where the IPC token file was briefly world-readable between `File.WriteAllBytes` and `LockTokenAcl`. Token is now written to a temp file with a pre-configured `FileSecurity` descriptor (SYSTEM full, Admins full, AuthenticatedUsers read) via the `FileStream` constructor, then atomically renamed into place. Parent directory (`%ProgramData%\Gnyida\Secure\`) is also ACL-locked before token creation.
 - Fallback to original write+lock behavior if the atomic path fails (e.g., cross-volume move).
 
 ### Fixed - PID buffer stale signal accumulation
@@ -4439,11 +4446,11 @@ Major test infrastructure expansion. Adds comprehensive unit tests for all previ
   - Below 200 MB free on the log volume: proactively prunes oldest rotated logs (`.5` through `.3`).
   - Below 100 MB free: stops writing entirely (drops events gracefully via `_droppedEvents` counter).
   - Auto-recovers when space is freed above the 100 MB floor.
-- Prevents Sentinel from filling the last disk space with event logs on constrained volumes.
+- Prevents Gnyida from filling the last disk space with event logs on constrained volumes.
 
 ### Fixed - Agent restart counter env-var leakage
 
-- **Agent `Program.cs`** - Replaced `WS_AGENT_RESTART_COUNT` environment variable with a file-based marker (`%ProgramData%\Sentinel\.agent_restart_marker`). The env-var approach leaked into child processes via `ProcessStartInfo.EnvironmentVariables` inheritance, potentially polluting the counter.
+- **Agent `Program.cs`** - Replaced `WS_AGENT_RESTART_COUNT` environment variable with a file-based marker (`%ProgramData%\Gnyida\.agent_restart_marker`). The env-var approach leaked into child processes via `ProcessStartInfo.EnvironmentVariables` inheritance, potentially polluting the counter.
 - Marker stores `{utc_ticks}|{count}` and auto-expires after 60 seconds (stale markers treated as fresh start). Cleared on successful host startup via `ClearRestartMarker()`.
 - Both `TryImmediateRestart` and `ScheduleDelayedRelaunch` use the unified `ReadAndIncrementRestartMarker()`.
 
@@ -4467,9 +4474,9 @@ Major test infrastructure expansion. Adds comprehensive unit tests for all previ
 
 ### Fixed - Config hygiene and documentation audit
 
-- **`disk JSON config` duplicate key** - `RestrictivePortHardening` appeared twice in the `Sentinel` section (once before `WindowsEventLog`, once after). `System.Text.Json` silently uses the last value; removed the duplicate to eliminate ambiguity on future edits.
+- **`disk JSON config` duplicate key** - `RestrictivePortHardening` appeared twice in the `Gnyida` section (once before `WindowsEventLog`, once after). `System.Text.Json` silently uses the last value; removed the duplicate to eliminate ambiguity on future edits.
 - **`MitmDefense.KnownRogueCastIps` cleared** - Default config contained `192.168.1.100`, the attacker IP from the June 13-14 incident on this machine. That IP is meaningless on any other machine and would cause `CastDeviceGuard` to pre-block a potentially legitimate LAN device on clean installs. Cleared to `[]`. Users who reproduce this attack should add their attacker IP post-incident; the detection logic (`AutoBlockRogueCast`, `RogueCastMacPrefixes`) remains armed and will identify rogue Cast devices dynamically.
-- **`README.md` installer filename** - Download link referenced `SentinelSetup-2.0.0.exe`; corrected to `2.0.1` (now `2.0.2` with this release).
+- **`README.md` installer filename** - Download link referenced `GnyidaSetup-2.0.0.exe`; corrected to `2.0.1` (now `2.0.2` with this release).
 
 ### Docs - requirements.md brought to current (was stale at v1.8.5)
 
@@ -4491,7 +4498,7 @@ Complete rewrite to match the 2.0.x codebase:
 
 ### Restored - Post-incident MitM defense suite (fake Chromecast + planted cert + ghost process)
 
-Recreates the June 13-14 attack defense as a single opt-in suite under `Sentinel:MitmDefense`.
+Recreates the June 13-14 attack defense as a single opt-in suite under `Gnyida:MitmDefense`.
 
 **Attack chain this closes:**
 1. Plant self-signed root (machine-name CN, absurd validity, Server Auth EKU) -> TLS MitM
@@ -4507,7 +4514,7 @@ Recreates the June 13-14 attack defense as a single opt-in suite under `Sentinel
 - **NullSessionGuard** - FCM TCP 5228 block when suite on (Send Tab to Self)
 - **AdvancedResponseEngine** - MitmDefense actions are not demoted to LogOnly by legacy chain-wait mode
 
-**Config** (`disk JSON config` -> `Sentinel:MitmDefense`):
+**Config** (`disk JSON config` -> `Gnyida:MitmDefense`):
 ```json
 "MitmDefense": {
   "Enabled": true,
@@ -4544,7 +4551,7 @@ Major platform release. Product law unchanged: **observe by default**, work-firs
 - Emits **`Weighted Correlation: Multi-Signal Threat`** when total >= threshold (default **100**), >=2 distinct categories, and a terminal-family contribution (or high score).
 - Every signal gets `ScoreCardTotal`, `ScoreCardBreakdown`, `ScoreCardExplanation` metadata for JSONL / packs.
 - Complements hand-authored `BehavioralCorrelationEngine` composites (both stay armed).
-- Config: `Sentinel:WeightedCorrelation` (`Enabled`, `Threshold`, `MinDistinctCategories`, `EnableGraphBoost`).
+- Config: `Gnyida:WeightedCorrelation` (`Enabled`, `Threshold`, `MinDistinctCategories`, `EnableGraphBoost`).
 - **EventGraph diversity boost** (0-25): endpoint/file fan-out raises the score card when `EnableGraphBoost=true`.
 
 #### MITRE ATT&CK mapping
@@ -4554,16 +4561,16 @@ Major platform release. Product law unchanged: **observe by default**, work-firs
 #### Plugin architecture + signed rule packs
 - Interfaces: `IDetector`, `ITelemetryProvider`, `ICorrelationRule`, `IResponsePlugin`.
 - **`PluginRegistry`** DI singleton - register correlation rules without editing core god-files.
-- **`RulePackLoader`**: `%ProgramData%\Sentinel\rules\packs\*.pack.json` (HMAC fail-closed) -> `FragmentCorrelationRule` plugins.
+- **`RulePackLoader`**: `%ProgramData%\Gnyida\rules\packs\*.pack.json` (HMAC fail-closed) -> `FragmentCorrelationRule` plugins.
 - Docs: [docs/RULE_PACKS.md](RULE_PACKS.md).
 
 #### Ops / diagnostics
-- Expanded **`SentinelMetrics`**: telemetry/sec, detections/sec, drops, composite/weighted counts, correlation latency percentiles.
-- **`OpsMetricsPublisher`** writes `%ProgramData%\Sentinel\ops_metrics.json` every ~10s.
+- Expanded **`GnyidaMetrics`**: telemetry/sec, detections/sec, drops, composite/weighted counts, correlation latency percentiles.
+- **`OpsMetricsPublisher`** writes `%ProgramData%\Gnyida\ops_metrics.json` every ~10s.
 - Agent Settings -> **Ops** page (prefers live IPC, falls back to file).
 
 #### Service<->Agent IPC (RT-HIGH-4)
-- **`ServiceAgentIpcHost`** named pipe `SentinelIpc-v2` with HMAC token (`%ProgramData%\Sentinel\Secure\.ipc_token`).
+- **`ServiceAgentIpcHost`** named pipe `GnyidaIpc-v2` with HMAC token (`%ProgramData%\Gnyida\Secure\.ipc_token`).
 - Read-only ops: `ping`, `ops`, `health`. No ActiveResponse control over the pipe.
 
 #### Security hardening (audit residual)
@@ -4572,13 +4579,13 @@ Major platform release. Product law unchanged: **observe by default**, work-firs
 - **RT-HIGH-4 mitigation:** authenticated named-pipe IPC (above).
 
 #### Product info
-- `ProductInfo.Version = 2.0.0`, `version.txt`, installer `SentinelSetup-2.0.0`.
+- `ProductInfo.Version = 2.0.0`, `version.txt`, installer `GnyidaSetup-2.0.0`.
 
 ## [1.9.9] - 2026-08-04
 
 ### Observe - optional OS services + bulk upload noise (no host mutation)
 
-**Product law unchanged:** for ~99% of software and normal user work (including **torrent seeding**), Sentinel **observes only**. Destructive response remains reserved for chain-confirmed malice (credential dump, C2 beaconing, ransomware encryption, reverse shell, token theft, true staged exfil chains).
+**Product law unchanged:** for ~99% of software and normal user work (including **torrent seeding**), Gnyida **observes only**. Destructive response remains reserved for chain-confirmed malice (credential dump, C2 beaconing, ransomware encryption, reverse shell, token theft, true staged exfil chains).
 
 - **`PrivacyServiceOutboundMonitor`** + **`ServiceProcessMap`** - inventory optional services (`DiagTrack`, `whesvc`, `dmwappushservice`, `PcaSvc`, `WerSvc`, `wisvc`, plus config extras); log running state and public outbound remotes as **Tier2 / LogOnly / WeakObserveSeed**. Never stop services, kill `svchost`, or firewall-block for privacy noise.
 - **`ServiceExfilPosture`** config - default `Enabled=true`, `Mode=Observe`. Soft/Hard reaction reserved for a later opt-in (not shipped).
@@ -4622,7 +4629,7 @@ Detection, events.jsonl, and chain-confirmed response are unchanged. Kiosk opera
 
 ## [1.9.6] - 2026-08-03
 
-### Fixed - ASR no longer blocks SentinelSetup as "ransomware protection"
+### Fixed - ASR no longer blocks GnyidaSetup as "ransomware protection"
 **Root cause:** `HardeningModule` applied Defender ASR rule `c1db55ab`
 ("Use advanced protection against ransomware") in **Block**. That rule stops
 unsigned/low-prevalence EXEs launched from `%TEMP%` - which is exactly how
@@ -4632,7 +4639,7 @@ hardening** re-applied by `AsrPolicyGuard` every ~60s.
 
 - **Removed** `c1db55ab` from the enforced Block list.
 - On every apply: **delete** that GUID if an older build left it.
-- **ASROnlyExclusions** for `Program Files*\Sentinel` (and running base dir).
+- **ASROnlyExclusions** for `Program Files*\Gnyida` (and running base dir).
 - Manual helpers: `installer/install-no-inno.ps1`, `installer/fix-asr-for-setup.ps1`.
 
 ### Docs
@@ -4643,7 +4650,7 @@ hardening** re-applied by `AsrPolicyGuard` every ~60s.
 ### Added - Windows Event Log trail (critical events only)
 Durable **secondary** audit trail alongside JSONL for SIEM / Event Viewer / LE chain-of-custody.
 
-- **`SentinelEventLogWriter`:** writes to Windows **Application** log, source **Sentinel** (configurable).
+- **`GnyidaEventLogWriter`:** writes to Windows **Application** log, source **Gnyida** (configurable).
 - **Event IDs:** 1000 service start - 1001 stop - 1100 chain response - 1200 evidence pack - 1400 anti-tamper - 1500 heartbeat.
 - **Default CriticalOnly:** no Tier2 observe spam - only lifecycle, chain-confirmed responses, packs, heartbeat.
 - **Wired:** service start/stop, `AdvancedResponseEngine` destructive/chain actions, `AutoIncidentReporter` pack seal, optional heartbeat hosted service.
@@ -4659,11 +4666,11 @@ Stripped images often lack or break Event Log, ETW, WMI, toast, etc. 1.9.5 polic
 - Heartbeat and writes no-op when disabled; service still starts.
 - Existing ETW -> WMI/poll fallback unchanged; monitor start failures still isolated.
 
-### Config (`Sentinel:WindowsEventLog`)
+### Config (`Gnyida:WindowsEventLog`)
 ```json
 "WindowsEventLog": {
   "Enabled": true,
-  "SourceName": "Sentinel",
+  "SourceName": "Gnyida",
   "LogName": "Application",
   "CriticalOnly": true,
   "MaxWritesPerMinute": 30,
@@ -4685,7 +4692,7 @@ Protects users from **machine-side tools** used in online harassment, sexual coe
   - `Session Theft + Abuse Channel` (0.95) - credential/session access + network/exfil
   - `Stalkerware Persistence Chain` (0.92) - surveillance + autorun/persistence
 - **Evidence packs:** dedicated "DIGITAL COERCION / SURVEILLANCE TOOLKIT" section + affidavit optional harm categories when tagged.
-- **Agent Settings -> Safety:** plain-language page (what Sentinel does/doesn't do, session revoke, report, packs).
+- **Agent Settings -> Safety:** plain-language page (what Gnyida does/doesn't do, session revoke, report, packs).
 - **Scope:** Discord, email, social, browsers, games, voice/video - any channel that leaves **host** traces.
 - Screen/webcam signals feed **composites** but remain weak chain seeds alone (no single-signal Cast-style nukes).
 
@@ -4695,7 +4702,7 @@ Protects users from **machine-side tools** used in online harassment, sexual coe
 ## [1.9.3] - 2026-08-03
 
 ### Fixed - Evidence packs after chain-confirmed nukes
-- **Root cause:** `SilentObserve` allowed reporting only when `Metadata.ChainConfirmed=true`, but `ShouldReport` still required high confidence / kill-grade fields that the response engine kept in *local* variables. Result: real chain kills (and toast path) produced **zero** packs under `%ProgramData%\Sentinel\IncidentReports`.
+- **Root cause:** `SilentObserve` allowed reporting only when `Metadata.ChainConfirmed=true`, but `ShouldReport` still required high confidence / kill-grade fields that the response engine kept in *local* variables. Result: real chain kills (and toast path) produced **zero** packs under `%ProgramData%\Gnyida\IncidentReports`.
 - **`ResponsePolicy.PromoteChainConfirmedFields`:** on chain confirm, write Tier1 + `QuarantineAndKill` back onto the detection (so `KillAuthorized` derives true).
 - **`AdvancedResponseEngine`:** calls promote on chain-confirmed nuke path.
 - **`AutoIncidentReporter.ShouldReport`:** chain-confirmed / nuke composites always generate a sealed local evidence pack (still blocked for TokenTheft OS false positives).
@@ -4715,10 +4722,10 @@ Protects users from **machine-side tools** used in online harassment, sexual coe
 
 ## [1.9.2] - 2026-08-02
 
-### Added - Force-remove legacy `*.sentinel_verdict` on upgrade
-- **`LegacyVerdictSidecarPurgeService`:** ~60s after service start, one-shot walk of all ready **fixed** drives deletes leftover `*.sentinel_verdict` sidecars from pre-1.8.8 pollution (for users who installed earlier builds).
-- **`FileVerdictAds.PurgeLegacySidecarsOnce` / `PurgeLegacySidecarFiles`:** best-effort recursive delete; skips WinSxS/Installer/junctions/reparse points; does **not** touch central `%ProgramData%\Sentinel\Secure\VerdictCache`.
-- Marker `%ProgramData%\Sentinel\Secure\legacy_sidecar_purge_1_9_2.done` prevents re-scan every boot; `force: true` re-runs.
+### Added - Force-remove legacy `*.gnyida_verdict` on upgrade
+- **`LegacyVerdictSidecarPurgeService`:** ~60s after service start, one-shot walk of all ready **fixed** drives deletes leftover `*.gnyida_verdict` sidecars from pre-1.8.8 pollution (for users who installed earlier builds).
+- **`FileVerdictAds.PurgeLegacySidecarsOnce` / `PurgeLegacySidecarFiles`:** best-effort recursive delete; skips WinSxS/Installer/junctions/reparse points; does **not** touch central `%ProgramData%\Gnyida\Secure\VerdictCache`.
+- Marker `%ProgramData%\Gnyida\Secure\legacy_sidecar_purge_1_9_2.done` prevents re-scan every boot; `force: true` re-runs.
 
 ## [1.9.1] - 2026-08-02
 
@@ -4754,14 +4761,14 @@ Protects users from **machine-side tools** used in online harassment, sexual coe
 - **ProxyEnable false positive:** treat missing / empty / `"0"` as equivalent (proxy off); adopt baseline after LogOnly so audits do not re-fire every 5s.
 - **`events.jsonl` rotation:** threshold **50 MB -> 20 MB**.
 
-### Fixed - Disk pollution (`*.sentinel_verdict`)
-- **`FileVerdictAds`:** store verdicts in central content-addressed cache under `%ProgramData%\Sentinel\Secure\VerdictCache\` (keyed by SHA-256).
-- Optional NTFS ADS on the target remains; **never** write adjacent `*.sentinel_verdict` sidecars (legacy fallback polluted every drive).
+### Fixed - Disk pollution (`*.gnyida_verdict`)
+- **`FileVerdictAds`:** store verdicts in central content-addressed cache under `%ProgramData%\Gnyida\Secure\VerdictCache\` (keyed by SHA-256).
+- Optional NTFS ADS on the target remains; **never** write adjacent `*.gnyida_verdict` sidecars (legacy fallback polluted every drive).
 - Legacy sidecars are migrated into the central cache on read, then deleted.
 - Unit tests cover no-sidecar write and legacy migration.
 
 ### Docs
-- Platform docs corrected: product targets **`net48-windows`** (Framework 4.8); optional `tools/Sentinel.MlTrainer` remains `net10.0-windows` for build hosts with SDK 10.
+- Platform docs corrected: product targets **`net48-windows`** (Framework 4.8); optional `tools/Gnyida.MlTrainer` remains `net10.0-windows` for build hosts with SDK 10.
 
 ## [1.8.7] - 2026-08-01
 
@@ -4845,7 +4852,7 @@ Protects users from **machine-side tools** used in online harassment, sexual coe
 
 ### Added - Offline PE/URL ML soft signals
 - `MlThreatScorer` (Microsoft.ML FastTree) scores PE binaries and URLs/hosts from offline models in `MlModels/`
-- Models trained from CroatiaSecurity/C datasets via `tools/Sentinel.MlTrainer` (`pe_model.zip`, `url_model.zip`)
+- Models trained from CroatiaSecurity/C datasets via `tools/Gnyida.MlTrainer` (`pe_model.zip`, `url_model.zip`)
 - `FileReputationEngine` blends PE ML into composite score (15% weight when model present; capped when Authenticode-signed)
 - `DnsQueryMonitor` emits Tier2 log-only `DNS: ML URL Model High Risk` above 90% probability (trusted domains skipped/dampened)
 - Soft signal only - ML never authorizes kill alone
@@ -4911,7 +4918,7 @@ Default product posture: **watch until something does something bad**, then act.
 | `ThreatIntelProactiveFirewall` | always on | **off** - feed watch + reactive isolate only |
 | `BlockFcmPushChannel` | always on (5228 + mtalk hosts) | **off** - set `true` after confirmed MitM/token theft (CHANGELOG 0.8.6) |
 | `TrustedCastDevices` empty | kill all LAN Cast | **observe-only** (log); non-empty = enforce allowlist |
-| Upgrade cleanup | left residual FCM/Cast FW rules | removes leftover `Sentinel-FCM-Push-Block` and `Sentinel-CastGuard-Block-*` when disabled/observe |
+| Upgrade cleanup | left residual FCM/Cast FW rules | removes leftover `Gnyida-FCM-Push-Block` and `Gnyida-CastGuard-Block-*` when disabled/observe |
 | TLS public roots | SSL.com / GTS false-flag risk | known public CA list expanded; long-lived roots not scored for missing CRL |
 
 **Post-incident host (this machine's June 13-14 chain):** set `"BlockFcmPushChannel": true` and/or list only trusted Cast IPs. That remains the correct permanent mitigation after Chrome sync token theft - it is no longer forced on every user.
@@ -4959,11 +4966,11 @@ Full adversarial review of Core, Service, Agent, installer, worker, and config. 
 
 | ID | Severity | Fix |
 |----|----------|-----|
-| RT-CRIT-1 | Critical | Stop sending `ProxySharedSecret` as `X-Sentinel-Auth`. HMAC + timestamp only. |
+| RT-CRIT-1 | Critical | Stop sending `ProxySharedSecret` as `X-Gnyida-Auth`. HMAC + timestamp only. |
 | RT-CRIT-2 | Medium | Dynamic rule reflection limited to documented telemetry property allowlist |
 | RT-MED-1 | Medium | Telemetry queue bounded (10k, DropOldest) |
 | RT-MED-2 | Medium | Rules reload debounce uses cancellable `Task.Delay` |
-| RT-MED-3 | Medium | `%ProgramData%\Sentinel` ACL locked before early diagnostic writes |
+| RT-MED-3 | Medium | `%ProgramData%\Gnyida` ACL locked before early diagnostic writes |
 | RT-LOW-1 | Low | Kill/isolate budget queues capped at `limit * 2` |
 | RT-LOW-2 | Low | HighRisk installer demotion requires `IsLikelyInstallerPath` |
 
@@ -5018,12 +5025,12 @@ Tray double-click / **Settings** opens a TrimKit-style dark WinForms settings wi
 | **About** | Version, paths, filing honesty notes |
 
 #### Report to Police flow
-- Lists `%ProgramData%\Sentinel\IncidentReports\AUTO_*` packs (newest first)
+- Lists `%ProgramData%\Gnyida\IncidentReports\AUTO_*` packs (newest first)
 - Editable complainant fields (name, contact, narrative, loss/harm, country portal)
 - Consent checkboxes; **Save Affidavit** writes `victim_affidavit.txt` (still excluded from integrity seal)
 - **Send Report to Police** saves affidavit, rebuilds pack ZIP, copies a filing summary to the clipboard, opens the national cybercrime portal, and opens the pack folder so the user can attach evidence
 - Also: Verify Integrity, Open ZIP, Copy Summary, Open Portal Only
-- Identity defaults persist under `%LocalAppData%\Sentinel\user_report_prefs.json`
+- Identity defaults persist under `%LocalAppData%\Gnyida\user_report_prefs.json`
 
 #### Tray menu
 - **Settings** (default / double-click)
@@ -5074,7 +5081,7 @@ Closest practical implementation of "auto-report hacking against users":
 
 | Automatic action | Destination | Notes |
 |------------------|-------------|--------|
-| Local evidence pack | `%ProgramData%\Sentinel\IncidentReports\AUTO_*` | Police-ready text pack + indicators + network snapshot |
+| Local evidence pack | `%ProgramData%\Gnyida\IncidentReports\AUTO_*` | Police-ready text pack + indicators + network snapshot |
 | National portal guidance | Country-specific cybercrime URLs | From Windows region or `CountryCode` override |
 | TI indicator share | MalwareBazaar / URLhaus / AbuseIPDB via existing Worker | When `ThreatReporting` proxy secret is set - **not** police |
 | User toast | Critical notification | Pack path + which portal to file with |
@@ -5273,7 +5280,7 @@ present, so `EjectUsbDevice` returned early and never ran `pnputil /remove-devic
 
 ### Fixed - Installer Self-Kill
 
-- **TokenTheftMonitor exempts installer extractors** - Inno Setup's elevated temp process (`SentinelSetup-*.tmp`) runs from `AppData\Local\Temp\is-XXXXX\` with `SeImpersonatePrivilege` (normal UAC elevation). `TokenTheftMonitor` was flagging this as a potato-class privilege escalation tool and killing the installer before it could stop the service. Added `InstallerHeuristics.IsInstallerExtractor` + `LooksLikeInstallerName` check before the suspicious-path detection fires.
+- **TokenTheftMonitor exempts installer extractors** - Inno Setup's elevated temp process (`GnyidaSetup-*.tmp`) runs from `AppData\Local\Temp\is-XXXXX\` with `SeImpersonatePrivilege` (normal UAC elevation). `TokenTheftMonitor` was flagging this as a potato-class privilege escalation tool and killing the installer before it could stop the service. Added `InstallerHeuristics.IsInstallerExtractor` + `LooksLikeInstallerName` check before the suspicious-path detection fires.
 
 ### Fixed - USB "Not Recognized" Notification Icon Persisting
 
@@ -5362,7 +5369,7 @@ All 9 provider GUIDs confirmed correct against Microsoft official documentation:
 
 ### Added - BYOVD Certificate Tracing (DriverLoadMonitor)
 
-Closes the BYOVD attack chain at the certificate level. When a vulnerable or suspicious kernel driver is detected, Sentinel now traces back to the Authenticode signing certificate and revokes it if it was planted in the Windows certificate store.
+Closes the BYOVD attack chain at the certificate level. When a vulnerable or suspicious kernel driver is detected, Gnyida now traces back to the Authenticode signing certificate and revokes it if it was planted in the Windows certificate store.
 
 - **`TracAndRevokeDriverCertAsync`** - Extracts the Authenticode cert from a detected BYOVD driver. Checks if the cert (or its issuer) exists in `TrustedPublisher` or `Root` stores (LocalMachine + CurrentUser). If it's NOT a well-known public CA (Microsoft, DigiCert, NVIDIA, Intel, etc.), fires `RemoveCertAndKillAdder` (0.95 confidence) to revoke the planted cert and kill the installer process tree.
 
@@ -5371,7 +5378,7 @@ Closes the BYOVD attack chain at the certificate level. When a vulnerable or sus
 - **Public CA safeguard** - Well-known CAs (DigiCert, GlobalSign, Sectigo, etc.) and major hardware vendors (NVIDIA, Intel, Realtek, Broadcom, etc.) are never revoked. Only non-public planted certs trigger the revocation chain.
 
 - **Attack chain closed:**
-  1. Attacker plants fake cert in TrustedPublisher -> Sentinel detects via DriverLoadMonitor
+  1. Attacker plants fake cert in TrustedPublisher -> Gnyida detects via DriverLoadMonitor
   2. Attacker signs driver with planted cert -> Windows DSE validates it
   3. DriverLoadMonitor detects new kernel driver -> extracts Authenticode cert
   4. Cert found in TrustedPublisher, NOT a public CA -> fires RemoveCertAndKillAdder
@@ -5381,7 +5388,7 @@ Closes the BYOVD attack chain at the certificate level. When a vulnerable or sus
 
 ### Fixed - Documentation Accuracy
 
-- **README.md** - Removed inaccurate "game over" language about kernel driver attacks. Sentinel has multi-layer BYOVD defense (pre-load detection, cert revocation, prerequisite monitoring). Updated to accurately describe capabilities including BYOVD defense, 80+ monitors, and the full attack-chain coverage.
+- **README.md** - Removed inaccurate "game over" language about kernel driver attacks. Gnyida has multi-layer BYOVD defense (pre-load detection, cert revocation, prerequisite monitoring). Updated to accurately describe capabilities including BYOVD defense, 80+ monitors, and the full attack-chain coverage.
 
 - **design.md** - Version bumped to 1.7.0. DriverLoadMonitor description updated to include cert-tracing. ConfigIntegrityMonitor clarified as integrated into AntiTamperGuard. Added full v1.7.0 section documenting cert-tracing capability, confidence levels, and response actions.
 
@@ -5422,7 +5429,7 @@ Closes all remaining detection gaps from the v1.6.4 red/blue audit. Adds browser
 
 ### Enhanced - Monitor Expansions
 
-- **`EtwThreatIntelMonitor`** - Now detects ALLOCVM_REMOTE + PROTECTVM_REMOTE effects by scanning high-value injection targets (svchost, explorer, lsass, etc.) for unbacked RWX memory regions via VirtualQueryEx. Targets the observable results of the Microsoft-Windows-Threat-Intelligence ETW provider keywords (GUID `{F4E1897C-BB5D-5668-F1D8-040F4D8DD344}`). Since Sentinel runs as a service (not PPL), it detects effects rather than subscribing to the kernel provider directly. Fires at 0.88 confidence. Runs every 3rd scan cycle.
+- **`EtwThreatIntelMonitor`** - Now detects ALLOCVM_REMOTE + PROTECTVM_REMOTE effects by scanning high-value injection targets (svchost, explorer, lsass, etc.) for unbacked RWX memory regions via VirtualQueryEx. Targets the observable results of the Microsoft-Windows-Threat-Intelligence ETW provider keywords (GUID `{F4E1897C-BB5D-5668-F1D8-040F4D8DD344}`). Since Gnyida runs as a service (not PPL), it detects effects rather than subscribing to the kernel provider directly. Fires at 0.88 confidence. Runs every 3rd scan cycle.
 
 - **`SyscallStubMonitor`** - Expanded with indirect syscall / Hell's Gate detection. Scans non-image executable memory in target processes via ReadProcessMemory looking for the syscall stub pattern: `4C 8B D1 B8 xx xx 00 00 ... 0F 05` (mov r10,rcx; mov eax,SSN; syscall). Requires 3+ distinct stubs for a Tier1 alert (0.92/KillProcessTree). JIT processes excluded. Runs every 2nd 30s cycle.
 
@@ -5465,7 +5472,7 @@ Addresses the highest-priority detection gaps identified in the v1.6.0 red/blue 
 
 - **`CloudSyncExfilMonitor`** (CoreDetection Group, 15s interval) - Monitors cloud sync directories (OneDrive, Dropbox, Google Drive, MEGA, iCloud, pCloud) for data staging exfiltration. Discovers sync directories via environment variables and well-known paths. Baselines file counts at startup; alerts on burst file creation (50+ new files since baseline). Detects exfiltration sync tools (rclone, megasync, megacmd, cyberduck, FreeFileSync) - tools from suspicious paths -> Tier1/0.88/KillProcessTree. Burst staging in sync folder -> Tier2/0.62-0.82/LogOnly. Addresses audit finding "Cloud sync exfil (OneDrive/Dropbox/rclone) - Weak - Med-High blind spot."
 
-- **`EtwProviderTamperMonitor`** (Critical Group, 30s interval, restarts indefinitely) - Detects ETW provider manipulation in OTHER processes beyond Sentinel's own session (which EtwSessionGuard covers). Three detection modes: (1) Enumerates active ETW sessions via QueryAllTracesW; alerts if critical sessions (EventLog-Security, SentinelUnifiedTrace, etc.) are stopped. (2) Reads EtwEventWrite function prologue in lsass.exe and EventLog svchost via ReadProcessMemory; detects RET/NOP/JMP patches that blind ETW consumers. (3) Monitors for logman.exe/wevtutil.exe with manipulation commands (stop/delete/disable patterns). ETW patch confirmed -> Tier1/0.95/KillProcessTree. Session stopped -> Tier1/0.92/LogOnly. logman manipulation -> Tier1/0.88-0.95/KillProcessTree. Addresses audit finding "ETW blind / provider strip - Weak - HIGH blind spot."
+- **`EtwProviderTamperMonitor`** (Critical Group, 30s interval, restarts indefinitely) - Detects ETW provider manipulation in OTHER processes beyond Gnyida's own session (which EtwSessionGuard covers). Three detection modes: (1) Enumerates active ETW sessions via QueryAllTracesW; alerts if critical sessions (EventLog-Security, GnyidaUnifiedTrace, etc.) are stopped. (2) Reads EtwEventWrite function prologue in lsass.exe and EventLog svchost via ReadProcessMemory; detects RET/NOP/JMP patches that blind ETW consumers. (3) Monitors for logman.exe/wevtutil.exe with manipulation commands (stop/delete/disable patterns). ETW patch confirmed -> Tier1/0.95/KillProcessTree. Session stopped -> Tier1/0.92/LogOnly. logman manipulation -> Tier1/0.88-0.95/KillProcessTree. Addresses audit finding "ETW blind / provider strip - Weak - HIGH blind spot."
 
 ### Architecture
 
@@ -5514,7 +5521,7 @@ Major test infrastructure release. Establishes comprehensive automated verificat
 
 - **`InstallerHeuristicsTests`** - `LooksLikeInstallerName`, `IsInstallerExtractor`, `IsBenignEphemeralPrefetchName` with 30+ positive/negative test cases covering Git, Chrome, VS Code, Python, Node, Inno Setup, NSIS, WiX patterns.
 
-- **`ModelAndInfraTests`** - Config defaults (SentinelConfig, ThreatReportingConfig, CveShieldConfig), DetectionEvent kill authorization logic, telemetry defaults, EventGraph add/prune, SentinelMetrics recording/percentiles, RateLimiter/BurstRateLimiter enforcement, SafeProcessExemptionRegistry.
+- **`ModelAndInfraTests`** - Config defaults (GnyidaConfig, ThreatReportingConfig, CveShieldConfig), DetectionEvent kill authorization logic, telemetry defaults, EventGraph add/prune, GnyidaMetrics recording/percentiles, RateLimiter/BurstRateLimiter enforcement, SafeProcessExemptionRegistry.
 
 - **`ProcessAncestryCacheExtendedTests`** - RecordProcessStart/GetParent/GetProcessInfo round-trip, authoritative entry persistence, unknown PID handling.
 
@@ -5530,9 +5537,9 @@ Major test infrastructure release. Establishes comprehensive automated verificat
 
 ## [1.6.4] - 2026-07-27
 
-### Fixed (CRITICAL - Sentinel quarantining its own installer)
+### Fixed (CRITICAL - Gnyida quarantining its own installer)
 
-- **[CRITICAL] Removed `DenyExecution` from `FileVerdictScanner`** - `FileVerdictScanner` was applying a Deny Execute ACL (Everyone) on files scored HighRisk/Malicious by `FileReputationEngine`. This is antivirus behavior, not EDR behavior. Sentinel's design is observe-first: detect, log, correlate, and only respond when a process *actively* does something malicious. Preemptively blocking execution based on reputation alone violated this principle and caused the installer (`SentinelSetup-1.6.4.exe`) to be blocked - unsigned + unknown to reputation DBs + Downloads path = score ~62 (HighRisk) = ACL denied. The method has been removed entirely. `FileVerdictScanner` now logs verdicts and writes ADS tags for informational purposes only.
+- **[CRITICAL] Removed `DenyExecution` from `FileVerdictScanner`** - `FileVerdictScanner` was applying a Deny Execute ACL (Everyone) on files scored HighRisk/Malicious by `FileReputationEngine`. This is antivirus behavior, not EDR behavior. Gnyida's design is observe-first: detect, log, correlate, and only respond when a process *actively* does something malicious. Preemptively blocking execution based on reputation alone violated this principle and caused the installer (`GnyidaSetup-1.6.4.exe`) to be blocked - unsigned + unknown to reputation DBs + Downloads path = score ~62 (HighRisk) = ACL denied. The method has been removed entirely. `FileVerdictScanner` now logs verdicts and writes ADS tags for informational purposes only.
 
 - **[CRITICAL] `DetectionEngine` on-execute reputation path demotes installer-like binaries** - The `ProcessTelemetryQueueAsync` reputation check now consults `InstallerHeuristics.LooksLikeInstallerName` before emitting kill-authorized detections. If a binary matches installer heuristics AND no reputation source positively confirms it as malicious (MalwareBazaar/VT), the detection is demoted to Tier2/LogOnly (confidence 0.45). Behavioral monitors remain active - if the "installer" does something actually malicious (credential theft, ransomware IO, injection), those detections fire independently at full Tier1.
 
@@ -5562,14 +5569,14 @@ Major test infrastructure release. Establishes comprehensive automated verificat
 ### Security Hardening (USB)
 
 - **`UsbDeviceFingerprinter` failed-enumeration response** - `VID_0000` / "Device Descriptor Request Failed" / "Unknown USB Device" -> Tier1 confidence 0.82, optional auto-disable via `ConfigFlags` (`AutoDisableFailedUsbEnumeration`, default true).
-- **Trusted USB allowlist** - `Sentinel:TrustedUsbDevices` (VID:PID). Built-in default includes `0951:1666` (Kingston DataTraveler 3.0 / common Ventoy). Matched devices log as trusted at low confidence and are not auto-disabled. `UsbHidWhitelist` merges the same list.
+- **Trusted USB allowlist** - `Gnyida:TrustedUsbDevices` (VID:PID). Built-in default includes `0951:1666` (Kingston DataTraveler 3.0 / common Ventoy). Matched devices log as trusted at low confidence and are not auto-disabled. `UsbHidWhitelist` merges the same list.
 
 ### Configuration
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
-| `Sentinel:AutoDisableFailedUsbEnumeration` | `true` | Disable failed-enum USB nodes via registry |
-| `Sentinel:TrustedUsbDevices` | `["0951:1666"]` | Operator-trusted mass-storage / receivers |
+| `Gnyida:AutoDisableFailedUsbEnumeration` | `true` | Disable failed-enum USB nodes via registry |
+| `Gnyida:TrustedUsbDevices` | `["0951:1666"]` | Operator-trusted mass-storage / receivers |
 
 ### Tests
 
@@ -5587,7 +5594,7 @@ Major test infrastructure release. Establishes comprehensive automated verificat
 
 - **[HIGH] `ChainTracer` never kills critical system names when image path is empty** - Explorer was killed when path unresolved (`IsSystemBinary` was false on null path). Empty path + critical name -> preserve. Also preserves signed installer / Inno ancestors.
 
-- **[HIGH] `QuarantineManager` refuses Authenticode-signed files by default** - Central gate so Git/Chrome/VS/SentinelSetup cannot be wiped by any caller. Cuckoo/sideload may force.
+- **[HIGH] `QuarantineManager` refuses Authenticode-signed files by default** - Central gate so Git/Chrome/VS/GnyidaSetup cannot be wiped by any caller. Cuckoo/sideload may force.
 
 - **[HIGH] `EphemeralProcessMonitor` ignores installer prefetch noise** - GIT-*, INNOSETUP-*, DOTNET-SDK-*, FINALIZER, ISIDE no longer fire "Self-Deleting Executable" dropper alerts.
 
@@ -5605,7 +5612,7 @@ Major test infrastructure release. Establishes comprehensive automated verificat
 
 ### Security Hardening (1.6.0 audit + 2025-26 threat intel)
 
-- **[CRITICAL] `EtwSessionGuard`** (Critical monitor group) - Detects inactive or stalled `SentinelUnifiedTrace` ETW session (EDR-killer / `logman stop` tradecraft highlighted on HN and The Register 2025). Auto-recreates the session via `UnifiedEtwSession.RestartAsync` and emits Tier1 `Anti-Tamper: ETW Session Disabled`.
+- **[CRITICAL] `EtwSessionGuard`** (Critical monitor group) - Detects inactive or stalled `GnyidaUnifiedTrace` ETW session (EDR-killer / `logman stop` tradecraft highlighted on HN and The Register 2025). Auto-recreates the session via `UnifiedEtwSession.RestartAsync` and emits Tier1 `Anti-Tamper: ETW Session Disabled`.
 
 - **[HIGH] NetworkIsolate rate limiting** - `MaxNetworkIsolatesPerMinute` (default 10). Exhaustion demotes further isolates and fires Tier1 `Anti-Tamper: Response Budget Exhausted`. Skips isolating major public resolvers (1.1.1.1, 8.8.8.8, 9.9.9.9) to reduce CDN/decoy collateral.
 
@@ -5620,7 +5627,7 @@ Major test infrastructure release. Establishes comprehensive automated verificat
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
-| `Sentinel:MaxNetworkIsolatesPerMinute` | `10` | Cap new firewall isolates per minute |
+| `Gnyida:MaxNetworkIsolatesPerMinute` | `10` | Cap new firewall isolates per minute |
 
 ---
 
@@ -5628,7 +5635,7 @@ Major test infrastructure release. Establishes comprehensive automated verificat
 
 ### Security Hardening (Red/Blue Audit Remediation)
 
-- **[CRITICAL] Threat proxy authentication redesign** - Cloudflare Worker no longer accepts client-supplied `X-Sentinel-Key`. HMAC is verified with server-side `SENTINEL_SHARED_SECRET` only (fail closed if unset). `ThreatReportService` and `FileReputationEngine` use `ProxyAuthHelper` with `ThreatReporting:ProxySharedSecret`. Reporting is skipped when the secret is missing. Worker adds per-IP rate limiting (60/min).
+- **[CRITICAL] Threat proxy authentication redesign** - Cloudflare Worker no longer accepts client-supplied `X-Gnyida-Key`. HMAC is verified with server-side `GNYIDA_SHARED_SECRET` only (fail closed if unset). `ThreatReportService` and `FileReputationEngine` use `ProxyAuthHelper` with `ThreatReporting:ProxySharedSecret`. Reporting is skipped when the secret is missing. Worker adds per-IP rate limiting (60/min).
 
 - **[HIGH] ActiveResponse boot-time bypass closed** - `AntiTamperGuard` force-enables `ActiveResponse` at `StartAsync` when `EnforceActiveResponse` is true (default). Runtime true->false transitions still force re-enable.
 
@@ -5650,14 +5657,14 @@ Major test infrastructure release. Establishes comprehensive automated verificat
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
-| `Sentinel:EnforceActiveResponse` | `true` | Force ActiveResponse on; set `false` only for lab/observe mode |
-| `Sentinel:MaxKillsPerMinute` | `15` | Kill budget; `0` = unlimited |
-| `ThreatReporting:ProxySharedSecret` | `null` | Must match Worker `SENTINEL_SHARED_SECRET` (>=16 chars) |
+| `Gnyida:EnforceActiveResponse` | `true` | Force ActiveResponse on; set `false` only for lab/observe mode |
+| `Gnyida:MaxKillsPerMinute` | `15` | Kill budget; `0` = unlimited |
+| `ThreatReporting:ProxySharedSecret` | `null` | Must match Worker `GNYIDA_SHARED_SECRET` (>=16 chars) |
 
 ### Worker deploy note
 
 ```bash
-wrangler secret put SENTINEL_SHARED_SECRET
+wrangler secret put GNYIDA_SHARED_SECRET
 ```
 
 Agent/service `disk JSON config` must set the same value under `ThreatReporting:ProxySharedSecret`.
@@ -5672,7 +5679,7 @@ Agent/service `disk JSON config` must set the same value under `ThreatReporting:
 
 - **[CRITICAL] C2 Beaconing re-added to President's Law** - `AllowlistService.ShouldSuppress()` previously allowed user-allowlisted processes to fully suppress C2 beaconing detections. An attacker running a Cobalt Strike beacon inside an allowlisted process (e.g., chrome.exe via extension compromise) would have all beaconing alerts silenced. C2Beaconing is now classified as a President's Law category - it can never be suppressed by allowlisting.
 
-- **[HIGH] ActiveResponse config tampering detection** - `AntiTamperGuard` now monitors `SentinelConfig.ActiveResponse` every integrity tick (~10s). If the flag transitions from `true` -> `false` at runtime (attacker modified `disk JSON config`), Sentinel fires a Tier1 anti-tamper detection (confidence 0.99, `SignalType.AntiTamper`) and forcibly re-enables `ActiveResponse`. This alert fires regardless of the ActiveResponse flag since its own response is `LogOnly`.
+- **[HIGH] ActiveResponse config tampering detection** - `AntiTamperGuard` now monitors `GnyidaConfig.ActiveResponse` every integrity tick (~10s). If the flag transitions from `true` -> `false` at runtime (attacker modified `disk JSON config`), Gnyida fires a Tier1 anti-tamper detection (confidence 0.99, `SignalType.AntiTamper`) and forcibly re-enables `ActiveResponse`. This alert fires regardless of the ActiveResponse flag since its own response is `LogOnly`.
 
 - **[HIGH] Baseline poisoning prevention** - `BehavioralBaselineService.IsEstablishedProcess()` now requires ZERO detection events for the process name within a 7-day window. Previously, malware with persistence could run 10+ times to earn "established" status and receive a -10 score reduction from `ScoringEngine`, weakening all future detections. `ScoringEngine.Score()` now records every detection via `RecordDetectionForProcess()`, permanently revoking established status until 7 days elapse with no new detections.
 
@@ -5743,7 +5750,7 @@ Agent/service `disk JSON config` must set the same value under `ThreatReporting:
 
 ### Fixed
 
-- **[CRITICAL] Fixed self-quarantine of explorer.exe, powershell.exe, and Sentinel service** - `SecurityValidation.VerifyAuthenticodeSignature` only checked embedded Authenticode signatures. Many Windows system binaries (explorer.exe, powershell.exe, cmd.exe, svchost.exe, conhost.exe) are catalog-signed rather than having embedded signatures. When the embedded check failed, these binaries appeared "unsigned" to the `FileReputationEngine`, received Suspicious scores (~43-55/100), triggered `BehavioralCorrelationEngine` escalation (Electron/JIT exemption also depends on Authenticode verification), and ultimately got killed/quarantined by `AdvancedResponseEngine`.
+- **[CRITICAL] Fixed self-quarantine of explorer.exe, powershell.exe, and Gnyida service** - `SecurityValidation.VerifyAuthenticodeSignature` only checked embedded Authenticode signatures. Many Windows system binaries (explorer.exe, powershell.exe, cmd.exe, svchost.exe, conhost.exe) are catalog-signed rather than having embedded signatures. When the embedded check failed, these binaries appeared "unsigned" to the `FileReputationEngine`, received Suspicious scores (~43-55/100), triggered `BehavioralCorrelationEngine` escalation (Electron/JIT exemption also depends on Authenticode verification), and ultimately got killed/quarantined by `AdvancedResponseEngine`.
 
 - **Fix**: Added native `CryptCATAdmin` API fallback (`CryptCATAdminAcquireContext2` -> `CryptCATAdminCalcHashFromFileHandle2` -> `CryptCATAdminEnumCatalogFromHash` -> `WinVerifyTrust` with `WTD_CHOICE_CATALOG`). This is a pure P/Invoke path with no shell command dependency, no PATH poisoning risk, and proper handle cleanup. The Windows Catalog Store (`catroot2`) is protected by TrustedInstaller ACLs and cannot be tampered with by non-kernel attackers.
 
@@ -5772,7 +5779,7 @@ Addresses all critical and high-severity findings from the comprehensive red/blu
 
 - **[CRITICAL] Removed blanket PowerShell script execution** (SAB-1, RT-HIGH-3): `HardeningModule.ApplyUserSetupScriptsHardening()` no longer executes ANY `.ps1` files from embedded resources. Only `.reg` (registry) and `.inf` (LGPO policy) files are extracted and applied. The extraction directory now has SYSTEM+Admins-only ACL.
 
-- **[HIGH] Removed FIPS disable from HardeningModule** (RT-HIGH-1): Sentinel no longer weakens system-wide cryptographic posture by disabling the FIPS Algorithm Policy. If internal algorithms are non-compliant, they should be fixed at the source.
+- **[HIGH] Removed FIPS disable from HardeningModule** (RT-HIGH-1): Gnyida no longer weakens system-wide cryptographic posture by disabling the FIPS Algorithm Policy. If internal algorithms are non-compliant, they should be fixed at the source.
 
 ### Fixed
 
@@ -5790,7 +5797,7 @@ Addresses all critical and high-severity findings from the comprehensive red/blu
 - `HardeningModule.ApplyUserSetupScriptsHardening()` - only extracts .reg/.inf/.exe (LGPO only), ACL-locks extraction directory
 - `UnifiedEtwSession` - full rewrite with working P/Invoke implementation
 - `DynamicRulesEvaluator` - HMAC signature validation, ACL enforcement on rules directory
-- `SentinelService.ExecuteAsync()` - ETW session enabled, WMI disabled when ETW is active
+- `GnyidaService.ExecuteAsync()` - ETW session enabled, WMI disabled when ETW is active
 
 ## [1.5.4] - 2026-07-18
 
@@ -5800,7 +5807,7 @@ Addresses findings from the comprehensive security audit (`audit-v1.5.3.md`). El
 
 ### Fixed
 
-- **[CRITICAL] FIPS Algorithm Policy keeps re-enabling itself** (`AntiTamperGuard`): Windows Group Policy Client (`gpsvc`) refreshes the local security database every 90-120 minutes. If FIPS was ever enabled in the security database (via `secedit`, domain GPO, or prior hardening), the GP refresh overwrites Sentinel's registry disable. Fix: `AntiTamperGuard` now checks the FIPS registry value every 10s (on the integrity tick cycle) and re-disables it when detected. On first re-enablement detection, it additionally runs `secedit /configure` to override the local security policy database itself, making the fix persist across GP refresh cycles. Registry-only enforcement as fallback if secedit fails.
+- **[CRITICAL] FIPS Algorithm Policy keeps re-enabling itself** (`AntiTamperGuard`): Windows Group Policy Client (`gpsvc`) refreshes the local security database every 90-120 minutes. If FIPS was ever enabled in the security database (via `secedit`, domain GPO, or prior hardening), the GP refresh overwrites Gnyida's registry disable. Fix: `AntiTamperGuard` now checks the FIPS registry value every 10s (on the integrity tick cycle) and re-disables it when detected. On first re-enablement detection, it additionally runs `secedit /configure` to override the local security policy database itself, making the fix persist across GP refresh cycles. Registry-only enforcement as fallback if secedit fails.
 
 - **[HIGH] Service self-healing uses sc.exe LOLBin** (`AntiTamperGuard`): Previously, service re-registration and start-type enforcement used `Process.Start("sc.exe")`. An attacker who blocks/renames/hijacks sc.exe could prevent recovery. Fix: Replaced all sc.exe calls with native `advapi32.dll` P/Invoke (`OpenSCManager`, `CreateService`, `OpenService`, `ChangeServiceConfig`, `CloseServiceHandle`). Zero external process dependency for self-healing operations.
 
@@ -5828,12 +5835,12 @@ Addresses findings from the comprehensive security audit (`audit-v1.5.3.md`). El
 
 ### Changed
 
-- **Project renaming**: Product name is `Sentinel` only (no prefixes/suffixes) across namespaces, assemblies, service name, install paths, config section, installer, worker, and docs.
+- **Project renaming**: Product name is `Gnyida` only (no prefixes/suffixes) across namespaces, assemblies, service name, install paths, config section, installer, worker, and docs.
 
 ### Fixed
 
 - **[HIGH] Fix uninstaller Access Denied permissions error on unins000.dat**: Updated `ExcludeUninstallerFromDeny` in `HardeningModule.cs` to save the protected DACL (disabling inheritance and copying rules) to disk and immediately re-read it before removing the Deny rule. This works around a .NET `CommonObjectSecurity` design where in-memory rule lists are not automatically converted from inherited to explicit, which previously caused the Deny rule removal to be ignored.
-- **[HIGH] Fix EDR RouteTableMonitor sandboxing compatibility**: Excluded on-link persistent routes (gateway `0.0.0.0`) from the suspicious `/32` host route registry cleanup and runtime modification checks in `RouteTableMonitor.cs`. This prevents Sentinel from deleting sandboxed routing configurations used by local development agents like Antigravity, which previously caused them to freeze.
+- **[HIGH] Fix EDR RouteTableMonitor sandboxing compatibility**: Excluded on-link persistent routes (gateway `0.0.0.0`) from the suspicious `/32` host route registry cleanup and runtime modification checks in `RouteTableMonitor.cs`. This prevents Gnyida from deleting sandboxed routing configurations used by local development agents like Antigravity, which previously caused them to freeze.
 - **[MEDIUM] Fix program installer FIPS algorithm policy**: Added registry configuration entries in `setup.iss` and programmatic registry writes in `HardeningModule.cs` at startup to ensure `SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy\Enabled` is set to `0` across the service, agent, and installer to prevent cryptographic validation exceptions.
 - **[MEDIUM] Fix uninstaller residues cleanup**: Added uninstaller steps in `setup.iss` to cleanly remove the `ShowAllTrayIcons` scheduled task, `GSecurity` IPSec policy, and the custom RPC dynamic port blocker firewall rules upon uninstallation.
 - **[LOW] Fix system explorer flashes and closed windows**: Commented out the `explorer.exe` restart step in `ShowAllTrayIcons.ps1` to prevent desktop flickering and closed explorer windows during EDR initialization.
@@ -5859,9 +5866,9 @@ Threat-intel-driven release based on June-July 2026 active campaigns (GentleKill
 
 ### Added
 
-- **`ConnectivityCanaryMonitor`** (Critical Group): Periodically verifies Sentinel can reach its threat intelligence endpoints (proxy, CIRCL, MalwareBazaar, Cloudflare). Detects EDRSilencer WFP blocking, DNS poisoning of proxy domain, and firewall rules silencing Sentinel. Probes every 45s with HEAD requests; falls back to raw TCP on direct IP (bypasses DNS). 3 consecutive failures -> Tier1 "Anti-Tamper: Network Silencing Detected" (0.90). Persistent silencing (>10 min) escalates to 0.95 confidence. Addresses the #1 red team finding: EDRSilencer can permanently blind all cloud intelligence with zero alerts.
+- **`ConnectivityCanaryMonitor`** (Critical Group): Periodically verifies Gnyida can reach its threat intelligence endpoints (proxy, CIRCL, MalwareBazaar, Cloudflare). Detects EDRSilencer WFP blocking, DNS poisoning of proxy domain, and firewall rules silencing Gnyida. Probes every 45s with HEAD requests; falls back to raw TCP on direct IP (bypasses DNS). 3 consecutive failures -> Tier1 "Anti-Tamper: Network Silencing Detected" (0.90). Persistent silencing (>10 min) escalates to 0.95 confidence. Addresses the #1 red team finding: EDRSilencer can permanently blind all cloud intelligence with zero alerts.
 
-- **`WfpIntegrityMonitor`** (SystemIntegrity Group): Scans Windows Filtering Platform filters every 30s for BLOCK rules targeting Sentinel's executable paths. Exports filters via `netsh wfp show filters`, parses XML output for application-ID-based blocks. Three detection modes: (1) Direct Sentinel targeting -> Tier1/0.97/KillProcessTree, (2) Bulk filter surge (+10) -> Tier1/0.75-0.90, (3) Multiple EDR processes blocked -> Tier1/0.85. Attempts WFP filter removal on detection. Maintains known-EDR target list covering 20+ security vendors (CrowdStrike, SentinelOne, Sophos, ESET, Elastic, etc.). Directly counters EDRSilencer, EDRKillShifter, and GentleKiller framework WFP manipulation.
+- **`WfpIntegrityMonitor`** (SystemIntegrity Group): Scans Windows Filtering Platform filters every 30s for BLOCK rules targeting Gnyida's executable paths. Exports filters via `netsh wfp show filters`, parses XML output for application-ID-based blocks. Three detection modes: (1) Direct Gnyida targeting -> Tier1/0.97/KillProcessTree, (2) Bulk filter surge (+10) -> Tier1/0.75-0.90, (3) Multiple EDR processes blocked -> Tier1/0.85. Attempts WFP filter removal on detection. Maintains known-EDR target list covering 20+ security vendors (CrowdStrike, GnyidaOne, Sophos, ESET, Elastic, etc.). Directly counters EDRSilencer, EDRKillShifter, and GentleKiller framework WFP manipulation.
 
 - **`DriverLoadMonitor`** (SystemIntegrity Group): Monitors for BYOVD (Bring Your Own Vulnerable Driver) attacks via three detection paths: (1) System Event Log Event ID 7045 (kernel service install), (2) Registry scan for new `SYSTEM\CurrentControlSet\Services` with Type=1/2, (3) .sys file creation in user-writable paths. Cross-references against embedded blocklist of 15+ SHA-256 hashes and 40+ filenames from the Microsoft Vulnerable Driver Blocklist and LOLDrivers project. Known-vulnerable hash match -> Tier1/0.97/KillProcessTree + attempt `sc stop`/`sc delete`. Covers RTCore64, DBUtil, gdrv, WinRing0, ProcExp152, Truesight, iqvw64e, Capcom, KProcessHacker, nbwdv (Medusa), and more. Baselines existing drivers at startup to avoid FP on boot.
 
@@ -5881,7 +5888,7 @@ Threat-intel-driven release based on June-July 2026 active campaigns (GentleKill
 - **Critical Monitor Group**: Expanded from 4 to 5 monitors. Added ConnectivityCanaryMonitor - lightweight (no I/O at startup, 30s grace period). Restarts indefinitely on failure.
 - **SystemIntegrity Monitor Group**: Added WfpIntegrityMonitor and DriverLoadMonitor (moved from Critical - both perform heavy I/O at startup: full Services registry enumeration and `netsh` subprocess spawn, which delayed service heartbeat and caused Agent tray freeze).
 - **CoreDetection Monitor Group**: Added ScriptHardeningMonitor alongside existing ScriptExecutionMonitor. Together they provide enterprise-grade anti-scripting coverage.
-- **`TrayIconService`** (Agent): Removed all `ShowBalloonTip` calls - the Windows Push Notification Service (`WpnService`) is removed by Sentinel's own hardening scripts, causing `ShowBalloonTip` to silently deadlock the STA message pump. Replaced `WatchLogFileAsync` (async/await on STA sync context) with `WatchLogFileSync` running on a dedicated background `Thread`. The STA pump now runs clean with zero async continuations or Win32 notification API calls competing for the message loop.
+- **`TrayIconService`** (Agent): Removed all `ShowBalloonTip` calls - the Windows Push Notification Service (`WpnService`) is removed by Gnyida's own hardening scripts, causing `ShowBalloonTip` to silently deadlock the STA message pump. Replaced `WatchLogFileAsync` (async/await on STA sync context) with `WatchLogFileSync` running on a dedicated background `Thread`. The STA pump now runs clean with zero async continuations or Win32 notification API calls competing for the message loop.
 
 ### Fixed
 
@@ -5892,8 +5899,8 @@ Threat-intel-driven release based on June-July 2026 active campaigns (GentleKill
 
 | Behavior | Detector | Justification |
 |---|---|---|
-| WFP filter blocking Sentinel network traffic | `WfpIntegrityMonitor` | Self-protection tampering - falls under existing "Sentinel self-protection tampering" |
-| Known-vulnerable driver loaded (BYOVD) | `DriverLoadMonitor` | Precursor to EDR kill - extends "Sentinel self-protection tampering" |
+| WFP filter blocking Gnyida network traffic | `WfpIntegrityMonitor` | Self-protection tampering - falls under existing "Gnyida self-protection tampering" |
+| Known-vulnerable driver loaded (BYOVD) | `DriverLoadMonitor` | Precursor to EDR kill - extends "Gnyida self-protection tampering" |
 | Download cradle execution (IEX+Download pipeline) | `ScriptHardeningMonitor` | Falls under "Reverse shell / C2 callback" |
 | .NET Assembly reflection loading from PowerShell | `ScriptHardeningMonitor` | Falls under "Process injection / hollowing" (in-memory execution) |
 | PowerShell v2.0 downgrade attack | `ScriptHardeningMonitor` | Falls under "ETW / AMSI tampering" (disables all PS security) |
@@ -5923,7 +5930,7 @@ Threat-intel-driven release based on June-July 2026 active campaigns (GentleKill
 
 ### Security - Service Self-Termination Vulnerability Fix
 
-**[CRITICAL] BackgroundService early return kills entire process** (`ApplicationIntegrityMonitor`): When no protected applications were configured, `ApplicationIntegrityMonitor.ExecuteAsync` returned immediately (completing its Task). In .NET 6+, a BackgroundService whose `ExecuteAsync` completes signals the Host to shut down - killing the entire Sentinel service. This caused a ~8-16 second crash-loop on every startup, leaving the system completely unprotected. SCM failure recovery restarted the service, but it died again immediately.
+**[CRITICAL] BackgroundService early return kills entire process** (`ApplicationIntegrityMonitor`): When no protected applications were configured, `ApplicationIntegrityMonitor.ExecuteAsync` returned immediately (completing its Task). In .NET 6+, a BackgroundService whose `ExecuteAsync` completes signals the Host to shut down - killing the entire Gnyida service. This caused a ~8-16 second crash-loop on every startup, leaving the system completely unprotected. SCM failure recovery restarted the service, but it died again immediately.
 
 ### Fixed
 
@@ -5932,10 +5939,10 @@ Threat-intel-driven release based on June-July 2026 active campaigns (GentleKill
 - **Program.cs Main()**: Changed from `host.Run()` to `host.StartAsync()` + `Thread.Sleep(Timeout.Infinite)`. The process cannot exit from managed code regardless of hosted service lifecycle events.
 - **Program.cs HostOptions**: Set `BackgroundServiceExceptionBehavior.Ignore` and `ServicesStartConcurrently = false` to prevent cascading shutdown from any hosted service failure.
 - **Program.cs diagnostics**: Added `AppDomain.UnhandledException` and `TaskScheduler.UnobservedTaskException` handlers writing to `fatal_crash.log`. Added `startup_trace.log` for startup lifecycle debugging.
-- **SentinelOrchestrator.Dispose()**: All component disposals wrapped in try/catch to prevent cascading ObjectDisposedException.
+- **GnyidaOrchestrator.Dispose()**: All component disposals wrapped in try/catch to prevent cascading ObjectDisposedException.
 - **ContextBus.Dispose()**: Added `_disposed` guard flag. Wrapped all CTS operations in try/catch.
 - **DetectionEngine.Stop()**: Added `_stopped` guard flag. Captured `_cts.Token` into local variable for fire-and-forget tasks. Added `catch (ObjectDisposedException)`.
-- **SentinelService.ExecuteAsync**: Monitors started with `CancellationToken.None` instead of `stoppingToken`. Entire method wrapped in try/catch with infinite-wait fallback.
+- **GnyidaService.ExecuteAsync**: Monitors started with `CancellationToken.None` instead of `stoppingToken`. Entire method wrapped in try/catch with infinite-wait fallback.
 - **Result**: Service starts and stays running indefinitely. Confirmed stable through multiple restart cycles.
 
 ---
@@ -5944,7 +5951,7 @@ Threat-intel-driven release based on June-July 2026 active campaigns (GentleKill
 
 ### Security - Double-Dispose Crash Fix
 
-**[HIGH] ContextBus double-dispose crash** (`ContextBus.Dispose()`): The DI container called `ContextBus.Dispose()` after `SentinelOrchestrator.Dispose()` had already disposed it. Calling `CancellationTokenSource.Cancel()` on an already-disposed CTS threw `ObjectDisposedException` - unhandled - crashing the process. Combined with SCM failure recovery, this created a crash-loop on any service shutdown.
+**[HIGH] ContextBus double-dispose crash** (`ContextBus.Dispose()`): The DI container called `ContextBus.Dispose()` after `GnyidaOrchestrator.Dispose()` had already disposed it. Calling `CancellationTokenSource.Cancel()` on an already-disposed CTS threw `ObjectDisposedException` - unhandled - crashing the process. Combined with SCM failure recovery, this created a crash-loop on any service shutdown.
 
 ### Fixed
 
@@ -5958,7 +5965,7 @@ Threat-intel-driven release based on June-July 2026 active campaigns (GentleKill
 
 ### Security - Service Crash-Loop Vulnerability Fix
 
-**[HIGH] CancellationTokenSource disposal race condition** (`DetectionEngine`, `ContextBus`): The service crashed with `ObjectDisposedException` when background reputation-check tasks accessed `_cts.Token` after the CancellationTokenSource was disposed during shutdown. This created a crash-loop (service dies -> SCM restarts -> dies again in ~20s) that left the system unprotected. An attacker triggering a service stop could exploit this to keep Sentinel offline indefinitely.
+**[HIGH] CancellationTokenSource disposal race condition** (`DetectionEngine`, `ContextBus`): The service crashed with `ObjectDisposedException` when background reputation-check tasks accessed `_cts.Token` after the CancellationTokenSource was disposed during shutdown. This created a crash-loop (service dies -> SCM restarts -> dies again in ~20s) that left the system unprotected. An attacker triggering a service stop could exploit this to keep Gnyida offline indefinitely.
 
 ### Fixed
 
@@ -6032,7 +6039,7 @@ Critical fixes for credential exposure and new detection coverage for script-bas
 ### Added
 
 - **`ScriptExecutionMonitor`** (`ScriptExecutionMonitor.cs`): New comprehensive monitor covering 5 previously undetected attack vectors:
-  1. **PowerShell Script Block Logging (Event ID 4104)** - catches deobfuscated script content even when command-line looks benign. Confidence scales with pattern count (1 pattern = 0.55, 5+ = 0.95). Tier1 kill on AMSI bypass, credential theft, or Sentinel-targeting patterns.
+  1. **PowerShell Script Block Logging (Event ID 4104)** - catches deobfuscated script content even when command-line looks benign. Confidence scales with pattern count (1 pattern = 0.55, 5+ = 0.95). Tier1 kill on AMSI bypass, credential theft, or Gnyida-targeting patterns.
   2. **Parent-child process anomaly detection** - Office->shells, wmiprvse/wmiadap->shells, taskeng/taskhostw->LOLBins, services->shells, explorer->LOLBins. All fire Tier1 + KillProcessTree.
   3. **AMSI bypass detection** - checks if PowerShell processes have amsi.dll unloaded (FreeLibrary bypass). Tier1 kill on module absence.
   4. **SAM hive extraction** - detects `reg.exe save HKLM\SAM/SECURITY/SYSTEM` commands. Tier1 kill.
@@ -6042,7 +6049,7 @@ Critical fixes for credential exposure and new detection coverage for script-bas
 
 - **Credential Guard monitoring** (`HardwareSecurityGuard`): Added `CheckCredentialGuardAsync()` that detects if Windows Credential Guard (VBS-based LSA isolation) is disabled. Checks LsaIso.exe process presence and `LsaCfgFlags` registry value. Alerts if Credential Guard was expected but is no longer active.
 
-- **`ProxySharedSecret`** property on `ThreatReportingConfig`: Allows configuring the HMAC shared secret for proxy authentication via `disk JSON config` under `Sentinel:ThreatReporting:ProxySharedSecret`.
+- **`ProxySharedSecret`** property on `ThreatReportingConfig`: Allows configuring the HMAC shared secret for proxy authentication via `disk JSON config` under `Gnyida:ThreatReporting:ProxySharedSecret`.
 
 ### Changed
 
@@ -6061,9 +6068,9 @@ Internal red team audit identified 15 vulnerabilities across Critical/High/Mediu
 - **[CRITICAL] Hash reputation trust inversion** (`HashReputationService`): Previously returned `Safe` when a hash was absent from both CIRCL and MalwareBazaar - treating absence of evidence as evidence of safety. Novel malware (zero-day payloads, custom implants) was permanently cached as Safe and received trust score boosts in BeaconingDetector. Now returns `Unknown` for absent hashes; only CIRCL trust score > 60 can positively confirm Safe.
 - **[CRITICAL] User-level ActiveResponse disable** (`TrayIconService`): Removed the "Stop Protection" toggle from the Agent tray menu. Previously, any user-level process could automate this menu item to disable all Agent-side detection responses without elevation. The Service (SYSTEM) is now the sole authority on response mode.
 - **[CRITICAL] Command injection via PowerShell** (`IsolationResponseEngine`): Both ISO dismount and Hyper-V Stop-VM commands now use `-EncodedCommand` (Base64-encoded Unicode) instead of string interpolation into `-Command`. Eliminates command injection via crafted ISO filenames or VM names. Added single-quote escaping as defense-in-depth.
-- **[HIGH] Self-exclusion bypass via junction/symlink** (`AdvancedResponseEngine`, `HardeningModule`, `DetectionEngine`): All 3 self-exclusion path checks now normalize both paths with `Path.GetFullPath()` to resolve symlinks, junctions, and relative segments. Added trailing directory separator to prevent prefix collision attacks (e.g., `Sentinel2\evil.exe` matching `Sentinel`).
+- **[HIGH] Self-exclusion bypass via junction/symlink** (`AdvancedResponseEngine`, `HardeningModule`, `DetectionEngine`): All 3 self-exclusion path checks now normalize both paths with `Path.GetFullPath()` to resolve symlinks, junctions, and relative segments. Added trailing directory separator to prevent prefix collision attacks (e.g., `Gnyida2\evil.exe` matching `Gnyida`).
 - **[HIGH] Overprivileged process handle** (`DllUnloadEngine`): Reduced `OpenProcess` from `PROCESS_ALL_ACCESS` (0x1F0FFF) to `PROCESS_QUERY_INFORMATION` (0x0400). Thread handles already opened individually with `THREAD_SET_CONTEXT` - the process-level handle only needed query access for module enumeration.
-- **[HIGH] Unauthenticated threat telemetry** (`ThreatReportService`): All outbound reports to the Cloudflare Worker proxy are now HMAC-SHA256 signed using a key derived from the installation entropy. Signature covers timestamp + path + body via `X-Sentinel-Timestamp` and `X-Sentinel-Signature` headers. Prevents MITM telemetry inspection, replay attacks, and fake report injection.
+- **[HIGH] Unauthenticated threat telemetry** (`ThreatReportService`): All outbound reports to the Cloudflare Worker proxy are now HMAC-SHA256 signed using a key derived from the installation entropy. Signature covers timestamp + path + body via `X-Gnyida-Timestamp` and `X-Gnyida-Signature` headers. Prevents MITM telemetry inspection, replay attacks, and fake report injection.
 - **[HIGH] SecureCacheStore HMAC key partially predictable** (`SecureCacheStore`): Removed boot time ticks (publicly readable from PID 4) and process ID (visible in task manager) from key derivation. Key now derived solely from Machine GUID + SYSTEM-ACL-protected installation entropy + domain-specific label. Stable across reboots; requires SYSTEM/Admin access to reconstruct.
 - **[MEDIUM] Docker imageId injection** (`IsolationResponseEngine`): `imageId` from `docker inspect` output is now validated with `IsValidDockerIdentifier()` before passing to `docker rmi`. Prevents argument injection via crafted image references in malicious containers.
 - **[MEDIUM] Config overwrite on upgrade** (`setup.iss`): Changed `disk JSON config` installer flag from `ignoreversion` (always overwrite) to `onlyifdoesntexist` (preserve user config). Upgrades no longer silently destroy custom TrustedCastDevices, ProtectedApps, LogPath, or other user settings.
@@ -6083,7 +6090,7 @@ Major internal refactor: monitors are now organized into priority groups with st
 
 ### Changed
 
-- **Source code split**: Eliminated the 5,500-line `BackgroundMonitors.cs` monolith. All monitor classes now live in 6 group files under `src/Sentinel.Core/Monitors/`:
+- **Source code split**: Eliminated the 5,500-line `BackgroundMonitors.cs` monolith. All monitor classes now live in 6 group files under `src/Gnyida.Core/Monitors/`:
   - `CriticalMonitors.cs` - SyscallStubMonitor, IPSecIntegrityGuard
   - `CoreDetectionMonitors.cs` - DiskWideDllScanner, DllEntropyAnalyzer, DllLoadFailureMonitor, ModuleValidationMonitor, RuntimeModuleIntegrityMonitor, AdsDataStagingMonitor
   - `CredentialProtectionMonitors.cs` - CanaryFileMonitor, BrowserCredentialGuard, MicrosoftAccountGuardMonitor, NullSessionGuard, BuiltinAdminGuard, PasswordRotationGuard
@@ -6097,11 +6104,11 @@ Major internal refactor: monitors are now organized into priority groups with st
   - **NetworkIntegrity** (6s delay): ArpSpoofMonitor, DnsResponseValidation, PublicIpMonitor, NetworkShareMonitor, +9 more - 3 restart attempts
   - **SystemIntegrity** (10s delay): FirewallIntegrity, SecureBoot, RegistryMonitor, WmiPersistence, +13 more - 3 restart attempts
   - **Peripheral** (30s delay): BluetoothMonitor, MtpTransferGuard, VolumeMountMonitor, CastDeviceGuard, +8 more - 2 restart attempts
-- **File I/O**: All file read operations across the codebase now use `FileShare.ReadWrite | FileShare.Delete`. Sentinel never holds file locks that prevent users from deleting their own files.
+- **File I/O**: All file read operations across the codebase now use `FileShare.ReadWrite | FileShare.Delete`. Gnyida never holds file locks that prevent users from deleting their own files.
 
 ### Design Rules Added
 
-- All file reads MUST use `FileShare.ReadWrite | FileShare.Delete` - Sentinel observes, never obstructs
+- All file reads MUST use `FileShare.ReadWrite | FileShare.Delete` - Gnyida observes, never obstructs
 - Monitors MUST be registered in groups by function and priority - no flat `AddHostedService` for monitors
 
 ## [1.4.3] - 2026-07-13
@@ -6127,7 +6134,7 @@ Live probing of the host OS identified 4 entry points that an attacker on the LA
 ### Added
 
 - **`CastDeviceGuard` - Inbound Rule Deletion**: Deletes all Windows built-in "Cast to Device" and "Media Center Extenders" inbound firewall rules at every service start. These rules allow any LAN device to push RTSP/HTTP streams into the machine - the exact attack surface rogue Cast relays exploit.
-- **`HardeningModule.RegisterForSafeMode`**: Registers `Sentinel` service under both `SafeBoot\Minimal` and `SafeBoot\Network` registry keys. Sentinel now runs in Safe Mode, preventing attackers from rebooting into Safe Mode to operate without EDR.
+- **`HardeningModule.RegisterForSafeMode`**: Registers `Gnyida` service under both `SafeBoot\Minimal` and `SafeBoot\Network` registry keys. Gnyida now runs in Safe Mode, preventing attackers from rebooting into Safe Mode to operate without EDR.
 - **`HardeningModule.BlockRemoteRpcEphemeralPorts`**: Adds a Windows Firewall rule blocking inbound access to RPC dynamic endpoint ports (49664-49675) from the local subnet. Prevents lateral movement via DCOM/WMI/Task Scheduler RPC from other LAN machines.
 - **IPSec: Port 5040 (CDPUserSvc) blocked**: Connected Devices Platform port added to the GSecurity IPSec policy. No reason for CDP on a hardened workstation.
 - **Installer: Safe Mode registration** via `[Registry]` section - ensures Safe Mode entries survive reinstalls.
@@ -6145,7 +6152,7 @@ Comprehensive red-team audit identified 11 potential bypass vectors. All address
 ### Added
 
 - **`BuiltinAdminGuard`** (new BackgroundService): Monitors the built-in Administrator account (RID 500) every 15 seconds. If found active, immediately disables it via `net user Administrator /active:no` and emits a Tier1 alert. The built-in Admin account should never be enabled on a personal workstation - attackers enable it for backdoor access (no UAC, possibly blank password, survives user profile changes, visible on login screen).
-- **`IPSecIntegrityGuard`** (new BackgroundService): Verifies the GSecurity IPSec policy is active every 30 seconds. If an attacker deletes or unassigns the policy via `netsh ipsec static delete policy`, Sentinel automatically re-applies the full port block ruleset and emits a Tier1 anti-tamper alert.
+- **`IPSecIntegrityGuard`** (new BackgroundService): Verifies the GSecurity IPSec policy is active every 30 seconds. If an attacker deletes or unassigns the policy via `netsh ipsec static delete policy`, Gnyida automatically re-applies the full port block ruleset and emits a Tier1 anti-tamper alert.
 - **`NetworkShareMonitor` - Local Share Creation Detection**: Baselines local SMB shares at startup via `NetShareEnum`. Detects new shares created at runtime (e.g., `net share PWNED=C:\ /grant:everyone,full`), emits Tier1 alert with 0.95 confidence for full-drive exposure, and auto-deletes the unauthorized share.
 - **`FileActivityMonitor` - Junction/Symlink Detection**: Detects `FileAttributes.ReparsePoint` on newly created directories within monitored paths. Alerts on unauthorized junction/symlink creation that could redirect monitoring or exploit TOCTOU vulnerabilities.
 - **`LocalServerMonitor` - Localhost High-Port Logging**: Previously silently skipped localhost listeners on ephemeral ports (>=49152). Now emits Tier2 events at confidence 0.35 to close the local relay exfiltration blind spot.
@@ -6180,7 +6187,7 @@ The existing path-verification guard (`IsInSystemDirectory`) still applies - a p
 
 ### Fixed - NTLite/DISM Compatibility: File Locking and Feature-Disable Stalling
 
-Two distinct issues caused Sentinel to interfere with NTLite and DISM offline servicing:
+Two distinct issues caused Gnyida to interfere with NTLite and DISM offline servicing:
 
 **Issue 1 - File locking inside mounted WIM images (unmount blocked)**
 
@@ -6202,19 +6209,19 @@ NTLite's feature-disable operation writes hundreds of manifests, deltas, and cat
  
 ### Fixed - Agent Process Dying (No Recovery Mechanism)
  
-**Root cause:** `Sentinel.Agent.exe` is a user-session process started via the HKLM Run key. Unlike the Service (which has `sc.exe` failure-restart configured: `restart/1000/restart/5000/restart/30000`), the Agent had zero recovery - if it crashed or was killed, it stayed dead until the next user login. The Service had no visibility into the Agent's liveness at all.
+**Root cause:** `Gnyida.Agent.exe` is a user-session process started via the HKLM Run key. Unlike the Service (which has `sc.exe` failure-restart configured: `restart/1000/restart/5000/restart/30000`), the Agent had zero recovery - if it crashed or was killed, it stayed dead until the next user login. The Service had no visibility into the Agent's liveness at all.
  
 **Three-layer fix:**
  
-- **`AgentWatchdog` (Service-side, primary)**: New `BackgroundService` in `Sentinel.Core` that polls for `Sentinel.Agent.exe` every 10 seconds. If absent, relaunches it in the active console user's session via `WTSQueryUserToken` -> `CreateEnvironmentBlock` -> `CreateProcessAsUser` (the standard Windows pattern for SYSTEM services spawning user-visible processes). Enforces a 15-second relaunch cooldown and a max of 5 relaunches per 5-minute window to prevent restart storms. Fires an `Anti-Tamper: Agent Process Repeatedly Killed` Tier1 detection if the Agent is absent 3+ times in the window - an attacker killing the agent to suppress tray notifications will now trigger an alert. A 20-second startup grace period prevents a double-launch race with the HKLM Run key on login.
+- **`AgentWatchdog` (Service-side, primary)**: New `BackgroundService` in `Gnyida.Core` that polls for `Gnyida.Agent.exe` every 10 seconds. If absent, relaunches it in the active console user's session via `WTSQueryUserToken` -> `CreateEnvironmentBlock` -> `CreateProcessAsUser` (the standard Windows pattern for SYSTEM services spawning user-visible processes). Enforces a 15-second relaunch cooldown and a max of 5 relaunches per 5-minute window to prevent restart storms. Fires an `Anti-Tamper: Agent Process Repeatedly Killed` Tier1 detection if the Agent is absent 3+ times in the window - an attacker killing the agent to suppress tray notifications will now trigger an alert. A 20-second startup grace period prevents a double-launch race with the HKLM Run key on login.
  
 - **Agent self-restart (Agent-side, secondary)**: `Agent/Program.cs` now wraps `host.Run()` in a try/finally. On any exit - clean or crash - `TryImmediateRestart()` relaunches the process immediately (2-second cooldown). A restart counter passed via the `WS_AGENT_RESTART_COUNT` environment variable limits self-restarts to 5 before deferring to the `AgentWatchdog`. For terminal `IsTerminating` crashes (where the finally block may not run), `ScheduleDelayedRelaunch()` spawns a detached `cmd.exe` that waits ~3 seconds and then re-launches the agent.
  
-- **Orchestrator wiring fix (Agent-side, correctness)**: `Agent/Program.cs` now calls `detectionEngine.SetOrchestrator(orchestrator)` after `Build()` and before `Run()`, matching the pattern in `SentinelService.cs`. Previously, any detection emitted by Agent-side monitors (e.g., `ShellWatchdog`, `ScreenCaptureMonitor`) bypassed the `SentinelOrchestrator` entirely - falling back to hitting `AdvancedResponseEngine` directly, skipping incident grouping, response deduplication, and the `ContextBus`.
+- **Orchestrator wiring fix (Agent-side, correctness)**: `Agent/Program.cs` now calls `detectionEngine.SetOrchestrator(orchestrator)` after `Build()` and before `Run()`, matching the pattern in `GnyidaService.cs`. Previously, any detection emitted by Agent-side monitors (e.g., `ShellWatchdog`, `ScreenCaptureMonitor`) bypassed the `GnyidaOrchestrator` entirely - falling back to hitting `AdvancedResponseEngine` directly, skipping incident grouping, response deduplication, and the `ContextBus`.
  
 - **Host config path fix**: Agent CWD may be System32 when launched by the watchdog; compiled defaults do not depend on CWD.
  
-- **`AgentWatchdog` registered** in `Sentinel.Service/Program.cs` as a hosted service.
+- **`AgentWatchdog` registered** in `Gnyida.Service/Program.cs` as a hosted service.
  
 ## [1.3.8] - 2026-07-12
  
@@ -6275,14 +6282,14 @@ Monitors now share intelligence with each other in real-time. The system is no l
 
 ## [1.3.2] - 2026-07-10
 
-### Added - SentinelOrchestrator (Phase 1: Unified Coordination Layer)
+### Added - GnyidaOrchestrator (Phase 1: Unified Coordination Layer)
 
-Sentinel now operates as a coordinated unit rather than a collection of independent monitors.
+Gnyida now operates as a coordinated unit rather than a collection of independent monitors.
 
 - **IncidentManager**: Detections are grouped into unified incidents by PID, parent process chain, or file hash (reinfection). Each incident has a lifecycle (Open -> Active -> Responded -> Closed) with automatic severity escalation based on corroborating signals. Multiple detections on the same attack chain are presented as one incident, not 5 separate log entries.
 - **MonitorRegistry**: All monitors are now supervised with heartbeat tracking (60s warning, 3m critical). Crashed monitors are automatically restarted (up to 5 attempts). Monitor death fires an anti-tamper detection - if an attacker kills a monitor, the system notices and alerts.
 - **StartupSequencer**: Phased dependency-ordered boot sequence (Infrastructure -> Engines -> Monitors -> Validators). Each phase runs components in parallel, waits for readiness before the next phase begins. Timeout enforcement prevents hung components from blocking startup. Startup report logged with per-component timing.
-- **SentinelOrchestrator**: Central coordination point that routes all detections through incident grouping before response. Per-PID response locks prevent duplicate kills and quarantine races. Unified system health status aggregates monitor, incident, and pipeline state.
+- **GnyidaOrchestrator**: Central coordination point that routes all detections through incident grouping before response. Per-PID response locks prevent duplicate kills and quarantine races. Unified system health status aggregates monitor, incident, and pipeline state.
 - **Response Coordination**: The response engine no longer fires independently - it's gated by the orchestrator which checks for in-progress responses on the same PID. No more race conditions where ChainTracer walks a chain while another thread is killing processes in it.
 
 ## [1.3.1] - 2026-07-10
@@ -6332,7 +6339,7 @@ Sentinel now operates as a coordinated unit rather than a collection of independ
 #### LOW
 
 - **DataExfiltrationMonitor**: MinBaselineBytes lowered from 20MB to 5MB. Detects exfiltration spikes above 50MB/15s (was 200MB).
-- **PseudoSandbox**: Job object naming randomized (`WinSvc_<GUID>` instead of predictable `SentinelSandboxJob_` prefix).
+- **PseudoSandbox**: Job object naming randomized (`WinSvc_<GUID>` instead of predictable `GnyidaSandboxJob_` prefix).
 - **IsolationResponseEngine**: Input sanitization on Docker containerId and VM names prevents command injection in response actions.
 
 ## [1.2.9] - 2026-07-09
@@ -6347,7 +6354,7 @@ Sentinel now operates as a coordinated unit rather than a collection of independ
 - **BeaconingDetector**: Diversity trust signal revoked when total destinations <=4 (trivially manufactured). DLL sideload indicators in the process directory force KillProcess regardless of Authenticode trust score.
 - **GhostProcessMonitor**: Immediate alert (first scan) for ghost PIDs connecting to high-confidence ports (4444, 5555, 1337, 31337, 9001, 9090) or blocked phantom devices. Closes the single-cycle exfiltration window.
 - **AntiTamperGuard**: Suspend detection threshold lowered from 10s to 4s. Added QueryPerformanceCounter as hardware-monotonic secondary time source immune to clock manipulation.
-- **SecureCacheStore**: HMAC key derivation now combines boot time, machine GUID, installation-specific random entropy (ACL-locked), and Sentinel's PID. Prevents baseline poisoning by attackers who can read System process start time.
+- **SecureCacheStore**: HMAC key derivation now combines boot time, machine GUID, installation-specific random entropy (ACL-locked), and Gnyida's PID. Prevents baseline poisoning by attackers who can read System process start time.
 - **CredentialCanaryMonitor**: Now plants 3-5 canaries per boot with randomized names from 8 realistic service credential templates. Credential dumping tools can no longer skip a single known target name.
 - **DnsQueryMonitor**: Removed `timediff(@SystemTime) <= 30000` time filter from event log XPath query. Relies solely on `lastRecordId` for deduplication, ensuring short-lived C2 DNS resolutions between polls are never dropped.
 - **ProcessAncestryCache**: ETW/WMI-sourced entries are now authoritative and preserved across refresh cycles. Dead PIDs retained for 60 seconds post-exit, enabling ChainTracer to walk parent chains of killed processes.
@@ -6355,7 +6362,7 @@ Sentinel now operates as a coordinated unit rather than a collection of independ
 ## [1.2.8] - 2026-07-07
 
 ### Fixed
-- **AntiTamperGuard: Service name mismatch causing 10-second detection spam** - The `ServiceName` constant was set to `"Sentinel"` (no space) but the actual SCM registration uses `"Sentinel"` (with space). `ServiceController` lookup failed every 10 seconds, triggering a false "Service Registration Deleted" detection, flooding `events.jsonl` (~6 MB/day) and the Windows Application Event Log with ~8,640 warning entries per day. Fixed the constant to match the registered name and quoted it in `sc.exe` commands for space-safe operation.
+- **AntiTamperGuard: Service name mismatch causing 10-second detection spam** - The `ServiceName` constant was set to `"Gnyida"` (no space) but the actual SCM registration uses `"Gnyida"` (with space). `ServiceController` lookup failed every 10 seconds, triggering a false "Service Registration Deleted" detection, flooding `events.jsonl` (~6 MB/day) and the Windows Application Event Log with ~8,640 warning entries per day. Fixed the constant to match the registered name and quoted it in `sc.exe` commands for space-safe operation.
 
 ## [1.2.5] - 2026-07-05
 
@@ -6417,7 +6424,7 @@ Sentinel now operates as a coordinated unit rather than a collection of independ
 - **BootIntegrityGuard**: Dynamic EFI drive letter selection - finds a free letter at runtime instead of hardcoding S-W. Prevents conflicts with existing volumes.
 - **AntiTamperGuard**: `_serviceAlertSuppressed` flag now resets on successful service re-registration, allowing detection of subsequent deletions instead of permanently silencing the check.
 - **NullSessionGuard**: Reduced security policy tamper alert dedup window from 1 hour to 5 minutes. Attackers can no longer silently revert null-session protections by waiting between attempts.
-- **PhantomDeviceMonitor**: Added startup cleanup of orphaned `Sentinel-Block-PhantomDevice-*` firewall rules from previous sessions. Previously, service restarts left blocked devices permanently blocked.
+- **PhantomDeviceMonitor**: Added startup cleanup of orphaned `Gnyida-Block-PhantomDevice-*` firewall rules from previous sessions. Previously, service restarts left blocked devices permanently blocked.
 - **AdvancedResponseEngine**: President's Law check now delegates to `ScoringEngine.IsPresidentsLawRule()` instead of maintaining a divergent parallel keyword list. Eliminates the risk of the two systems producing different results.
 - **DetectionEngine**: Background reputation check `Task.Run` now passes `_cts.Token` for proper cancellation on shutdown. Added `OperationCanceledException` catch to prevent log noise during normal shutdown.
 - **RemoteAccessMonitor**: Added per-PID deduplication. Once a remote access process is alerted on, it won't fire again until that PID exits. Eliminates per-minute alert spam for installed tools like TeamViewer.
@@ -6427,18 +6434,18 @@ Sentinel now operates as a coordinated unit rather than a collection of independ
 ## [1.2.0] - 2026-07-03
 
 ### Added
-- **Configurable Polling Intervals**: Exposed key polling intervals and timings (`DnsPollIntervalSeconds`, `RouteTableScanIntervalSeconds`, `RawDiskScanIntervalSeconds`, `AntiTamperTimingTickMs`, and `AntiTamperIntegrityTickMs`) under the `Sentinel` block in `disk JSON config` and bound them dynamically to `SentinelConfig` at runtime.
+- **Configurable Polling Intervals**: Exposed key polling intervals and timings (`DnsPollIntervalSeconds`, `RouteTableScanIntervalSeconds`, `RawDiskScanIntervalSeconds`, `AntiTamperTimingTickMs`, and `AntiTamperIntegrityTickMs`) under the `Gnyida` block in `disk JSON config` and bound them dynamically to `GnyidaConfig` at runtime.
 
 ### Fixed
 - **Supervised Background Task Lifetimes**: Wrapped the main telemetry queue processing loop in `DetectionEngine` in robust top-level `try-catch` blocks and assigned it to a tracked background `Task` property, ensuring unhandled exceptions are logged via `ILogger` rather than failing silently.
 - **Resource and Handle Leak Audits**:
-  - Updated `SentinelService.cs` shutdown sequence to recursively stop and call `Dispose()` on all constructor-injected singleton monitors (like `FileActivityMonitor`, `WmiProcessMonitor`, etc.) that implement `IDisposable`.
+  - Updated `GnyidaService.cs` shutdown sequence to recursively stop and call `Dispose()` on all constructor-injected singleton monitors (like `FileActivityMonitor`, `WmiProcessMonitor`, etc.) that implement `IDisposable`.
   - Implemented `IDisposable` on `DnsQueryMonitor.cs`, `EtwThreatIntelMonitor.cs`, `PrintSpoolerMonitor.cs`, and `ProcessAncestryCache.cs` to cleanly cancel background loops, await task completion, and dispose of cancellation tokens and file system watchers.
 
 ## [1.1.9] - 2026-07-03
 
 ### Added
-- **QoS Registry Anti-Tamper Guard**: Implemented periodic checks on `HKLM\Software\Policies\Microsoft\Windows\QoS` in `AntiTamperGuard.cs` to prevent attackers from using Policy-based QoS rules to throttle or block Sentinel's network bandwidth. Unauthorized policies targeting Sentinel are automatically purged and reported.
+- **QoS Registry Anti-Tamper Guard**: Implemented periodic checks on `HKLM\Software\Policies\Microsoft\Windows\QoS` in `AntiTamperGuard.cs` to prevent attackers from using Policy-based QoS rules to throttle or block Gnyida's network bandwidth. Unauthorized policies targeting Gnyida are automatically purged and reported.
 
 ### Fixed
 - **Catalog Signature Verification Fallback**: Updated `SecurityValidation.VerifyAuthenticodeSignature` to support catalog-signed system files (like native DLLs in `System32` and `SysWOW64`) using a fast PowerShell fallback. This resolves high-frequency false positives and halts the 43MB log bloating.
@@ -6473,8 +6480,8 @@ Sentinel now operates as a coordinated unit rather than a collection of independ
 
 ### Fixed - Full Codebase Audit & Shell Protection
 
-**cmd.exe / PowerShell / pwsh no longer killed by Sentinel:**
-- Added `cmd`, `powershell`, and `pwsh` to `HardeningModule.SafeKillProcessTree` protected process list. Sentinel will never terminate user shell processes regardless of detection trigger.
+**cmd.exe / PowerShell / pwsh no longer killed by Gnyida:**
+- Added `cmd`, `powershell`, and `pwsh` to `HardeningModule.SafeKillProcessTree` protected process list. Gnyida will never terminate user shell processes regardless of detection trigger.
 - Added `cmd`, `powershell`, and `pwsh` to `HostsFileGuard.GetModifyingProcess` exclusion list. Editing the hosts file from a shell no longer kills the shell (file still reverts to trusted baseline).
 
 **Fixed `proc.MainModule` in AdvancedResponseEngine:**
@@ -6623,7 +6630,7 @@ Sentinel now operates as a coordinated unit rather than a collection of independ
 
 ### Fixed - VolumeMountMonitor: SUBST Drive Auto-Dismount Now Fires Unconditionally
 
-**Problem:** An attacker's fallback SUBST drive (S:) was being created minutes after Sentinel start but was NOT being auto-dismounted. The v1.0.1 auto-dismount logic required correlation with a `PhantomDeviceMonitor` block within a 2-minute window. If no phantom device happened to be blocked - or if the SUBST creation happened outside the 2-minute window - the attacker's staging drive was left untouched and only logged as a Tier2 indicator.
+**Problem:** An attacker's fallback SUBST drive (S:) was being created minutes after Gnyida start but was NOT being auto-dismounted. The v1.0.1 auto-dismount logic required correlation with a `PhantomDeviceMonitor` block within a 2-minute window. If no phantom device happened to be blocked - or if the SUBST creation happened outside the 2-minute window - the attacker's staging drive was left untouched and only logged as a Tier2 indicator.
 
 **Root cause:** Multiple issues compounded:
 1. The auto-dismount was gated on `_phantomDeviceMonitor.HasRecentBlock(PhantomCorrelationWindow)`. This created a dependency on an unrelated monitor. Attackers who don't use a rogue LAN device (or whose device block happened >2 min earlier) bypassed the dismount entirely.
@@ -6636,16 +6643,16 @@ Sentinel now operates as a coordinated unit rather than a collection of independ
 - **Registry-based detection** - additionally scans all user profile `Run` keys for `subst` commands, catching persistent SUBST drives even when the user session hasn't started yet.
 - **Cross-session SUBST removal** - `RemoveSubstDrive` now falls back to executing `subst /D` in the user's session via `CreateProcessAsUser` when local `DefineDosDevice` fails (which it always will for user-session drives).
 - **Synthetic DeviceId fast-path** - drives discovered via user-session enumeration get `SUBST:X:` DeviceId and are immediately classified as SUBST without needing `QueryDosDevice` (which wouldn't work cross-session anyway).
-- **SUBST drives are NEVER baselined** - at startup, any detected SUBST drive is immediately dismounted. Attacker persistence that creates the drive before Sentinel starts no longer evades detection.
+- **SUBST drives are NEVER baselined** - at startup, any detected SUBST drive is immediately dismounted. Attacker persistence that creates the drive before Gnyida starts no longer evades detection.
 - **SUBST drives bypass the grace period** - the 60-second startup grace window no longer protects SUBST drives. They are killed regardless of timing.
 - **SUBST drives at runtime are unconditionally dismounted** when `ActiveResponse` is enabled. No phantom device correlation required.
-- **Implant hunter** - after dismounting the SUBST drive, Sentinel actively hunts and kills the responsible process:
+- **Implant hunter** - after dismounting the SUBST drive, Gnyida actively hunts and kills the responsible process:
   - Phase 1: Finds `subst.exe` or shells with subst in command line + kills their parent process (the implant)
   - Phase 2: Scans all TCP connections, kills any process connected to a PhantomDeviceMonitor-blocked IP (the C2 channel)
   - Phase 3: Kills any process running from the SUBST target directory (staged payloads)
   - Phase 4: Kills recently-spawned (<30s) non-system processes from non-standard paths (catches direct DefineDosDevice callers)
 - **Persistence removal** - removes registry Run keys and scheduled tasks containing "subst" + the drive letter
-- **No cooldown for SUBST** - if the drive reappears, Sentinel kills it again every 5-second poll without waiting 10 minutes
+- **No cooldown for SUBST** - if the drive reappears, Gnyida kills it again every 5-second poll without waiting 10 minutes
 - **Non-SUBST suspicious volumes** (VHDs, RAM disks, encrypted containers) still require phantom device correlation to avoid nuking legitimate developer workloads.
 - **60-second startup grace period** - prevents false detection of volumes that report with different WMI DeviceId during initialization.
 - **Drive letter stability check** - if a volume's drive letter was already present at startup baseline, it's recognized as the same volume.
@@ -6670,7 +6677,7 @@ Sentinel now operates as a coordinated unit rather than a collection of independ
 - **Self-healing firewall rules.** Blocks the rogue IP via netsh - survives Chrome reconnection.
 - **5-second scan interval.** Connection killed within 5s of establishment.
 
-**Config:** `disk JSON config` -> `"Sentinel": { "TrustedCastDevices": ["192.168.1.50"] }`
+**Config:** `disk JSON config` -> `"Gnyida": { "TrustedCastDevices": ["192.168.1.50"] }`
 Default is empty array = all Cast connections killed.
 
 **Impact on Chromecast users:** Add your device IP to the allowlist. One-time config.
@@ -6809,10 +6816,10 @@ Comprehensive coverage for all previously unmonitored attack surfaces.
 
 ### Fixed - Agent Crash on Non-Debloated Windows (QuarantineManager ACL)
 
-**Root cause:** The Agent (running as the logged-in user) crashed immediately on startup with `System.UnauthorizedAccessException: Access to the path 'C:\ProgramData\Sentinel\Quarantine' is denied`.
+**Root cause:** The Agent (running as the logged-in user) crashed immediately on startup with `System.UnauthorizedAccessException: Access to the path 'C:\ProgramData\Gnyida\Quarantine' is denied`.
 
 **Chain of events:**
-1. The Service (SYSTEM) creates `C:\ProgramData\Sentinel\` and locks it with ACLs restricted to SYSTEM + Administrators only (via `JsonlEventLogger` directory hardening)
+1. The Service (SYSTEM) creates `C:\ProgramData\Gnyida\` and locks it with ACLs restricted to SYSTEM + Administrators only (via `JsonlEventLogger` directory hardening)
 2. The Agent launches as the logged-in user via HKLM Run key (`runasoriginaluser`)
 3. `QuarantineManager` constructor unconditionally called `Directory.CreateDirectory()` - threw `UnauthorizedAccessException` for non-elevated users
 4. Unhandled exception propagated through DI container -> hosting startup failure -> process termination
@@ -6831,8 +6838,8 @@ Comprehensive coverage for all previously unmonitored attack surfaces.
 - Only shows toast when an actual KILL/QUARANTINE/NETWORK_ISOLATE response occurred
 
 **System Integrity false positives (FileActivityMonitor):**
-- Excluded Sentinel, Kiro, Chrome, Delivery Optimization, AppXSVC, and WinStore from "Unauthorized Write to System Directory"
-- These processes trigger FileSystemWatcher `Changed` events when Sentinel writes ADS verdict tags to System32 DLLs - the watcher misattributes the change to whatever process last loaded the DLL
+- Excluded Gnyida, Kiro, Chrome, Delivery Optimization, AppXSVC, and WinStore from "Unauthorized Write to System Directory"
+- These processes trigger FileSystemWatcher `Changed` events when Gnyida writes ADS verdict tags to System32 DLLs - the watcher misattributes the change to whatever process last loaded the DLL
 
 **Module Count Growth false positives (MemoryBehaviorAnalyzer):**
 - Added `svchost.exe`, `Taskmgr.exe`, `mmc.exe`, `explorer.exe`, `SearchHost.exe`, `RuntimeBroker.exe`, `dllhost.exe` to the excluded process list
@@ -6847,7 +6854,7 @@ Comprehensive coverage for all previously unmonitored attack surfaces.
 
 ### Added - Isolation Response Engine (ISO / Docker / VM Containment)
 
-New `IsolationResponseEngine` handles threats originating from isolated environments where Sentinel cannot inspect or modify files directly:
+New `IsolationResponseEngine` handles threats originating from isolated environments where Gnyida cannot inspect or modify files directly:
 
 **Mounted ISO Response:**
 - Kill all processes running from the ISO drive path
@@ -7069,7 +7076,7 @@ Full security audit performed. No backdoors or malicious code found. 10 issues i
   - Rootkit/implant holds persistent WebSocket to relay (e.g., forum.hr)
   - Hosts file block severs connection
   - Implant panics: tries failover servers, hammers DNS, spawns persistence tools, or crashes system
-  - Sentinel detects the panic behavior and kills the process tree before recovery completes
+  - Gnyida detects the panic behavior and kills the process tree before recovery completes
 
   **Design:**
   - Ignores known-legitimate long-connection holders (browsers, Steam, Discord, OneDrive, etc.)
@@ -7126,8 +7133,8 @@ Full security audit performed. No backdoors or malicious code found. 10 issues i
 
 ### Fixed - BrowserDnsPolicyGuard Alert Loop
 
-- **Root cause identified:** Group Policy Client (`gpsvc`) deletes registry keys under `SOFTWARE\Policies\` that it didn't create. Sentinel wrote policies for Vivaldi, Opera, Chromium, Brave, etc. - GP wiped them every ~30-90s - monitor saw "missing" and re-reported every 15s.
-- **Fix:** Newly-created policy keys (for browsers without pre-existing GP policies) no longer trigger "changed" alerts. 5-minute cooldown on "Re-Applied" detection events. Sentinel still silently re-writes every 15s - enforcement persists even while GP fights it.
+- **Root cause identified:** Group Policy Client (`gpsvc`) deletes registry keys under `SOFTWARE\Policies\` that it didn't create. Gnyida wrote policies for Vivaldi, Opera, Chromium, Brave, etc. - GP wiped them every ~30-90s - monitor saw "missing" and re-reported every 15s.
+- **Fix:** Newly-created policy keys (for browsers without pre-existing GP policies) no longer trigger "changed" alerts. 5-minute cooldown on "Re-Applied" detection events. Gnyida still silently re-writes every 15s - enforcement persists even while GP fights it.
 
 ## [0.8.7] - 2026-06-19
 
@@ -7161,7 +7168,7 @@ Full security audit performed. No backdoors or malicious code found. 10 issues i
   - **Opera** - Same policies via `HKLM\SOFTWARE\Policies\Opera Software\Opera`
   - **Chromium** - Same policies via `HKLM\SOFTWARE\Policies\Chromium`
   - **Firefox** - `DNSOverHTTPS\Enabled=0`, `DNSOverHTTPS\Locked=1` via `HKLM\SOFTWARE\Policies\Mozilla\Firefox`
-  - **15-second re-enforcement interval** - If a browser update, Windows Update, or malware re-enables DoH, Sentinel kills it within 15 seconds.
+  - **15-second re-enforcement interval** - If a browser update, Windows Update, or malware re-enables DoH, Gnyida kills it within 15 seconds.
 
 - **Why this is necessary:** Chromium browsers have a built-in async DNS resolver that bypasses the Windows hosts file entirely when Secure DNS (DoH) is active. Without this monitor, all hosts-file-based blocking has zero effect in the browser.
 
@@ -7184,7 +7191,7 @@ Full security audit performed. No backdoors or malicious code found. 10 issues i
   - **LimitBlankPasswordUse = 1** - Blocks network logon (SMB, RDP, WinRM) for accounts with empty passwords. Prevents null-session authentication and pass-the-hash with the well-known empty NTLM hash (31D6CFE0D16AE931B73C59D7E0C089C0).
   - **RestrictAnonymous = 1** - Prevents anonymous enumeration of SAM accounts and network shares.
   - **EveryoneIncludesAnonymous = 0** - Excludes anonymous tokens from the Everyone security group.
-  - **Self-healing**: If an attacker or Group Policy reverts these settings, Sentinel re-applies within 60 seconds and emits a tamper detection event.
+  - **Self-healing**: If an attacker or Group Policy reverts these settings, Gnyida re-applies within 60 seconds and emits a tamper detection event.
 
 - **FCM Push Channel Block** - Blocks outbound TCP port 5228 (Google Firebase Cloud Messaging) via Windows Firewall to prevent remote tab injection attacks:
   - **Attack chain mitigated**: MitM root cert -> HTTPS intercept -> Chrome sync token theft -> attacker uses "Send Tab to Self" via FCM push -> arbitrary URLs open on victim's machine.
@@ -7196,8 +7203,8 @@ Full security audit performed. No backdoors or malicious code found. 10 issues i
 The following attack chain was observed June 13-14 and is documented for threat model accuracy:
 
 1. **Two self-signed root certificates planted** (CN=WINDOWS-PC, CN=WIN-0M9R8BJOBHS) with 1000-year validity and Server Authentication EKU - designed for TLS interception
-2. **Sentinel detected and removed both certs** on startup (confidence 0.99, REMOVE_CERT response)
-3. **However**: between cert installation (Jun 13) and Sentinel startup (Jun 14 03:55 UTC), the attacker had a window to intercept all HTTPS traffic and steal Chrome sync tokens
+2. **Gnyida detected and removed both certs** on startup (confidence 0.99, REMOVE_CERT response)
+3. **However**: between cert installation (Jun 13) and Gnyida startup (Jun 14 03:55 UTC), the attacker had a window to intercept all HTTPS traffic and steal Chrome sync tokens
 4. **Ghost process (empty name) beaconing** to Google FCM IPs (142.251.x.x:5228) - Chrome's network utility process
 5. **Phantom device** (192.168.1.100, Google Chromecast) detected on port 8009 - potential C2 relay
 6. **FCM push** can trigger "Send Tab to Self" which opens URLs without user interaction
@@ -7210,7 +7217,7 @@ The `NullSessionGuard` addresses vectors 6 and 7 with active, self-healing prote
 ### Added - Community Threat Reporting via Cloudflare Worker Proxy
 
 - **`ThreatReportService`** - New service that reports detected threats (malicious hashes, URLs, IPs) to threat intelligence platforms (MalwareBazaar, URLhaus, AbuseIPDB) via a Cloudflare Worker proxy.
-- **Cloudflare Worker proxy** (`worker/`) - Serverless endpoint that holds API keys server-side so they never appear in the open-source repo. Users install Sentinel and reporting works automatically with zero configuration.
+- **Cloudflare Worker proxy** (`worker/`) - Serverless endpoint that holds API keys server-side so they never appear in the open-source repo. Users install Gnyida and reporting works automatically with zero configuration.
 - **`ProxyEndpoint` config** - New `ThreatReporting.ProxyEndpoint` setting in disk JSON config. When set, all reports route through the proxy instead of requiring local API keys.
 - **Worker endpoints**: `/report/hash`, `/report/url`, `/report/ip`, `/health`
 - **Free tier**: 100,000 reports/day on Cloudflare Workers free plan (no credit card)
@@ -7280,11 +7287,11 @@ An attacker reading this source code cannot exploit the trust demotion because:
 
 ### Fixed - Shell Stability, Detection Accuracy & Notification Reliability
 
-- **ShellWatchdog startup race fixed** - Added 30-second initialization delay before monitoring explorer.exe. Prevents false "explorer is dead" detection during agent startup when the shell window hasn't been registered yet. This was the root cause of File Explorer windows opening on Sentinel launch.
+- **ShellWatchdog startup race fixed** - Added 30-second initialization delay before monitoring explorer.exe. Prevents false "explorer is dead" detection during agent startup when the shell window hasn't been registered yet. This was the root cause of File Explorer windows opening on Gnyida launch.
 - **ShellWatchdog no longer force-restarts explorer** - Removed `Process.Start("explorer.exe")` auto-restart which opened file manager windows instead of restarting the shell. Now relies on Windows' built-in Winlogon shell recovery mechanism and logs the event for forensic review.
-- **Detection metrics counting fixed** - `SentinelMetrics.RecordDetection()` now only fires when a rule actually produces a detection (non-null result), not on every evaluation pass. Reduces reported "DetectionsTotal" from ~79/sec to actual alert count, eliminating misleading health telemetry.
+- **Detection metrics counting fixed** - `GnyidaMetrics.RecordDetection()` now only fires when a rule actually produces a detection (non-null result), not on every evaluation pass. Reduces reported "DetectionsTotal" from ~79/sec to actual alert count, eliminating misleading health telemetry.
 - **Toast notification priority system** - Critical kill-authorized detections (Tier1 + KillAuthorized + ActiveResponse) now bypass the rate limiter and always show. Lower-severity alerts remain rate-limited at 3 per 5 seconds. Prevents important kill notifications from being suppressed during alert storms.
-- **Credential canary obfuscation** - Renamed honeypot credential from obvious `Sentinel_Canary_DO_NOT_USE` to realistic-looking `WindowsBackup_AutoSync_Token`. Attackers reading the source can still identify it, but automated credential harvesters won't skip it based on name alone.
+- **Credential canary obfuscation** - Renamed honeypot credential from obvious `Gnyida_Canary_DO_NOT_USE` to realistic-looking `WindowsBackup_AutoSync_Token`. Attackers reading the source can still identify it, but automated credential harvesters won't skip it based on name alone.
 
 ### Improved - Architecture & Detection Quality
 
@@ -7300,14 +7307,14 @@ An attacker reading this source code cannot exploit the trust demotion because:
 - **RouteTableMonitor cold-boot fix** - Deferred baseline capture 30s after startup. Won't set baseline until network is up (routes AND gateway present). Prevents blocking the default gateway on cold boot when network stack isn't ready yet.
 - **DLL unloading restored** - `CreateRemoteThread + FreeLibrary` in-memory DLL unload is back. Attempts to remove malicious DLLs from process memory without killing the host. If unload fails, kills process as fallback. Quarantine + lock file still applied to disk copy.
 - **Kaspersky "mimikatz" false positive** - Split all hack tool detection strings (`mimikatz` -> `S("mimi","katz")`) so they don't appear as static literals in compiled IL. Prevents HEUR:HackTool.MSIL signature matches.
-- **System32 write detection** - Added `CNG Key Isolation`, `Credential Guard`, `VBS Key Protection`, `LsaIso`, and Sentinel itself to trusted system writers.
+- **System32 write detection** - Added `CNG Key Isolation`, `Credential Guard`, `VBS Key Protection`, `LsaIso`, and Gnyida itself to trusted system writers.
 - **DNS trusted domains** - Added `msftconnecttest.com`, `.localmachine`, `disabled.invalid`.
 
 ## [0.7.8] - 2026-06-13
 
 ### Improved - TlsCertificateMonitor Hardened
 
-- **Startup audit now detects pre-existing MitM certs** - certs with confidence >=0.90 at startup are actively removed (catches "install cert before Sentinel starts" race attack).
+- **Startup audit now detects pre-existing MitM certs** - certs with confidence >=0.90 at startup are actively removed (catches "install cert before Gnyida starts" race attack).
 - **Active removal at lower threshold** - runtime certs with confidence >=0.80 get removed + adder killed (was 0.95, too conservative).
 - **New detection signals:**
   - Machine hostname CN (WIN-XXXXX, DESKTOP-XXXXX, or matching local machine name) -> +0.25 confidence
@@ -7381,7 +7388,7 @@ An attacker reading this source code cannot exploit the trust demotion because:
 ### Removed
 
 - `ResponseAction.UnloadDllAndKillOwner` renamed to `QuarantineAndKill`
-- `SentinelMetrics.RecordDeception()` and deception latency queue (dead code from removed DeceptionEngine)
+- `GnyidaMetrics.RecordDeception()` and deception latency queue (dead code from removed DeceptionEngine)
 - `HollowProcessMonitor.cs` (merged into MemoryBehaviorAnalyzer)
 
 ## [0.7.3] - 2026-06-10
@@ -7436,7 +7443,7 @@ An attacker reading this source code cannot exploit the trust demotion because:
 - **`DnsQueryMonitor` false positive: `amazontrust.com`** - Added `amazontrust.com`, `digicert.com`, `globalsign.com` to TrustedBaseDomains. Certificate authority OCSP/CRL validation domains generate high query volumes during TLS handshakes.
 - **`LocalServerMonitor` false positive: port 2869** - Added well-known Windows service ports (2869 SSDP/UPnP, 5357 WSDAPI, 5985 WinRM, 1900 SSDP, 3702 WS-Discovery) to the exclusion list. These services start/stop dynamically and are not indicators of compromise.
 - **`design.md` framework reference** - Corrected `net8.0-windows` -> `net10.0-windows` to match actual `.csproj` target framework.
-- **`requirements.md` ActiveResponse default** - Corrected "Active response must be disabled by default" to "Active response is enabled by default" to match `constraints.md`, `architecture-council.md`, and actual `SentinelConfig.ActiveResponse = true`.
+- **`requirements.md` ActiveResponse default** - Corrected "Active response must be disabled by default" to "Active response is enabled by default" to match `constraints.md`, `architecture-council.md`, and actual `GnyidaConfig.ActiveResponse = true`.
 
 ### Changed - Version Scheme
 - **Version numbering changed from `X.Y.0` to `0.X.Y`** - All historical versions renumbered. Current release is `7.0.0` (first major release under new scheme).
@@ -7465,9 +7472,9 @@ An attacker reading this source code cannot exploit the trust demotion because:
 
 ### Fixed - Logging Robustness & Data Integrity
 - **`JsonlEventLogger`** - Fixed race conditions between `LogEventAsync` and `DisposeAsync` with a `_disposed` flag and safe semaphore handling. Added `CancellationToken` support for graceful shutdown. Protected `JsonSerializer.Serialize` with a try/catch fallback to prevent unhandled exceptions from leaking to callers. Added `DroppedEvents` counter for rate-limited events. Fixed `50 * 1024 * 1024` integer overflow risk with `50L` literal. Safe semaphore release now handles `ObjectDisposedException`.
-- **`SentinelHealthCheck`** - Fixed hardcoded `CommonApplicationData\Sentinel` paths; now derives log/quarantine directories from `_eventLogger.LogFilePath`. Fixed integer division bug in `LogFileSizeMB` (files < 1 MB always reported `0` due to `long / (1024*1024)`). First health check now runs immediately (changed `while` to `do-while` with delay after). Exception handler upgraded from `LogDebug` to `LogError`.
-- **`SentinelService`** - Fixed hardcoded log/quarantine directory paths in `RunStartupSelfTest`; now uses `_eventLogger.LogFilePath`. Passed `CancellationToken` to startup `LogEventAsync`. Updated logged version string to `6.7.0`.
-- **`StartupSelfTest`** - Fixed hardcoded `CommonApplicationData\Sentinel` paths in log and quarantine directory checks; now derives from `_eventLogger.LogFilePath`.
+- **`GnyidaHealthCheck`** - Fixed hardcoded `CommonApplicationData\Gnyida` paths; now derives log/quarantine directories from `_eventLogger.LogFilePath`. Fixed integer division bug in `LogFileSizeMB` (files < 1 MB always reported `0` due to `long / (1024*1024)`). First health check now runs immediately (changed `while` to `do-while` with delay after). Exception handler upgraded from `LogDebug` to `LogError`.
+- **`GnyidaService`** - Fixed hardcoded log/quarantine directory paths in `RunStartupSelfTest`; now uses `_eventLogger.LogFilePath`. Passed `CancellationToken` to startup `LogEventAsync`. Updated logged version string to `6.7.0`.
+- **`StartupSelfTest`** - Fixed hardcoded `CommonApplicationData\Gnyida` paths in log and quarantine directory checks; now derives from `_eventLogger.LogFilePath`.
 - **`DetectionEngine`** - Fixed deduplication race condition that caused duplicate detection floods. Replaced non-atomic `TryGetValue` + indexer-assignment pattern with `ConcurrentDictionary.AddOrUpdate`, making the 60-second suppression window thread-safe.
 - **`AdvancedResponseEngine`** - Fixed missing `_metrics.RecordResponse()` call in the `LOG`-only `else` branch, so `ResponsesTotal` now correctly counts all response events (previously stayed at `0` for log-only detections).
 - **Installer** - Updated `setup.iss` and `build.ps1` version references to `6.7.0`.
@@ -7507,7 +7514,7 @@ An attacker reading this source code cannot exploit the trust demotion because:
 ### Fixed - NeuroBehaviorVisualMonitor Redesign (Allow Until Proven Malicious)
 - **Anomaly scoring (focus steals, cursor jumps, brightness oscillations) is now `LogOnly` (Tier2).** Previously, the monitor accumulated an anomaly score from normal user behavior (rapid window switching, large mouse movements across monitors) and killed the foreground process with `KillProcessTree` when the score reached 60. This killed browsers, IDEs (Devin, VS Code, Cursor, Windsurf), and any other app the user was actively using. Focus changes and cursor movements are **not proof of maliciousness** - they are normal user behavior.
 - **Transparent overlay detection is now `KillProcessTree` (Tier1).** A large (`>800x600`), layered + transparent + topmost window is actual proof of a phishing overlay or clickjacking attack. This is the only condition in `NeuroBehaviorVisualMonitor` that triggers an active kill response.
-- **Removed all browser/IDE exemption lists.** Since anomaly scoring no longer kills, static name-based exemptions are unnecessary and were an evasion vector (open-source attackers could read the list and rename malware to match). Sentinel now follows the principle: *allow anything to run until proven malicious at runtime*.
+- **Removed all browser/IDE exemption lists.** Since anomaly scoring no longer kills, static name-based exemptions are unnecessary and were an evasion vector (open-source attackers could read the list and rename malware to match). Gnyida now follows the principle: *allow anything to run until proven malicious at runtime*.
 
 ### Fixed - Browser False Positive Reduction
 - **`ThreatIntelInjectionRule`** - Browsers legitimately use `VirtualAllocEx`, `WriteProcessMemory`, and `CreateRemoteThread` for their multi-process sandbox model. Now skips all known browser processes entirely.
@@ -7519,7 +7526,7 @@ An attacker reading this source code cannot exploit the trust demotion because:
 
 - **Startup scan** (`ScanAndBaselineStoreAsync`) now silently baselines ALL existing root certificates. No detections are emitted and no certificates are removed during startup.
 - **Runtime polling** (`PollForNewCertsAsync`) alerts only on NEW certificates added to the `LocalMachine\Root` store after the baseline. Known public root CAs are baselined silently without alert.
-- **Removed auto-removal**. The `RemoveCertAsync` method has been deleted. Sentinel never auto-removes certificates regardless of confidence score.
+- **Removed auto-removal**. The `RemoveCertAsync` method has been deleted. Gnyida never auto-removes certificates regardless of confidence score.
 - **All cert detections are `LogOnly`**. `AuthorizedResponse` is always `ResponseAction.LogOnly` for certificate events. Previously, high-confidence certs triggered `RemoveCert` when `ActiveResponse` was enabled.
 - **Fixed alarmist reasoning text**. No longer describes all root CAs as "suspicious self-signed" (all root CAs are self-signed by definition). Uses neutral language: "new root certificate was added" and "assessment signals."
 - **Documentation updated** (`design.md`, `THREAT_MODEL.md`) to reflect that `TlsCertificateMonitor` monitors the Windows Root certificate store, not TLS endpoints.
@@ -7579,7 +7586,7 @@ An attacker reading this source code cannot exploit the trust demotion because:
 - Integrated `ChainTracer` into the `AdvancedResponseEngine` to trace and terminate attack trees cleanly on kill responses.
 
 ### Changed
-- Rewired all orphaned core engines and services (`ScoringEngine`, `AllowlistService`, `ParentPidSpoofDetector`, `IoCScanner`, `HashReputationService`, `BehavioralCorrelationEngine`) into `DetectionEngine` and `SentinelService`.
+- Rewired all orphaned core engines and services (`ScoringEngine`, `AllowlistService`, `ParentPidSpoofDetector`, `IoCScanner`, `HashReputationService`, `BehavioralCorrelationEngine`) into `DetectionEngine` and `GnyidaService`.
 - Registered required core services in the Agent's dependency injection container.
 - Updated `ThreatIntelInjectionRule` to correctly evaluate `ThreatIntelTelemetry`.
 
@@ -7607,9 +7614,9 @@ An attacker reading this source code cannot exploit the trust demotion because:
 - **CampaignIocRule** - Known malicious filenames (typo-squatted system binaries) and C2 exfiltration endpoints (pastebin raw, Discord webhooks, tor2web). Tier1/Tier2.
 
 ### Added - Services
-- **IncidentResponseService** - Forensic evidence collection before kill: module inventory, network connections, process tree, binary quarantine. Evidence stored in `%ProgramData%\Sentinel\Evidence\`.
+- **IncidentResponseService** - Forensic evidence collection before kill: module inventory, network connections, process tree, binary quarantine. Evidence stored in `%ProgramData%\Gnyida\Evidence\`.
 - **StartupSelfTest** - Pre-flight checks on startup: log directory, quarantine directory, DPAPI cache, rule loading, event logger.
-- **SentinelHealthCheck** - Periodic health reporting (every 5 min): memory, handles, threads, log size, quarantine count, thread pool, uptime, detection/response totals.
+- **GnyidaHealthCheck** - Periodic health reporting (every 5 min): memory, handles, threads, log size, quarantine count, thread pool, uptime, detection/response totals.
 
 ### Added - Monitors Registered
 - **ScreenCaptureMonitor** - Detects DXGI desktop duplication (screen capture) by non-standard processes.
@@ -7642,9 +7649,9 @@ An attacker reading this source code cannot exploit the trust demotion because:
 ## [0.5.9.1] - 2026-06-04
 
 ### Changed - Anti-Tamper Responses Enabled
-- **ModuleValidationMonitor** (module deleted) - `LogOnly` -> `KillProcessTree`. Sentinel's own DLLs being deleted = active attacker.
-- **ModuleValidationMonitor** (module tampered) - `LogOnly` -> `KillProcessTree`. Sentinel's binaries modified on disk = DLL replacement attack.
-- **RuntimeModuleIntegrityMonitor** (unexpected DLL in Sentinel) - `LogOnly` -> `KillProcessTree`. DLL injection into Sentinel process.
+- **ModuleValidationMonitor** (module deleted) - `LogOnly` -> `KillProcessTree`. Gnyida's own DLLs being deleted = active attacker.
+- **ModuleValidationMonitor** (module tampered) - `LogOnly` -> `KillProcessTree`. Gnyida's binaries modified on disk = DLL replacement attack.
+- **RuntimeModuleIntegrityMonitor** (unexpected DLL in Gnyida) - `LogOnly` -> `KillProcessTree`. DLL injection into Gnyida process.
 - **SyscallStubMonitor** (ntdll.dll hash changed) - `LogOnly` -> `KillProcessTree`. On-disk ntdll modification = rootkit/unhooking.
 - **GatewayFingerprintMonitor** - `LogOnly` -> `NetworkIsolate`. Gateway change = network hijack.
 
@@ -7653,7 +7660,7 @@ An attacker reading this source code cannot exploit the trust demotion because:
 ## [0.5.9] - 2026-06-04
 
 ### Added - Network Isolation Response
-- **NetworkIsolate response action** - New response type for network-layer threats where there's no local process to kill. When DNS poisoning is detected, Sentinel now:
+- **NetworkIsolate response action** - New response type for network-layer threats where there's no local process to kill. When DNS poisoning is detected, Gnyida now:
   1. Blocks the suspicious IP via Windows Firewall (inbound + outbound)
   2. Flushes the ARP cache entry for that IP
   3. Flushes the DNS resolver cache (`ipconfig /flushdns`) to clear poisoned records
@@ -7724,7 +7731,7 @@ An attacker reading this source code cannot exploit the trust demotion because:
 ### Changed - Installer Hardening
 - **Upgrade handling** - `PrepareToInstall` stops existing service, kills Agent/Service processes, resets antitamper ACLs via `icacls /reset` before overwriting files.
 - **Uninstall cleanup** - Stops service, deletes SCM entry, removes `HKLM\...\Run` registry key, removes `Program Files (x86)` leftovers from legacy installs.
-- **ProgramData preserved** - `C:\ProgramData\Sentinel` logs intentionally NOT deleted on uninstall for forensic retention.
+- **ProgramData preserved** - `C:\ProgramData\Gnyida` logs intentionally NOT deleted on uninstall for forensic retention.
 
 ### Changed - DI Wiring
 - Service `Program.cs` registers AllowlistService, ScoringEngine, ChainTracer, DllUnloadEngine as singletons; CampaignDetectionRule as IDetectionRule; BeaconingDetector and BehavioralBaselineService as hosted services.
@@ -7789,7 +7796,7 @@ An attacker reading this source code cannot exploit the trust demotion because:
 
 ## [0.5.3] - 2026-06-02
 
-### Added - Major Import from SentinelOld
+### Added - Major Import from GnyidaOld
 - Imported 42+ monitors from the previous codebase.
 - Includes: AdsDataStaging, ArpSpoof, AudioHijack, Bluetooth, BrowserExtension, CanaryFile, ChromeCredentialGuard, ChromeSessionGuard, CredentialCanary, DataExfiltration, DeviceInstall, LocalServer, LsassDumpCanary, MemoryBehaviorAnalyzer, MicSession, MicrosoftAccountGuard, ModuleValidation, NamedPipe, Network, NeuroBehaviorVisual, ParentPidSpoof, PhantomKeystroke, PowerShellThreat, PublicIp, RansomwareIo, RemoteAccess, RouteTable, RuntimeModuleIntegrity, ScheduledTask, ScreenCapture, SecureBootIntegrity, SyscallStub, TlsCertificate, TokenIntegrity, UacBypassSurface, WebcamMic, WifiSecurity, WindowsUpdateIntegrity, WmiPersistence, WorkFoldersExfil, and more.
 
@@ -7803,8 +7810,8 @@ An attacker reading this source code cannot exploit the trust demotion because:
 ## [0.5.2] - 2026-06-02
 
 ### Changed - Codebase Rebuild
-- Complete rewrite of the Sentinel codebase from design specifications.
-- New flat namespace architecture (Sentinel.Core instead of sub-namespaces).
+- Complete rewrite of the Gnyida codebase from design specifications.
+- New flat namespace architecture (Gnyida.Core instead of sub-namespaces).
 - Modernized DI, BackgroundService-based monitor pattern, unified DetectionEngine API.
 - FusedTelemetryContext-based detection rule interface.
 
@@ -8112,12 +8119,12 @@ Service working set reduced from ~3.4 GB to an expected ~300-600 MB on typical d
 - **System tray NotifyIcon** in the Agent process, running on a dedicated STA thread with a WinForms message pump alongside the Generic Host.
 - **Context menu items:**
   - **Open Console** (bold, default double-click action) - Allocates a console window, live-tails `events.jsonl` with color-coded output (yellow for detections, red for kills). Updates in real time (1-second poll). Handles log rotation.
-  - **Open Quarantine Folder** - Opens `%ProgramData%\Sentinel\Quarantine` in Explorer.
+  - **Open Quarantine Folder** - Opens `%ProgramData%\Gnyida\Quarantine` in Explorer.
   - **Open Event Log** - Opens `events.jsonl` in Notepad for quick inspection.
   - **Stop/Start Protection** (dynamic) - Shows "Stop Protection" (red) when service is running, "Start Protection" (green) when stopped. Stop requires balloon-click confirmation. Start uses ServiceController.
 - **Balloon tip notifications** for Agent-side detections: Tier1 kills show error balloon, Tier1 detections show warning balloon. Thread-safe `ShowBalloon()` API callable from any thread.
-- **Icon**: Extracts the embedded `Sentinel.ico` from the exe via `Icon.ExtractAssociatedIcon`. Falls back to `SystemIcons.Shield` if unavailable.
-- **Tooltip**: Shows "Sentinel v0.4.3 - Protection Active".
+- **Icon**: Extracts the embedded `Gnyida.ico` from the exe via `Icon.ExtractAssociatedIcon`. Falls back to `SystemIcons.Shield` if unavailable.
+- **Tooltip**: Shows "Gnyida v0.4.3 - Protection Active".
 - **Graceful cleanup**: Removes the tray icon on shutdown (no ghost icons in the notification area).
 - **FreeConsole on startup**: Detaches from the console allocated by `CreateProcessAsUser` so the WinForms message pump works correctly.
 - **Auto-start via Registry Run key**: `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` entry ensures Agent launches on user login without relying on `CreateProcessAsUser`.
@@ -8197,10 +8204,10 @@ Service working set reduced from ~3.4 GB to an expected ~300-600 MB on typical d
 - **Root cause**: Cleanup only checked the primary `SparseBombDirectory`. If the path resolved differently between deploy and cleanup (SYSTEM profile path variations), or if Trend Micro locked the file, cleanup silently failed.
 - **Fix**: (1) Added retry logic (3 attempts with 500ms delay). (2) Scans multiple alternate paths. (3) Clears read-only/system attributes before deletion. (4) Catches any file >1GB in the deception directory (renamed bombs). (5) Added evidence dump cleanup - keeps only 3 most recent cases, deletes older 300-900MB dump files.
 
-#### Agent Keeps Dying (Trend Micro killing SentinelAgent.exe)
-- **Root cause**: Trend Micro's AEGIS engine rates SentinelAgent.exe as "Suspicious" and terminates it on launch. The UserSessionLauncher retried every 30 seconds indefinitely, flooding the event log.
+#### Agent Keeps Dying (Trend Micro killing GnyidaAgent.exe)
+- **Root cause**: Trend Micro's AEGIS engine rates GnyidaAgent.exe as "Suspicious" and terminates it on launch. The UserSessionLauncher retried every 30 seconds indefinitely, flooding the event log.
 - **Fix**: (1) Added consecutive failure counter. (2) After 10 failures, logs a CRITICAL alert explaining that an antivirus is blocking the Agent and listing which monitors are offline. (3) After 20 failures, backs off to 5-minute retry intervals instead of 30-second spam. (4) Logs recovery when Agent finally stays alive.
-- **User action required**: Add `C:\Program Files\Sentinel\` to Trend Micro's exclusion list.
+- **User action required**: Add `C:\Program Files\Gnyida\` to Trend Micro's exclusion list.
 
 #### Ransomware I/O False Positive (msedge)
 - **Root cause**: Edge's cache writes, IndexedDB operations, and service workers produce 23K+ write ops / 130MB per minute continuously. This exceeds the ransomware threshold every 60 seconds.
@@ -8223,8 +8230,8 @@ Service working set reduced from ~3.4 GB to an expected ~300-600 MB on typical d
 
 ### Fixed - Critical False Positives
 
-#### Trend Micro Conflict (RAN4936T - Sentinel flagged as ransomware)
-- **Root cause**: Trend Micro's AEGIS behavioral engine detected Sentinel's ACL test files (`.sentinel_acl_test_*` in System32), forensic process dumps (300-900MB `.dmp` files), honeypot deception files (`wallet_keys.dat`, `credentials_backup.db`), and `CreateRemoteThread` (DLL unload engine) as ransomware-like behavior.
+#### Trend Micro Conflict (RAN4936T - Gnyida flagged as ransomware)
+- **Root cause**: Trend Micro's AEGIS behavioral engine detected Gnyida's ACL test files (`.gnyida_acl_test_*` in System32), forensic process dumps (300-900MB `.dmp` files), honeypot deception files (`wallet_keys.dat`, `credentials_backup.db`), and `CreateRemoteThread` (DLL unload engine) as ransomware-like behavior.
 - **Fix**: Added all Trend Micro processes (`TmsaInstance64`, `PtSessionAgent`, `uiSeAgnt`, `coreServiceShell`, `coreFrameworkHost`, `PtSvcHost`, `AMSPTelemetryService`) to LSASS dump canary allowlist, memory behavior JIT allowlist, ransomware I/O whitelist, and network allowlist.
 
 #### Cobalt Strike Campaign IOC False Positive
@@ -8312,12 +8319,12 @@ All allowlists expanded with commonly-used applications. Security model preserve
 
 ### Added - Anti-Tamper & Route Remediation
 
-Addresses the 2026-05-25 attack where an attacker silently removed Sentinel overnight after it detected their traffic interception infrastructure (hundreds of persistent /32 host routes + TLS MITM).
+Addresses the 2026-05-25 attack where an attacker silently removed Gnyida overnight after it detected their traffic interception infrastructure (hundreds of persistent /32 host routes + TLS MITM).
 
 #### AntiTamperGuard (new BackgroundService)
 - **Service Self-Reinstall**: If the service registry key is deleted while running, immediately re-registers the service via native SCM APIs (CreateService). No sc.exe LOLBin dependency.
 - **Last-Gasp Logging**: Registers console control handler and ProcessExit event. Writes death events to `last_gasp.jsonl` (separate from main log) when the process is being terminated ungracefully.
-- **Anti-Suspend Detection**: Monitors execution timing every 2 seconds. If a gap exceeds 10 seconds, emits a Tier1 detection - indicates NtSuspendProcess was used to freeze Sentinel while the attacker operated.
+- **Anti-Suspend Detection**: Monitors execution timing every 2 seconds. If a gap exceeds 10 seconds, emits a Tier1 detection - indicates NtSuspendProcess was used to freeze Gnyida while the attacker operated.
 
 #### Route Table Remediation (RouteTableMonitor enhanced)
 - **Active deletion of malicious routes**: When a suspicious /32 host route is detected (netmgmt protocol, non-virtual adapter), it is now immediately deleted via DeleteIpForwardEntry.
@@ -8326,7 +8333,7 @@ Addresses the 2026-05-25 attack where an attacker silently removed Sentinel over
 
 #### RemoteAccessMonitor (new BackgroundService)
 - **Unauthorized tool detection**: Scans every 30 seconds for 35+ known remote access tools (VNC, TeamViewer, AnyDesk, ScreenConnect, RustDesk, ngrok, chisel, frp, NetSupport, Ammyy, Radmin, Action1, Atera, and more).
-- **RDP state monitoring**: Captures RDP enabled/disabled state at startup. Alerts if RDP is enabled after Sentinel starts (attacker enabling remote access).
+- **RDP state monitoring**: Captures RDP enabled/disabled state at startup. Alerts if RDP is enabled after Gnyida starts (attacker enabling remote access).
 - **Active RDP session detection**: Identifies established RDP connections and reports remote IP addresses.
 - **Remote access port scanning**: Flags listening ports commonly used by remote access tools (3389, 5900-5902, 5938, 7070, 4899, 6129, 8200).
 - Addresses the "fake desktop" scenario where an attacker could relay or present a cloned desktop via remote access tools.
@@ -8337,8 +8344,8 @@ Addresses the 2026-05-25 attack where an attacker silently removed Sentinel over
 - All documentation updated
 
 ### Fixed - Installer Reboot Race Condition
-- **Root cause**: `restartreplace` flag in Inno Setup schedules a file swap on reboot when the service EXE is locked. But `PrepareToInstall` already deleted the service registration via `sc delete`. After reboot, the file is replaced but no service exists - Sentinel is gone.
-- **Fix**: Added boot guard scheduled tasks (`SentinelBootGuard` + `SentinelBootStart`) created in `[Code] CurStepChanged(ssPostInstall)`. These ONSTART tasks re-register and start the service on every boot, ensuring it survives the reboot regardless of install order.
+- **Root cause**: `restartreplace` flag in Inno Setup schedules a file swap on reboot when the service EXE is locked. But `PrepareToInstall` already deleted the service registration via `sc delete`. After reboot, the file is replaced but no service exists - Gnyida is gone.
+- **Fix**: Added boot guard scheduled tasks (`GnyidaBootGuard` + `GnyidaBootStart`) created in `[Code] CurStepChanged(ssPostInstall)`. These ONSTART tasks re-register and start the service on every boot, ensuring it survives the reboot regardless of install order.
 - Added `sc failure` recovery options (auto-restart on crash: 1s, 5s, 30s delays).
 - Tasks are cleaned up on uninstall.
 - Added `fix-service.ps1` script for manual recovery.
@@ -8435,7 +8442,7 @@ Passed!  - Failed: 0, Passed: 278, Skipped: 0, Total: 278
 
 ### Added - Full-Spectrum Protection (Beyond IDS/EDR)
 
-Sentinel expands from a pure IDS/EDR into comprehensive system protection. 13 new monitors cover network integrity, wireless security, and system hardening - attack surfaces that were previously outside Sentinel's scope.
+Gnyida expands from a pure IDS/EDR into comprehensive system protection. 13 new monitors cover network integrity, wireless security, and system hardening - attack surfaces that were previously outside Gnyida's scope.
 
 #### Network Hijack Protection (6 monitors)
 
@@ -8475,7 +8482,7 @@ Sentinel expands from a pure IDS/EDR into comprehensive system protection. 13 ne
 
 ### Security Impact
 
-Sentinel now detects attacks that were previously completely invisible:
+Gnyida now detects attacks that were previously completely invisible:
 - **ARP spoofing** on local network (coffee shop, hotel, office)
 - **Evil twin** Wi-Fi access points
 - **DNS poisoning** (rogue DHCP pushing attacker DNS)
@@ -8619,7 +8626,7 @@ With these changes, the following threats from the events.jsonl would now be act
 
 ### Added - Browser & Account Credential Protection + PowerShell Threat Monitoring
 
-This release closes the browser credential theft gap across ALL browsers and adds Microsoft account protection. Sentinel now actively detects and kills processes attempting to steal saved passwords, cookies, session tokens, or Microsoft account PRT tokens. Also adds PowerShell script-block threat monitoring to detect living-off-the-land attacks.
+This release closes the browser credential theft gap across ALL browsers and adds Microsoft account protection. Gnyida now actively detects and kills processes attempting to steal saved passwords, cookies, session tokens, or Microsoft account PRT tokens. Also adds PowerShell script-block threat monitoring to detect living-off-the-land attacks.
 
 #### New Monitors
 
@@ -8703,7 +8710,7 @@ This release closes the browser credential theft gap across ALL browsers and add
 
 - **NamedPipeMonitor** - Polls `\\.\pipe\` every 15s for C2/lateral movement pipe patterns (Cobalt Strike, PsExec, Impacket, Metasploit). Uses `GetNamedPipeServerProcessId` for owner attribution. Tier2 advisory.
 - **WmiPersistenceMonitor** - Periodic WMI namespace scan every 5 minutes for `__EventFilter` / `__EventConsumer` / `__FilterToConsumerBinding` subscriptions (T1546.003 - most common fileless persistence mechanism). Direct emission to DetectionEngine.
-- **SentinelMetrics** wiring - DetectionEngine and AdvancedResponseEngine now record metrics (detection rate, response latency, FP tracking) with P50/P90/P95/P99 histograms.
+- **GnyidaMetrics** wiring - DetectionEngine and AdvancedResponseEngine now record metrics (detection rate, response latency, FP tracking) with P50/P90/P95/P99 histograms.
 - **HashReputationService** two-tier cache - In-memory + DPAPI-encrypted disk cache cuts API calls by 90%+.
 - **StartupSelfTest** - Verifies ETW, DPAPI, quarantine, log file, and rule loading on service start before activating monitors.
 - **Watchdog HMAC signing** - Heartbeat file HMAC-signed with DPAPI-derived key. Unforgeable without SYSTEM access.
@@ -8712,7 +8719,7 @@ This release closes the browser credential theft gap across ALL browsers and add
 - **BurstRateLimiter** - Thread-safe rate limiting with burst capability for response actions.
 - **SafeExecution** - Retry, timeout, circuit breaker, and performance measurement patterns.
 - **ConfigIntegrityMonitor** - Runtime detection of config/executable tampering via SHA-256 baseline, checked every 5 minutes.
-- **SentinelHealthCheck** - Structured health checks: process, memory, handles, log file, quarantine, thread pool.
+- **GnyidaHealthCheck** - Structured health checks: process, memory, handles, log file, quarantine, thread pool.
 - **SecureHttpClientFactory** - TLS 1.2+ enforcement, domain allowlisting, certificate validation for all threat intel API calls.
 - **QuarantineFileAtomicAsync** - Atomic quarantine: encrypt -> move -> delete prevents race conditions on quarantine operations.
 
@@ -8722,8 +8729,8 @@ This release closes the browser credential theft gap across ALL browsers and add
 
 ### Added - Security Hardening, Observability & Resilience
 
-- **ProcessHardening** - DLL-search-order hardening via CIG (Code Integrity Guard), `SetDefaultDllDirectories`, and install-directory ACL enforcement. Prevents DLL sideloading against Sentinel itself.
-- **Strict install directory validation** - Opt-in via `SENTINEL_STRICT_INSTALL_DIR=1`. Rejects execution from unexpected paths.
+- **ProcessHardening** - DLL-search-order hardening via CIG (Code Integrity Guard), `SetDefaultDllDirectories`, and install-directory ACL enforcement. Prevents DLL sideloading against Gnyida itself.
+- **Strict install directory validation** - Opt-in via `GNYIDA_STRICT_INSTALL_DIR=1`. Rejects execution from unexpected paths.
 - **ServiceProtectionMonitor** - Service binary tamper protection. Monitors the service executable for modification.
 - **Event Log flooding reduction** - Warning+ severity only written to Windows Event Viewer. Debug/Info stays in `events.jsonl` only.
 - **LogRotationService** - Configurable size-based log rotation (50 MB per file, up to 5 rotated files). Replaces ad-hoc rotation.
@@ -9031,7 +9038,7 @@ All monitors now feed raw telemetry through a central fusion layer before the de
 - **ProcessAncestryCache** - `CreateToolhelp32Snapshot` refreshed every 2s. Provides parent name resolution for all monitors and rules. Uses atomic `volatile IReadOnlyDictionary` swap - readers never block. WMI fallback for Server Core/IoT.
 - **DetectionJobScheduler** - Background job scheduler for periodic detection tasks (memory scans, module integrity checks, baseline cleanup). Prevents all monitors from polling simultaneously.
 - **CircuitBreaker** - API failure handling for external threat intel calls. Opens after 5 consecutive failures, half-opens after 60s, closes on success. Prevents cascading failures when AbuseIPDB/URLhaus/MalwareBazaar are unreachable.
-- **SentinelGracefulShutdown** - Ordered teardown of all monitors and engines on service stop. Ensures in-flight detections are flushed to the log before exit.
+- **GnyidaGracefulShutdown** - Ordered teardown of all monitors and engines on service stop. Ensures in-flight detections are flushed to the log before exit.
 - **ToastNotificationService** - Windows toast notification integration via WinRT `Windows.UI.Notifications`. (Note: broken from session 0 - fixed in v0.4.2 with `WTSSendMessage` fallback, then replaced with tray balloon tips in v0.4.3.)
 - **IncidentResponseService** - Coordinates forensic evidence collection on kill: memory dump, module inventory, network snapshot, process tree capture.
 - **ChainTracer** - Walks process parent chain (forensic), collects descendants. Kills leaves first, root last.
@@ -9043,9 +9050,9 @@ All monitors now feed raw telemetry through a central fusion layer before the de
 
 ### Added - Self-Protection & Hardening
 
-- **SelfProtectionService** - Monitors Sentinel's own process integrity. Detects AMSI/ETW tampering against Sentinel itself, DLL hijacking of Sentinel's load path, and config file tampering. Triggers Tier1 self-protection kill on confirmed attack.
+- **SelfProtectionService** - Monitors Gnyida's own process integrity. Detects AMSI/ETW tampering against Gnyida itself, DLL hijacking of Gnyida's load path, and config file tampering. Triggers Tier1 self-protection kill on confirmed attack.
 - **HardeningModule** - Applies process-level hardening on startup: `SetDefaultDllDirectories` (prevents DLL search-order hijacking), install-directory ACL enforcement, CIG (Code Integrity Guard) opt-in.
-- **SecureCacheStore** - DPAPI machine-scope encryption + HMAC integrity for all persisted cache files. ACL-hardened to SYSTEM + Admins under `%ProgramData%\Sentinel\Secure\`. Rejects tampered or foreign cache files on load.
+- **SecureCacheStore** - DPAPI machine-scope encryption + HMAC integrity for all persisted cache files. ACL-hardened to SYSTEM + Admins under `%ProgramData%\Gnyida\Secure\`. Rejects tampered or foreign cache files on load.
 - **HeartbeatService** - Cross-process watchdog. Service writes HMAC-signed heartbeat file every 30s. Agent monitors it and restarts the service if heartbeat goes stale.
 - **UserSessionLauncher** - Launches the Agent process into the active user session from the SYSTEM service using `CreateProcessAsUser`. Monitors Agent liveness and restarts on exit.
 - **ProcessValidator** - Validates process names to prevent Unicode spoofing, homoglyph attacks, and path traversal in process identifiers.
@@ -9053,7 +9060,7 @@ All monitors now feed raw telemetry through a central fusion layer before the de
 - **ShadowProxyDetector** - Detects proxy manipulation: PAC file injection, WPAD poisoning, system proxy registry changes by non-trusted processes. Runs as a background service.
 - **HIDMacroGuard** - USB HID macro injection detection. Monitors for rapid automated keystroke sequences from HID devices that don't match user typing patterns.
 - **PseudoSandbox** - Lightweight behavioral sandbox for suspicious files: spawns in a restricted job object, monitors API calls and file/network activity for the first 5 seconds of execution.
-- **ConsultantSignalIngestor** - Tails `%ProgramData%\Sentinel\consultants\*.jsonl` for signals from external PowerShell consultant scripts (Council of Elders architecture). Ingests Tier2 signals into the detection engine.
+- **ConsultantSignalIngestor** - Tails `%ProgramData%\Gnyida\consultants\*.jsonl` for signals from external PowerShell consultant scripts (Council of Elders architecture). Ingests Tier2 signals into the detection engine.
 
 ---
 
@@ -9108,7 +9115,7 @@ This release ports the core detection rules from the GIDR reference architecture
 
 ### Added - Logging & Event Model
 
-- **JsonlEventLogger** - JSONL output to `%ProgramData%\Sentinel\events.jsonl`. Thread-safe via `SemaphoreSlim`. `System.Text.Json` only (no string-built JSON). `FileShare.ReadWrite` for concurrent readers. Size-based rotation at 50 MB, up to 5 rotated files. Rate-limited to 100 entries/second, burst of 200. Graceful degradation on file access failure. Self-healing writer (retries on each write). Stale file handling (renames locked files to `.stale.<timestamp>`).
+- **JsonlEventLogger** - JSONL output to `%ProgramData%\Gnyida\events.jsonl`. Thread-safe via `SemaphoreSlim`. `System.Text.Json` only (no string-built JSON). `FileShare.ReadWrite` for concurrent readers. Size-based rotation at 50 MB, up to 5 rotated files. Rate-limited to 100 entries/second, burst of 200. Graceful degradation on file access failure. Self-healing writer (retries on each write). Stale file handling (renames locked files to `.stale.<timestamp>`).
 - **StructuredLoggingExtensions** - `BeginScope` helpers for consistent operation context in all log entries.
 - **DetectionEvent model** - Structured event with `RuleName`, `Evidence`, `Reasoning`, `Confidence`, `Tier`, `ProcessName`, `ProcessId`, `Metadata`.
 - **DetectionTier** - `Tier1Behavioral` (kill-authorized) and `Tier2Indicator` (log-only). Tier2 enforcement is unconditional in `AdvancedResponseEngine` - no config override possible.

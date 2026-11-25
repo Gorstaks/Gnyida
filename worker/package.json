@@ -1,7 +1,7 @@
 {
-  "name": "sentinel-threat-proxy",
+  "name": "gnyida-threat-proxy",
   "version": "1.0.0",
-  "description": "Cloudflare Worker that proxies threat reports from Sentinel to abuse.ch APIs",
+  "description": "Cloudflare Worker that proxies threat reports from Gnyida to abuse.ch APIs",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",

@@ -1,0 +1,270 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Threading;
+using Microsoft.Extensions.Logging;
+
+namespace Gnyida.Core
+{
+    /// <summary>
+    /// Detects PPID spoofing by comparing a process's declared parent PID
+    /// (from PROCESS_BASIC_INFORMATION via NtQueryInformationProcess) against
+    /// the actual creator PID recorded in the process ancestry cache.
+    ///
+    /// Installer extractors (Inno Setup, NSIS, etc.) frequently race ETW/WMI
+    /// ancestry or re-parent during elevation - that is NOT T1134.004. Killing
+    /// them chain-quarantines Git/Chrome/VS installers (observed in production).
+    ///
+    /// Production FP 2026-08-01: WinReducerEX110 spawned System32\conhost with an
+    /// ETW/kernel parent mismatch -> KillProcess + ChainTracer walked up and killed
+    /// WinReducer. Stock console hosts and other System32 binaries must never be
+    /// kill-authorized on PPID race alone.
+    /// </summary>
+    public sealed class ParentPidSpoofDetector : IDisposable
+    {
+        private readonly DetectionEngine _detectionEngine;
+        private readonly ProcessAncestryCache _ancestryCache;
+        private readonly AllowlistService _allowlist;
+        private readonly SignerTrustService _signerTrust;
+        private readonly ILogger<ParentPidSpoofDetector> _logger;
+        private readonly System.Threading.Timer _timer;
+        private readonly HashSet<int> _alertedPids = new();
+
+        // NtQueryInformationProcess resolved dynamically via NativeResolver (no PE import bait).
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct PROCESS_BASIC_INFORMATION
+        {
+            public IntPtr Reserved1;
+            public IntPtr PebBaseAddress;
+            public IntPtr Reserved2_0;
+            public IntPtr Reserved2_1;
+            public IntPtr UniqueProcessId;
+            public IntPtr InheritedFromUniqueProcessId; // Real parent PID
+        }
+
+        private const int ProcessBasicInformation = 0;
+
+        public ParentPidSpoofDetector(
+            DetectionEngine de,
+            ProcessAncestryCache ac,
+            AllowlistService allowlist,
+            ILogger<ParentPidSpoofDetector> l,
+            SignerTrustService? signerTrust = null)
+        {
+            _detectionEngine = de;
+            _ancestryCache = ac;
+            _allowlist = allowlist;
+            _signerTrust = signerTrust ?? new SignerTrustService(new Microsoft.Extensions.Logging.Abstractions.NullLogger<SignerTrustService>());
+            _logger = l;
+            _timer = new System.Threading.Timer(Scan, null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+        }
+
+        private void Scan(object? state)
+        {
+            try
+            {
+                foreach (var proc in Process.GetProcesses())
+                {
+                    try
+                    {
+                        if (proc.Id <= 4) continue;
+                        if (_alertedPids.Contains(proc.Id)) continue;
+
+                        // Get image path for trust verification (name alone is spoofable)
+                        string? imagePath = null;
+                        try { imagePath = SecurityValidation.GetProcessImagePath(proc.Id); }
+                        catch { imagePath = null; }
+
+                        // Short-lived dev helpers (git-remote-https, gh, ...) often exit mid-scan,
+                        // so GetProcessImagePath races and returns null. Fall back to the path the
+                        // ancestry cache already recorded for this PID - if present it lets the
+                        // signed-skip below work correctly instead of racing to a false kill.
+                        if (string.IsNullOrEmpty(imagePath))
+                        {
+                            try
+                            {
+                                var cachedPath = _ancestryCache.GetProcessInfo(proc.Id).imagePath;
+                                if (!string.IsNullOrEmpty(cachedPath)) imagePath = cachedPath;
+                            }
+                            catch (Exception ex) { _logger.LogDebug(ex, "[ParentPidSpoofDetector] Scan failed"); }
+                        }
+
+                        // Verify code signature for development tools and browser process exemptions
+                        bool isDev = _allowlist.IsDevelopmentProcess(proc.ProcessName);
+                        var lowerName = proc.ProcessName.ToLowerInvariant();
+                        bool isBrowser = lowerName is "chrome" or "msedge" or "firefox" or "brave" or "opera" or "vivaldi";
+
+                        if (isDev || isBrowser)
+                        {
+                            // Only skip if the binary is validly signed - no path-based trust
+                            if (!string.IsNullOrEmpty(imagePath) && _signerTrust.IsSignedFile(imagePath!))
+                            {
+                                continue;
+                            }
+                        }
+
+                        // Inno Setup / NSIS / SFX extractors - ancestry races are normal
+                        if (InstallerHeuristics.IsInstallerExtractor(proc.ProcessName, imagePath))
+                        {
+                            continue;
+                        }
+
+                        // Signed official installers (Git-2.x-64-bit.exe, etc.)
+                        if (!string.IsNullOrEmpty(imagePath) &&
+                            InstallerHeuristics.LooksLikeInstallerName(proc.ProcessName, imagePath) &&
+                            (SecurityValidation.VerifyAuthenticodeSignature(imagePath!) || _signerTrust.IsSignedFile(imagePath!)))
+                        {
+                            continue;
+                        }
+
+                        var pbi = new PROCESS_BASIC_INFORMATION();
+                        int status = NativeResolver.NtQueryInformationProcess(proc.Handle, ProcessBasicInformation,
+                            ref pbi, out _);
+
+                        if (status != 0) continue;
+
+                        int kernelParentPid = (int)pbi.InheritedFromUniqueProcessId;
+
+                        // Compare with what the ancestry cache recorded (from ETW or WMI)
+                        if (!_ancestryCache.TryGetLiveProcessInfo(proc.Id, out var liveInfo)) continue;
+                        int cachedParentPid = liveInfo.parentId;
+                        if (cachedParentPid > 0 && cachedParentPid != kernelParentPid && kernelParentPid > 4)
+                        {
+                            // Child of a signed installer/extractor -> ETW race, not spoofing
+                            if (IsBenignInstallerParent(kernelParentPid) || IsBenignInstallerParent(cachedParentPid))
+                            {
+                                continue;
+                            }
+
+                            const string demoteTag = " [unconfirmed ancestry mismatch - LogOnly]";
+
+                            _ = _detectionEngine.EmitAsync(new DetectionEvent
+                            {
+                                RuleName = "PPID Spoofing: Parent PID Mismatch",
+                                Evidence = $"Process '{proc.ProcessName}' (PID {proc.Id}) kernel parent PID={kernelParentPid}, cached parent PID={cachedParentPid}" +
+                                           demoteTag,
+                                Reasoning = "The process's kernel-reported parent PID does not match the parent recorded via ETW process creation events, which may reflect PPID spoofing (T1134.004), PID reuse, or a collection race." +
+                                            " An isolated mismatch is observational and cannot authorize a kill.",
+                                Confidence = 0.55,
+                                Tier = DetectionTier.Tier2Indicator,
+                                AuthorizedResponse = ResponseAction.LogOnly,
+                                ProcessName = proc.ProcessName,
+                                ProcessId = proc.Id
+                            });
+                            _alertedPids.Add(proc.Id);
+                        }
+                    }
+                    catch (System.ComponentModel.Win32Exception ex) { _logger.LogDebug(ex, "[ParentPidSpoofDetector] Scan failed"); }
+                    catch (InvalidOperationException ex) { _logger.LogDebug(ex, "[ParentPidSpoofDetector] Scan failed"); }
+                    catch (Exception ex) { _logger.LogDebug(ex, "[ParentPidSpoofDetector] Scan failed"); }
+                    finally { proc.Dispose(); }
+                }
+
+                if (_alertedPids.Count > 500) _alertedPids.Clear();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "[ParentPidSpoofDetector] Scan error");
+            }
+        }
+
+        private bool IsBenignInstallerParent(int parentPid)
+        {
+            if (parentPid <= 4) return false;
+            try
+            {
+                var procInfo = _ancestryCache.GetProcessInfo(parentPid);
+                var name = procInfo.name;
+                var path = procInfo.imagePath;
+                if (string.IsNullOrEmpty(path))
+                    path = SecurityValidation.GetProcessImagePath(parentPid);
+
+                if (InstallerHeuristics.IsInstallerExtractor(name, path)) return true;
+                if (InstallerHeuristics.LooksLikeInstallerName(name, path) &&
+                    !string.IsNullOrEmpty(path) &&
+                    (SecurityValidation.VerifyAuthenticodeSignature(path!) || _signerTrust.IsSignedFile(path!)))
+                    return true;
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "[ParentPidSpoofDetector] IsBenignInstallerParent failed"); }
+            return false;
+        }
+
+        /// <summary>
+        /// PPID races on these must never authorize kill/chain-trace (production FP: WinReducer + conhost).
+        /// Restricts demotion to transient scenarios (unresolved paths for short-lived helpers,
+        /// stock console hosts) and verified signed dev tools. Prevents name-only trust vulnerabilities
+        /// per constraints.md "no attacker-controllable trust" rule.
+        /// </summary>
+        internal static bool ShouldDemotePpidToLogOnly(
+            string processName,
+            string? imagePath,
+            bool selfSigned,
+            bool allowlistedDevTool = false)
+        {
+            // Signed binary (validly Authenticode-signed, not raced): demote the mismatch
+            // as the race likely resolved after verification
+            if (selfSigned) return true;
+
+            // Stock console hosts (conhost, openconsole): demote, but ONLY when path is unresolved
+            // or when path is under System32/SysWOW64. Prevents impostor conhost.exe in C:\Temp
+            // from being exonerated by name alone.
+            if (IsStockWindowsConsoleHost(processName, imagePath)) return true;
+
+            // OS-critical path: demote (e.g., System32 service binaries)
+            if (!string.IsNullOrEmpty(imagePath) && SecurityValidation.IsOsCriticalPath(imagePath))
+                return true;
+
+            // Allowlisted dev/browser NAME demotes the mismatch ONLY in the transient-race window:
+            // the image path could not be resolved this tick (short-lived gh/git-remote-https
+            // exited before QueryFullProcessImageName). If a path DID resolve, name is not enough —
+            // require signature verification (selfSigned above). This prevents impostor at C:\Temp\gh.exe
+            // from being exonerated by its name alone, matching the IsStockWindowsConsoleHost pattern.
+            if (allowlistedDevTool && string.IsNullOrEmpty(imagePath)) return true;
+
+            // Everything else (resolved untrusted path, unsigned): authorization stands, don't demote
+            return false;
+        }
+
+        /// <summary>
+        /// True for stock console hosts. Path must be under System32/SysWOW64 when known;
+        /// name-only "conhost" with empty path is demoted (path often unresolved at scan time).
+        /// Impostor conhost.exe outside Windows is NOT demoted.
+        /// </summary>
+        internal static bool IsStockWindowsConsoleHost(string processName, string? imagePath)
+        {
+            // Case-insensitive: ETW and Process.ProcessName can report "CONHOST.EXE" / "OpenConsole".
+            var stem = StringNet48.ReplaceIgnoreCase(processName ?? string.Empty, ".exe", "")
+                .Trim();
+            if (stem.Length == 0) return false;
+
+            bool isConhost = string.Equals(stem, "conhost", StringComparison.OrdinalIgnoreCase);
+            bool nameIsConsole = isConhost ||
+                string.Equals(stem, "openconsole", StringComparison.OrdinalIgnoreCase);
+
+            if (!nameIsConsole) return false;
+
+            if (string.IsNullOrWhiteSpace(imagePath))
+                return isConhost;
+
+            try
+            {
+                var lower = Path.GetFullPath(imagePath).ToLowerInvariant();
+                var file = Path.GetFileName(lower);
+                if (file is not ("conhost.exe" or "openconsole.exe")) return false;
+
+                return lower.Contains(@"\windows\system32\") ||
+                       lower.Contains(@"\windows\syswow64\") ||
+                       SecurityValidation.IsOsCriticalPath(imagePath);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public void Dispose() => _timer.Dispose();
+    }
+}

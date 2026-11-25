@@ -1,6 +1,6 @@
 # Certificate trust and removal (3.2.3)
 
-Sentinel separates a review finding from permission to change a Windows trust store.
+Gnyida separates a review finding from permission to change a Windows trust store.
 
 ## Current implementation
 

@@ -1,4 +1,4 @@
-# Sentinel 3.6.4 Release Notes
+# Gnyida 3.6.4 Release Notes
 
 **Release Date:** November 6, 2026  
 **Version:** 3.6.4  
@@ -6,7 +6,7 @@
 
 ## Summary
 
-Sentinel 3.6.4 fixes critical hard-constraint violations and code quality issues that emerged in the 3.6.3 codebase audit. All fixes maintain the existing Tier2/Tier1 separation contract and do not introduce new functionality or breaking changes.
+Gnyida 3.6.4 fixes critical hard-constraint violations and code quality issues that emerged in the 3.6.3 codebase audit. All fixes maintain the existing Tier2/Tier1 separation contract and do not introduce new functionality or breaking changes.
 
 ### Critical Fixes
 
@@ -191,7 +191,7 @@ catch (Exception ex)
 - This improves stability during OS shutdown and service restarts
 
 ### Monitoring
-- New audit events: `FORENSIC_COLLECTION_FAILED` will appear in `%ProgramData%\Sentinel\Logs\audit.jsonl` if forensic evidence collection fails
+- New audit events: `FORENSIC_COLLECTION_FAILED` will appear in `%ProgramData%\Gnyida\Logs\audit.jsonl` if forensic evidence collection fails
 - JSON metrics endpoint now safer from corruption
 
 ---
@@ -200,9 +200,9 @@ catch (Exception ex)
 
 | File | Change | Lines |
 |------|--------|-------|
-| `src/Sentinel.Agent/WebDashboardService.cs` | JSON wrapping via System.Text.Json | +6 -8 |
-| `src/Sentinel.Service/Program.cs` | Watchdog loop and main shutdown | +20 -15 |
-| `src/Sentinel.Core/AdvancedResponseEngine.cs` | Forensic collection logging | +12 -3 |
+| `src/Gnyida.Agent/WebDashboardService.cs` | JSON wrapping via System.Text.Json | +6 -8 |
+| `src/Gnyida.Service/Program.cs` | Watchdog loop and main shutdown | +20 -15 |
+| `src/Gnyida.Core/AdvancedResponseEngine.cs` | Forensic collection logging | +12 -3 |
 | `docs/CHANGELOG.md` | 3.6.4 release notes | +36 |
 | `docs/constraints.md` | Version bump to 3.6.4 | 1 |
 | `version.txt` | 3.6.3 → 3.6.4 | 1 |
@@ -231,7 +231,7 @@ These lower-priority items will be addressed in future maintenance releases if n
 ## Support
 
 For questions or issues:
-1. Check `%ProgramData%\Sentinel\Logs\` for diagnostic logs
+1. Check `%ProgramData%\Gnyida\Logs\` for diagnostic logs
 2. Review audit trail in `audit.jsonl` for policy decisions
 3. File an issue with relevant logs attached
 

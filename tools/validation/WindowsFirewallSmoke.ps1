@@ -8,11 +8,11 @@ if (-not ([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([Secur
     throw 'The isolated Windows firewall fixture requires the hosted runner administrator token.'
 }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$core = Join-Path $repo 'src/Sentinel.Core/bin/Release/net48-windows'
-$fixture = Join-Path ([IO.Path]::GetTempPath()) ('Sentinel-Firewall-Smoke-' + [Guid]::NewGuid().ToString('N'))
-$prefix = 'Sentinel-Smoke-' + [Guid]::NewGuid().ToString('N')
+$core = Join-Path $repo 'src/Gnyida.Core/bin/Release/net48-windows'
+$fixture = Join-Path ([IO.Path]::GetTempPath()) ('Gnyida-Firewall-Smoke-' + [Guid]::NewGuid().ToString('N'))
+$prefix = 'Gnyida-Smoke-' + [Guid]::NewGuid().ToString('N')
 New-Item -ItemType Directory -Path $fixture | Out-Null
-$smokeExe = Join-Path $repo 'tools/Sentinel.FirewallSmoke/bin/Release/net48-windows/Sentinel.FirewallSmoke.exe'
+$smokeExe = Join-Path $repo 'tools/Gnyida.FirewallSmoke/bin/Release/net48-windows/Gnyida.FirewallSmoke.exe'
 $clientSource = @'
 using System;
 using System.Net.Sockets;
@@ -31,10 +31,10 @@ public static class SmokeClient {
     }
 }
 '@
-Add-Type -TypeDefinition $clientSource -OutputAssembly (Join-Path $fixture 'Sentinel.Agent.exe') -OutputType ConsoleApplication
-Copy-Item (Join-Path $fixture 'Sentinel.Agent.exe') (Join-Path $fixture 'control.exe')
-Copy-Item (Join-Path $repo 'src/Sentinel.Service/bin/Release/net48-windows/Sentinel.Service.exe') $fixture
-Copy-Item (Join-Path $repo 'tools/Sentinel.AutoRotate/bin/Release/net48-windows/SentinelAutoRotate.exe') $fixture
+Add-Type -TypeDefinition $clientSource -OutputAssembly (Join-Path $fixture 'Gnyida.Agent.exe') -OutputType ConsoleApplication
+Copy-Item (Join-Path $fixture 'Gnyida.Agent.exe') (Join-Path $fixture 'control.exe')
+Copy-Item (Join-Path $repo 'src/Gnyida.Service/bin/Release/net48-windows/Gnyida.Service.exe') $fixture
+Copy-Item (Join-Path $repo 'tools/Gnyida.AutoRotate/bin/Release/net48-windows/GnyidaAutoRotate.exe') $fixture
 $listener = $null
 $mutated = $false
 function Invoke-Policy($operation, $store = $null, $name = $null) {
@@ -48,15 +48,15 @@ function Invoke-Policy($operation, $store = $null, $name = $null) {
 }
 function Assert-Smoke($condition, $message) { if (-not $condition) { throw $message }; Write-Host ('PASS: ' + $message) }
 try {
-    # An external host is used only by this disposable test client, never by Sentinel product code.
+    # An external host is used only by this disposable test client, never by Gnyida product code.
     $remote = [Net.Dns]::GetHostAddresses('example.com') | Where-Object AddressFamily -eq InterNetwork | Select-Object -First 1
     if (-not $remote) { throw 'No IPv4 test endpoint resolved' }
-    Copy-Item (Join-Path $fixture 'control.exe') (Join-Path $fixture 'Sentinel.Service.exe') -Force
-    & (Join-Path $fixture 'Sentinel.Service.exe') $remote.IPAddressToString 443
+    Copy-Item (Join-Path $fixture 'control.exe') (Join-Path $fixture 'Gnyida.Service.exe') -Force
+    & (Join-Path $fixture 'Gnyida.Service.exe') $remote.IPAddressToString 443
     Assert-Smoke ($LASTEXITCODE -eq 0) 'Service-path executable can reach HTTPS for hash reputation'
     & (Join-Path $fixture 'control.exe') $remote.IPAddressToString 443
     Assert-Smoke ($LASTEXITCODE -eq 0) 'Control executable can reach the external test endpoint before mutation'
-    & (Join-Path $fixture 'Sentinel.Agent.exe') $remote.IPAddressToString 443
+    & (Join-Path $fixture 'Gnyida.Agent.exe') $remote.IPAddressToString 443
     Assert-Smoke ($LASTEXITCODE -eq 0) 'Identical Agent-path test executable connects before its own block'
     New-NetFirewallRule -Name ($prefix + '-IN') -DisplayName ($prefix + '-IN') -Direction Inbound -Action Allow -Protocol TCP -LocalPort 65271 -Enabled True | Out-Null
     New-NetFirewallRule -Name ($prefix + '-OUT') -DisplayName ($prefix + '-OUT') -Direction Outbound -Action Allow -Protocol TCP -RemotePort 65271 -Enabled True | Out-Null
@@ -66,7 +66,7 @@ try {
     $null = Invoke-Policy NativeApply
     $result = Invoke-Policy Apply
     if (-not $result.SelfBlocksEffective) {
-        Get-NetFirewallRule -PolicyStore ActiveStore -TracePolicyStore | Where-Object { $_.Name -like 'Sentinel-Offline-*' -or $_.DisplayName -like 'Sentinel-Offline-*' } | ForEach-Object {
+        Get-NetFirewallRule -PolicyStore ActiveStore -TracePolicyStore | Where-Object { $_.Name -like 'Gnyida-Offline-*' -or $_.DisplayName -like 'Gnyida-Offline-*' } | ForEach-Object {
             [pscustomobject]@{
                 Rule=($_ | Select-Object Name,DisplayName,Enabled,Direction,Action,Profile,EnforcementStatus,PolicyStoreSource)
                 Port=($_ | Get-NetFirewallPortFilter | Select-Object Protocol,LocalPort,RemotePort)
@@ -87,24 +87,24 @@ try {
     $null = Invoke-Policy Approve PersistentStore ($prefix + '-IN')
     $null = Invoke-Policy Apply
     Assert-Smoke ((Get-NetFirewallRule -PolicyStore PersistentStore -Name ($prefix + '-IN')).Enabled -eq 'True') 'Explicit approval survives a fresh policy-engine invocation'
-    & (Join-Path $fixture 'Sentinel.Agent.exe') $remote.IPAddressToString 443
+    & (Join-Path $fixture 'Gnyida.Agent.exe') $remote.IPAddressToString 443
     Assert-Smoke ($LASTEXITCODE -eq 0) 'Agent-path executable retains outbound connectivity after inbound-only enforcement'
-    Copy-Item (Join-Path $fixture 'control.exe') (Join-Path $fixture 'Sentinel.Service.exe') -Force
-    & (Join-Path $fixture 'Sentinel.Service.exe') $remote.IPAddressToString 443
+    Copy-Item (Join-Path $fixture 'control.exe') (Join-Path $fixture 'Gnyida.Service.exe') -Force
+    & (Join-Path $fixture 'Gnyida.Service.exe') $remote.IPAddressToString 443
     Assert-Smoke ($LASTEXITCODE -eq 0) 'Service-path executable can reach HTTPS for hash reputation'
     & (Join-Path $fixture 'control.exe') $remote.IPAddressToString 443
     Assert-Smoke ($LASTEXITCODE -eq 0) 'Identical control executable still connects, excluding a general endpoint outage'
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     $listener.Start()
-    & (Join-Path $fixture 'Sentinel.Agent.exe') '127.0.0.1' $listener.LocalEndpoint.Port
+    & (Join-Path $fixture 'Gnyida.Agent.exe') '127.0.0.1' $listener.LocalEndpoint.Port
     Assert-Smoke ($LASTEXITCODE -eq 0) 'Agent-path executable retains localhost connectivity'
     $null = Invoke-Policy Restore
     $null = Invoke-Policy NativeRemove
     Assert-Smoke ((Get-NetFirewallRule -PolicyStore PersistentStore -Name ($prefix + '-IN')).Enabled -eq 'True') 'Rollback restores the original inbound enabled state'
     Assert-Smoke ((Get-NetFirewallRule -PolicyStore localhost -Name ($prefix + '-GPO-IN')).Enabled -eq 'True') 'Rollback restores the original local-GPO inbound enabled state'
-    foreach ($executable in @('Sentinel.Service.exe', 'Sentinel.Agent.exe', 'SentinelAutoRotate.exe')) {
+    foreach ($executable in @('Gnyida.Service.exe', 'Gnyida.Agent.exe', 'GnyidaAutoRotate.exe')) {
         foreach ($direction in @('IN', 'OUT')) {
-            $ruleName = 'Sentinel-Offline-' + $executable + '-' + $direction
+            $ruleName = 'Gnyida-Offline-' + $executable + '-' + $direction
             Assert-Smoke (@(Get-NetFirewallRule -PolicyStore ActiveStore | Where-Object { $_.Name -eq $ruleName -or $_.DisplayName -eq $ruleName }).Count -eq 0) ('Rollback removed effective owned rule ' + $ruleName)
         }
     }

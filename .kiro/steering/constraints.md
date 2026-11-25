@@ -2,9 +2,9 @@
 inclusion: always
 ---
 
-# Sentinel - Hard Constraints (Never Violate)
+# Gnyida - Hard Constraints (Never Violate)
 
-These are non-negotiable rules for the Sentinel codebase. They take precedence over
+These are non-negotiable rules for the Gnyida codebase. They take precedence over
 convenience or brevity when writing or reviewing code. A change that violates any of these
 must not be made.
 

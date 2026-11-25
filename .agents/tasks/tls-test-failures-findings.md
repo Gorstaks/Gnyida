@@ -8,8 +8,8 @@ require it to be lower.
 
 | Test | File:Line | Asserts | Actual | Delta |
 |------|-----------|---------|--------|-------|
-| `AnalyzeCert_SelfSigned_Alone_DoesNotIncreaseConfidence` | `tests/Sentinel.Tests/Monitors/TlsCertificateMonitorTests.cs:22` | `Confidence < 0.60` | **0.65** | +0.05 over |
-| `AnalyzeCert_LongLivedSelfSignedRoot_MissingCrl_NotScored` | `tests/Sentinel.Tests/Monitors/TlsCertificateMonitorTests.cs:49` | `Confidence < 0.65` | **0.65** | +0.00 (strict `<` fails on equality) |
+| `AnalyzeCert_SelfSigned_Alone_DoesNotIncreaseConfidence` | `tests/Gnyida.Tests/Monitors/TlsCertificateMonitorTests.cs:22` | `Confidence < 0.60` | **0.65** | +0.05 over |
+| `AnalyzeCert_LongLivedSelfSignedRoot_MissingCrl_NotScored` | `tests/Gnyida.Tests/Monitors/TlsCertificateMonitorTests.cs:49` | `Confidence < 0.65` | **0.65** | +0.00 (strict `<` fails on equality) |
 
 **Root cause (c): a stale/self-inconsistent commit, not a product regression and not
 nondeterminism.** The scoring code and the two tests were written in the **same commit**
@@ -35,7 +35,7 @@ Exact changes for both options are given below. **No change was made.**
 ### 1. The failing tests
 
 Captured from `dotnet test --filter "FullyQualifiedName~TlsCertificateMonitorTests"` run from
-`e:\Gorstak\Sentinel` (net48, 2 Failed / 13 Passed / 15 Total):
+`e:\Gorstak\Gnyida` (net48, 2 Failed / 13 Passed / 15 Total):
 
 ```
 Failed ...AnalyzeCert_LongLivedSelfSignedRoot_MissingCrl_NotScored [32 ms]
@@ -48,10 +48,10 @@ Failed ...AnalyzeCert_SelfSigned_Alone_DoesNotIncreaseConfidence [46 ms]
    Self-signed alone should be < 0.60, got 0.65
   ...TlsCertificateMonitorTests.cs:line 22
 
-Failed!  - Failed: 2, Passed: 13, Skipped: 0, Total: 15, Duration: 696 ms - Sentinel.Tests.dll (net48)
+Failed!  - Failed: 2, Passed: 13, Skipped: 0, Total: 15, Duration: 696 ms - Gnyida.Tests.dll (net48)
 ```
 
-Test source (`tests/Sentinel.Tests/Monitors/TlsCertificateMonitorTests.cs`):
+Test source (`tests/Gnyida.Tests/Monitors/TlsCertificateMonitorTests.cs`):
 
 - Lines 17-23 — `AnalyzeCert_SelfSigned_Alone_DoesNotIncreaseConfidence`:
   ```csharp
@@ -81,7 +81,7 @@ var cert = req.CreateSelfSigned(new DateTimeOffset(notBefore), new DateTimeOffse
 ### 2. Product code under test — scoring trace
 
 Class: `TlsCertificateMonitor` in
-`src/Sentinel.Core/Monitors/SystemIntegrityMonitors.cs:181`.
+`src/Gnyida.Core/Monitors/SystemIntegrityMonitors.cs:181`.
 Method under test: `internal static CertAnalysisResult AnalyzeCert(X509Certificate2 cert)`
 (declared at line ~554).
 
@@ -117,7 +117,7 @@ Net: **0.65** for both. The only non-base contribution is the EKU All-Purpose +0
 
 - `HEAD = c3cd372` `"feat: add InputIntegrityGuard, register AcousticThreatMonitor, remove
   PhantomKeystrokeGuard"`. `git show --stat c3cd372` touches **only**
-  `src/Sentinel.Core/InputIntegrityGuard.cs` and
+  `src/Gnyida.Core/InputIntegrityGuard.cs` and
   `tests/.../Monitors/InputIntegrityGuardTests.cs` — **no** TLS/cert/scoring files. Confirms the
   failures pre-date the input-integrity work.
 - The failing assertions (`blame -L 20,24` and `-L 45,50`) and the EKU All-Purpose scoring
@@ -157,7 +157,7 @@ expected number.
 Align the two thresholds with the intended scoring (base 0.40 + All-Purpose 0.25 = 0.65 for a
 bare self-signed root). This keeps product detection semantics unchanged.
 
-- `tests/Sentinel.Tests/Monitors/TlsCertificateMonitorTests.cs:22`
+- `tests/Gnyida.Tests/Monitors/TlsCertificateMonitorTests.cs:22`
   — change
   ```csharp
   Assert.True(result.Confidence < 0.60, $"Self-signed alone should be < 0.60, got {result.Confidence}");
@@ -168,7 +168,7 @@ bare self-signed root). This keeps product detection semantics unchanged.
   ```
   and update the stale comment on line 21 from `// Base confidence is 0.40, no bonus for
   self-signed anymore` to note the +0.25 All-Purpose (no-EKU) bonus.
-- `tests/Sentinel.Tests/Monitors/TlsCertificateMonitorTests.cs:49`
+- `tests/Gnyida.Tests/Monitors/TlsCertificateMonitorTests.cs:49`
   — change the strict `< 0.65` to `<= 0.65`:
   ```csharp
   Assert.True(result.Confidence <= 0.65, $"Long-lived root should stay at/below remove threshold, got {result.Confidence}");
@@ -186,7 +186,7 @@ never removed.
 
 If the team decides a bare self-signed root with no suspicion signals should score the pure base
 0.40, gate the All-Purpose bonus so it does not fire on a long-lived self-signed root that
-carries no other signal. Concretely, in `src/Sentinel.Core/Monitors/SystemIntegrityMonitors.cs`
+carries no other signal. Concretely, in `src/Gnyida.Core/Monitors/SystemIntegrityMonitors.cs`
 around line 759:
 
 ```csharp
@@ -218,5 +218,5 @@ if product requirements explicitly say a no-EKU self-signed root must not be sco
 
 `c3cd372` (input-integrity) is HEAD; it did not touch TLS code, matching the brief's premise
 that these two failures are pre-existing. I did not modify any source. The `global.json` the
-brief mentioned does not exist under `e:\Gorstak\Sentinel`; the test project targets
+brief mentioned does not exist under `e:\Gorstak\Gnyida`; the test project targets
 `net48-windows` and the standard `dotnet test` invocation builds and runs cleanly.

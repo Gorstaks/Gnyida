@@ -2,7 +2,7 @@
 inclusion: always
 ---
 
-# Sentinel - Current Project State and Pre-Change Checklist
+# Gnyida - Current Project State and Pre-Change Checklist
 
 ## Read history before acting (mandatory)
 
@@ -20,14 +20,14 @@ If history does not explain it, ask the owner - do not offer "restore it" as a d
 
 ## Current architecture facts (do not re-litigate)
 
-- **NanoAV is integrated into Sentinel.Core (3.4.5).** There is no separate NanoAV runtime, module
+- **NanoAV is integrated into Gnyida.Core (3.4.5).** There is no separate NanoAV runtime, module
   build or installer step. `installer/retire-nanoav.ps1` and its CI migration smoke were removed on
   purpose. The standalone source folder `modules/NanoAV` was removed in 3.7.0 and must not be recreated
   (its verification script was removed with it).
 - **GVPN is a separate project (3.6.8)** in `D:\Gorstak\GVPN` with its own repo, versioning and
-  installer. Sentinel does not build, bundle, install, start or control any VPN and has no VPN
+  installer. Gnyida does not build, bundle, install, start or control any VPN and has no VPN
   response action. `ResponseAction.VpnShieldUp` is an `[Obsolete]` numeric slot kept only for
-  serialized-log stability. Sentinel must coexist with any VPN client via `VpnTunnelClassifier`
+  serialized-log stability. Gnyida must coexist with any VPN client via `VpnTunnelClassifier`
   and `VpnTunnelLeakMonitor` (observe-only). Never trust a VPN client's log (user-writable).
 - **`Network Tamper: Local MitM Chain` is a LogOnly report**, pinned by
   `ResponsePolicy.IsReportOnlyNetworkTamper`.
@@ -50,7 +50,7 @@ If history does not explain it, ask the owner - do not offer "restore it" as a d
   `git checkout -- <file>` and stop build servers (`dotnet build-server shutdown`) before rebuilding.
 - Versioning: one patch per release (`workflow.md`). If `version.txt` is already at the target
   version and the installer was built, do **not** run `installer/release.ps1` (it bumps again);
-  publish with `D:\Gorstak\push.ps1 -ProjectFilter sentinel`.
+  publish with `D:\Gorstak\push.ps1 -ProjectFilter gnyida`.
 - Every release needs a `docs/CHANGELOG.md` section whose heading matches the released version.
 - Never claim "built", "tests pass" or "verified" unless you ran it and saw the result. If you could
   not run it, say so plainly.

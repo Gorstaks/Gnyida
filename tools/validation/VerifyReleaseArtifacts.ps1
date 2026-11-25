@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version' }
 # Use fixed expected names, never paths supplied by a downloaded manifest.
-$names = @("SentinelSetup-$Version.exe", "SentinelWorker-$Version.js", "SentinelDiagnostics-$Version.zip")
+$names = @("GnyidaSetup-$Version.exe", "GnyidaWorker-$Version.js", "GnyidaDiagnostics-$Version.zip")
 $referenceManifest = Join-Path $ReferenceDirectory 'SHA256SUMS.txt'
 $publishedManifest = Join-Path $PublishedDirectory 'SHA256SUMS.txt'
 if ((Get-FileHash -Algorithm SHA256 -LiteralPath $referenceManifest).Hash -ne (Get-FileHash -Algorithm SHA256 -LiteralPath $publishedManifest).Hash) {

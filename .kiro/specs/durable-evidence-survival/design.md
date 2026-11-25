@@ -2,7 +2,7 @@
 
 Implements the requirements in `./requirements.md`. This design **reuses existing abstractions**
 (evidence packs, the HMAC-signed proxy, the append-only audit log, the last-gasp exit hook) rather
-than introducing new subsystems. It fits the Sentinel pipeline and constraints
+than introducing new subsystems. It fits the Gnyida pipeline and constraints
 (`#[[file:../../../docs/design.md]]`, `#[[file:../../../docs/constraints.md]]`).
 
 ---
@@ -11,14 +11,14 @@ than introducing new subsystems. It fits the Sentinel pipeline and constraints
 
 | Component | File | Role in this feature |
 |-----------|------|----------------------|
-| `AutoIncidentReporter` | `src/Sentinel.Core/AutoIncidentReporter.cs` | Writes + seals packs; `HandleDetectionAsync` is where the off-host mirror step is added (after `WriteEvidencePackAsync` / `SealPackIntegrityAsync`). |
-| `ResponsePolicy.ShouldAutoReportIncident` | `src/Sentinel.Core/ResponsePolicy.cs` | Existing silent-observe / chain-confirmed gate. The mirror reuses it - no new gating logic. |
-| `ProxyAuthHelper` | `src/Sentinel.Core/ProxyAuthHelper.cs` | `CreateAuthenticatedPost` + `CreatePinnedHttpClient`; the only sanctioned outbound-auth path (FR-11). |
-| `ThreatReportService` | `src/Sentinel.Core/ThreatReportService.cs` | Template + home for a new signed `ReportEvidenceAsync` route; `CanReport()` fail-closed pattern reused verbatim. |
-| `AntiTamperGuard` | `src/Sentinel.Core/AntiTamperGuard.cs` | `CheckServiceRegistration`, `RegisterExitHandler`, `WriteLastGasp` - extended for stop classification (R1). |
-| `SentinelService` / `SentinelGuardService` | `src/Sentinel.Service/SentinelService.cs`, `Program.cs` | Service stop path (`finally`, `OnStop`) - signals expected-stop vs unexpected. |
-| `JsonlEventLogger` | `src/Sentinel.Core/JsonlEventLogger.cs` | Append-only `audit-*.jsonl` (SYSTEM+Admins ACL) - the durable local sink for R1/R3. |
-| `ThreatReportingConfig` | `src/Sentinel.Core/Models.cs` (config types) | Extended with off-host mirror flag (R5). |
+| `AutoIncidentReporter` | `src/Gnyida.Core/AutoIncidentReporter.cs` | Writes + seals packs; `HandleDetectionAsync` is where the off-host mirror step is added (after `WriteEvidencePackAsync` / `SealPackIntegrityAsync`). |
+| `ResponsePolicy.ShouldAutoReportIncident` | `src/Gnyida.Core/ResponsePolicy.cs` | Existing silent-observe / chain-confirmed gate. The mirror reuses it - no new gating logic. |
+| `ProxyAuthHelper` | `src/Gnyida.Core/ProxyAuthHelper.cs` | `CreateAuthenticatedPost` + `CreatePinnedHttpClient`; the only sanctioned outbound-auth path (FR-11). |
+| `ThreatReportService` | `src/Gnyida.Core/ThreatReportService.cs` | Template + home for a new signed `ReportEvidenceAsync` route; `CanReport()` fail-closed pattern reused verbatim. |
+| `AntiTamperGuard` | `src/Gnyida.Core/AntiTamperGuard.cs` | `CheckServiceRegistration`, `RegisterExitHandler`, `WriteLastGasp` - extended for stop classification (R1). |
+| `GnyidaService` / `GnyidaGuardService` | `src/Gnyida.Service/GnyidaService.cs`, `Program.cs` | Service stop path (`finally`, `OnStop`) - signals expected-stop vs unexpected. |
+| `JsonlEventLogger` | `src/Gnyida.Core/JsonlEventLogger.cs` | Append-only `audit-*.jsonl` (SYSTEM+Admins ACL) - the durable local sink for R1/R3. |
+| `ThreatReportingConfig` | `src/Gnyida.Core/Models.cs` (config types) | Extended with off-host mirror flag (R5). |
 
 ---
 
@@ -28,7 +28,7 @@ than introducing new subsystems. It fits the Sentinel pipeline and constraints
 The Service already knows when it is stopping cooperatively; the missing signal is intent.
 
 1. **Expected-stop token.** Add a process-lifetime flag set by the *legitimate* shutdown paths:
-   - `SentinelService` stop `finally` block and `SentinelGuardService.OnStop` set
+   - `GnyidaService` stop `finally` block and `GnyidaGuardService.OnStop` set
      `ShutdownContext.MarkExpected(reason)` before teardown, where reason 
      {`ServiceControllerStop`, `SystemShutdown`, `Upgrade`, `Uninstall`}.
    - OS shutdown is detected via `SessionEnding` / `SERVICE_CONTROL_SHUTDOWN` already delivered to
@@ -68,7 +68,7 @@ pack is written and sealed, gated by `_config` (off-host enabled) AND the existi
 - Catches all exceptions, logs at Debug, never throws (mirrors `SendReportAsync`).
 
 **Payload (`EvidenceSummary`)** - minimal, no file contents, no secrets:
-- `reportId`, `sentinelVersion`, `host` (machine name), `sealedUtc`
+- `reportId`, `gnyidaVersion`, `host` (machine name), `sealedUtc`
 - detection summary: `rule`, `signalType`, `tier`, `confidence`, `processName`, `processId`
 - `indicators` (hashes/ips/urls) from the existing `ExtractIndicators`
 - `manifestSha256` + `manifestHmacSha256` (origin proof, R4) from the sealed manifest
@@ -131,8 +131,8 @@ Per `constraints.md` testing rules and NFR-5:
   absence of a reason -> `SERVICE_STOP_SUSPECTED` audit record + Tier1 `AntiTamper` LogOnly.
 - **Fail-closed mirror:** `ReportEvidenceAsync` with missing/short secret -> no request sent
   (assert `CanReport()` false path), local pack still written.
-- **Signed mirror:** with a valid secret, assert the request carries `X-Sentinel-Timestamp`,
-  `X-Sentinel-Nonce`, `X-Sentinel-Signature` and NO secret header (reuse `ProxyAuthHelper` tests).
+- **Signed mirror:** with a valid secret, assert the request carries `X-Gnyida-Timestamp`,
+  `X-Gnyida-Nonce`, `X-Gnyida-Signature` and NO secret header (reuse `ProxyAuthHelper` tests).
 - **Tier2 gate:** a Tier2 detection never triggers the mirror (ShouldAutoReportIncident false).
 - **Payload minimality:** assert no file contents / secrets in the serialized `EvidenceSummary`.
 - **Graceful degradation:** exit-hook classification never throws even if the logger is disposed.

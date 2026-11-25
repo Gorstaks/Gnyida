@@ -1,6 +1,6 @@
 # VirusTotal / AV false-positive notes
 
-These are dated historical investigation/build notes. They do not establish current AV detection counts or override current response/import policy. Sentinel 3.2.3 makes no VirusTotal requests or automatic sample uploads; any external submission is a separate, explicit operator action. Current runtime behavior is documented in [design](design.md), [constraints](constraints.md) and [offline reputation](HASH_REPUTATION.md).
+These are dated historical investigation/build notes. They do not establish current AV detection counts or override current response/import policy. Gnyida 3.2.3 makes no VirusTotal requests or automatic sample uploads; any external submission is a separate, explicit operator action. Current runtime behavior is documented in [design](design.md), [constraints](constraints.md) and [offline reputation](HASH_REPUTATION.md).
 
 ## Goal
 
@@ -10,7 +10,7 @@ inspection, service install, quarantine, hooks), not just malware signatures.
 
 ## v2.4.0: offensive string table elimination (Kaspersky build-time quarantine)
 
-Kaspersky 21.26 was quarantining `Sentinel.Core.dll` immediately on build -
+Kaspersky 21.26 was quarantining `Gnyida.Core.dll` immediately on build -
 blocking the installer entirely. The trigger was **contiguous offensive tool
 name strings** in the PE string table, specifically:
 
@@ -37,16 +37,16 @@ Microsoft Defender **Attack Surface Reduction** rule
 `c1db55ab-...` is named *"Use advanced protection against ransomware"*. When it
 fires (Event 1121), it is **blocking untrusted/low-prevalence EXEs** (often
 Inno Setup extractors under `%TEMP%`) - **not** a classification that
-"Sentinel is ransomware."
+"Gnyida is ransomware."
 
-Still, Sentinel must **never enable that rule in Block mode** against itself
+Still, Gnyida must **never enable that rule in Block mode** against itself
 (see `HardeningModule.AsrRulesNeverBlock`). Unsigned Setup + that rule = Error 5
 on upgrade. **Code signing** is what makes prevalence/trust pass for both ASR
 and most VT engines.
 
-## VT result: SentinelSetup-2.3.6.exe (2026-09-01)
+## VT result: GnyidaSetup-2.3.6.exe (2026-09-01)
 
-VirusTotal reported **4/72** on `SentinelSetup-2.3.6.exe` (SHA-256 uploaded by
+VirusTotal reported **4/72** on `GnyidaSetup-2.3.6.exe` (SHA-256 uploaded by
 user). Engines visible in the community UI included:
 
 | Engine | Label |
@@ -81,7 +81,7 @@ still draw a few generic hits until **Authenticode (ideally EV)** is applied.
 2. **Detection vocab** - `Rules` / `FileReputationEngine` / script & agent
    monitors use contiguous literals again (no `S()` / `A()` Concat helpers).
 3. **Quarantine vault** - blobs are `SENQ` magic + DPAPI under
-   `%ProgramData%\Sentinel\Quarantine\*.senq` (structured EDR vault, not
+   `%ProgramData%\Gnyida\Quarantine\*.senq` (structured EDR vault, not
    in-place user-file encryption). Targets Alyac `MSIL.Ransom.Agent`.
 4. **Composite display name** - `Active Mass-Encryption Chain` (was
    `Active Ransomware Chain`) to reduce PE string bait; `SignalType.Ransomware`
@@ -91,8 +91,8 @@ still draw a few generic hits until **Authenticode (ideally EV)** is applied.
 
 ## v2.3.6: AV false positive root causes fixed
 
-Kaspersky flagged `Sentinel.Core.dll` (confirmed via `report.rpt` - path
-`C:\Program Files (x86)\Sentinel\Sentinel.Core.dll`). Two patterns were the cause:
+Kaspersky flagged `Gnyida.Core.dll` (confirmed via `report.rpt` - path
+`C:\Program Files (x86)\Gnyida\Gnyida.Core.dll`). Two patterns were the cause:
 
 ### 1. Split-string API name obfuscation (removed)
 
@@ -132,7 +132,7 @@ and extracted it at runtime - the classic dropper pattern.
 After `installer\build.ps1`, verify evasion helpers are gone and vault magic exists:
 
 ```powershell
-$dll = "publish\service\Sentinel.Core.dll"
+$dll = "publish\service\Gnyida.Core.dll"
 $b = [IO.File]::ReadAllBytes($dll)
 $a = [Text.Encoding]::ASCII.GetString($b)
 @('GetProcAddress') | ForEach-Object {
@@ -140,7 +140,7 @@ $a = [Text.Encoding]::ASCII.GetString($b)
     # tables; it must NOT be used to resolve OpenProcess in NativeResolver.
 }
 # NativeResolver source must use [DllImport], not GetProcAddress.
-Select-String -Path src\Sentinel.Core\NativeResolver.cs -Pattern 'GetProcAddress'
+Select-String -Path src\Gnyida.Core\NativeResolver.cs -Pattern 'GetProcAddress'
 # Expect: no matches
 
 @('QueueUserAPC', 'VirtualProtectEx', 'SetWindowsHookExW') | ForEach-Object {
@@ -155,4 +155,4 @@ Select-String -Path src\Sentinel.Core\NativeResolver.cs -Pattern 'GetProcAddress
    (Alyac ransom label was cleared on the first 2.3.9 upload).
 3. **Sign** when a cert is available - still the strongest prevalence/trust fix.
    Until then: keep Setup free of `sc create` / Run / SafeBoot / `taskkill` / `icacls`
-   strings (delegated to `Sentinel.Service.exe --install`).
+   strings (delegated to `Gnyida.Service.exe --install`).

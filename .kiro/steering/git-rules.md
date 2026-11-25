@@ -2,7 +2,7 @@
 inclusion: auto
 ---
 
-# Git Rules for Sentinel Repository
+# Git Rules for Gnyida Repository
 
 ## The sanctioned push/release path: `D:\Gorstak\push.ps1`
 
@@ -20,7 +20,7 @@ What it does (this is standing, pre-authorized policy - do NOT re-prompt for it)
   **both diverged -> `force-with-lease`, local wins.**
 - Uploads each `releases\<SEMVER>\` folder as a GitHub release with its assets.
 
-Typical invocation for this project: `.\push.ps1 -ProjectFilter sentinel` (run from `D:\Gorstak`).
+Typical invocation for this project: `.\push.ps1 -ProjectFilter gnyida` (run from `D:\Gorstak`).
 
 Because the owner has encoded these decisions in the script, running `push.ps1` (or asking the
 owner to) is the correct way to complete a release. Do not treat its internal force-with-lease as

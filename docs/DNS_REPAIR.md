@@ -4,7 +4,7 @@ The owner authorized autonomous maintenance. After an administrator has selected
 
 # DNS inspection and repair
 
-Sentinel 3.2.4 introduced administrator-approved local DNS configuration repair. It does not establish that an Avast finding is correct, authenticate DNS answers, or certify a router as clean.
+Gnyida 3.2.4 introduced administrator-approved local DNS configuration repair. It does not establish that an Avast finding is correct, authenticate DNS answers, or certify a router as clean.
 
 ## Use
 
@@ -16,14 +16,14 @@ Sentinel 3.2.4 introduced administrator-approved local DNS configuration repair.
 6. If inspection shows an interrupted transaction created by 3.2.5 or later, select it under **Recover interrupted DNS operation** and review its original settings. Fresh inspection and UAC approval are required. Recovery refuses unrelated static settings, changed protocol support or a newer transaction. It restores the original snapshot; it does not certify those settings as safe.
 7. To undo a verified repair, select its saved transaction and approve restoration. The previous static settings, including automatic mode, are restored and read back. Restoration does not establish that those previous settings were safe.
 
-Profiles: Quad9 `9.9.9.9`, `149.112.112.112`, `2620:fe::fe`, `2620:fe::9`; Cloudflare `1.1.1.1`, `1.0.0.1`, `2606:4700:4700::1111`, `2606:4700:4700::1001`; Google `8.8.8.8`, `8.8.4.4`, `2001:4860:4860::8888`, `2001:4860:4860::8844`. Only enabled address families are changed. Sentinel makes no external DNS/probe requests; these settings govern subsequent OS/application resolution.
+Profiles: Quad9 `9.9.9.9`, `149.112.112.112`, `2620:fe::fe`, `2620:fe::9`; Cloudflare `1.1.1.1`, `1.0.0.1`, `2606:4700:4700::1111`, `2606:4700:4700::1001`; Google `8.8.8.8`, `8.8.4.4`, `2001:4860:4860::8888`, `2001:4860:4860::8844`. Only enabled address families are changed. Gnyida makes no external DNS/probe requests; these settings govern subsequent OS/application resolution.
 
 ## Safeguards and outcomes
 
 - Inspection is passive. IPv4, IPv6 and DHCP-derived effective resolver changes produce Tier2 LogOnly observations, never automatic repair authority. Startup settings are observations, not trusted recovery values. The last verified profile is compared with current configuration on inspection; drift does not automatically reapply it.
 - Requests bind the adapter GUID to a configuration fingerprint. Stale previews, changed post-repair state, unavailable APIs, incomplete inspection, domain-joined machines, detected NRPT/resolver-assignment policy and known VPN/virtual adapters are refused. This conservative scope is not a complete inventory of every enterprise management system.
 - HTTP authentication and CSRF checks precede UAC. The service checks the actual named-pipe client's administrator token, in addition to existing IPC authentication. Browser possession of the dashboard token alone cannot approve DNS mutation. No arbitrary command or resolver address is accepted.
-- Before mutation, the service saves a durable snapshot under `%ProgramData%\Sentinel\DnsRepair` and requires acceptance of a `dns_repair_before` audit event. Snapshots are restricted to SYSTEM writes and administrator reads. Results and observed changes join the local audit chain.
+- Before mutation, the service saves a durable snapshot under `%ProgramData%\Gnyida\DnsRepair` and requires acceptance of a `dns_repair_before` audit event. Snapshots are restricted to SYSTEM writes and administrator reads. Results and observed changes join the local audit chain.
 - Configuration mismatch, cancellation, cache failure or journal failure triggers bounded rollback and read-back. **Failed**, **Refused**, and **PartiallyCompleted** are distinct from Verified; failed rollback remains visible. Final audit failure also prevents a fully successful receipt.
 - The journal holds at most 128 records. An administrator must archive records before further changes when full. In 3.2.5, new transactions persist both the intended target and starting state before mutation. Prepared/RestorePrepared/RecoveryPrepared/RecoveryRequired/RollbackFailed transactions can be explicitly recovered when current static settings match those saved operation states. Recovery is never automatic at startup. Legacy snapshots without an intent plan, later transactions and unrelated changes require administrator review. In-memory last-result display resets on service restart; snapshots and audit records persist.
 - Restoration refuses to overwrite changes made since the selected repair. DHCP changes can prevent exact restoration verification even when automatic mode was restored. Read the receipt rather than assuming success.
