@@ -1,0 +1,6 @@
+﻿root = true
+
+[*.cs]
+# CA1310: specify StringComparison for correctness. Culture comparisons ignore invisible characters
+# (for example U+00AD), so "c:\windows<U+00AD>\x.exe".StartsWith("c:\windows\") is true.
+dotnet_diagnostic.CA1310.severity = warning

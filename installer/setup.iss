@@ -1,0 +1,673 @@
+[Setup]
+AppName=Gnyida
+AppVersion=3.9.4
+AppPublisher=Gorstak
+AppPublisherURL=https://gorstak.eu
+AppCopyright=Copyright (C) 2026 Gorstak
+VersionInfoVersion=3.9.4.0
+VersionInfoCompany=Gorstak
+VersionInfoDescription=Gnyida Endpoint Detection and Response Setup
+VersionInfoCopyright=Copyright (C) 2026 Gorstak
+VersionInfoProductName=Gnyida EDR
+VersionInfoProductVersion=3.9.4.0
+VersionInfoOriginalFileName=GnyidaSetup-3.9.4.exe
+SourceDir=.
+DefaultDirName={autopf}\Gnyida
+DefaultGroupName=Gnyida
+SetupIconFile=assets\Gnyida.ico
+LicenseFile=assets\disclaimer.txt
+UninstallDisplayIcon={app}\Gnyida.ico
+Compression=lzma/max
+SolidCompression=no
+OutputDir=.
+OutputBaseFilename=GnyidaSetup-3.9.4
+PrivilegesRequired=admin
+SetupMutex=Global\GnyidaSetupMutex
+UsePreviousAppDir=yes
+; 3.7.1: the service runs as LocalSystem from {app}. The install directory is fixed to a protected
+; Program Files location (no directory page); PrepareToInstall also rejects a previously chosen custom path.
+DisableDirPage=yes
+CloseApplications=no
+RestartApplications=no
+
+[Languages]
+; Gnyida's own installer text lives in ..\localization\<language>\installer.isl, next to Inno Setup's standard messages.
+Name: "en"; MessagesFile: "compiler:Default.isl,..\localization\en\installer.isl"
+[Files]
+Source: "assets\Gnyida.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "assets\disclaimer.txt"; DestDir: "{app}"; DestName: "DISCLAIMER.txt"; Flags: ignoreversion
+; uninsrestartdelete: if a file is still locked at uninstall, Windows removes it at the next restart
+; instead of leaving the executable behind.
+Source: "..\publish\service\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs uninsrestartdelete
+Source: "..\publish\agent\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs uninsrestartdelete
+Source: "..\publish\autorotate\GnyidaAutoRotate.exe"; DestDir: "{app}"; Flags: ignoreversion uninsrestartdelete
+Source: "..\publish\exploitshield\*"; DestDir: "{app}\ExploitShield"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+
+[InstallDelete]
+; GVPN is a separate project now. Remove the copy older Gnyida releases bundled in {app}\GVPN
+; (MigrateBundledGvpn stops it and removes its task/rules first) and its Start menu shortcut.
+Type: filesandordirs; Name: "{app}\GVPN"
+Type: files; Name: "{group}\GVPN.lnk"
+
+
+[Tasks]
+Name: "autorotate"; Description: "{cm:AutoRotateTask}"; GroupDescription: "{cm:AutoRotateGroup}"; Flags: unchecked
+
+[Icons]
+Name: "{group}\Gnyida Agent"; Filename: "{app}\Gnyida.Agent.exe"; IconFilename: "{app}\Gnyida.ico"
+
+[Run]
+Filename: "{app}\Gnyida.Service.exe"; Parameters: "--install"; Flags: runhidden waituntilterminated; StatusMsg: "{cm:StatusStarting}"
+Filename: "{sys}\cmd.exe"; Parameters: "/c del /f /q ""{app}\*.old"" 2>nul & exit /b 0"; Flags: runhidden waituntilterminated
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+Type: filesandordirs; Name: "{commonpf32}\Gnyida"
+
+[Code]
+// Gnyida's own message by name (localization\<language>\installer.isl). %n becomes a line break and %1 the argument.
+function Msg(const Name: String): String;
+begin
+  Result := CustomMessage(Name);
+  StringChangeEx(Result, '%n', #13#10, True);
+end;
+function Msg1(const Name, Arg: String): String;
+begin
+  Result := Msg(Name);
+  StringChangeEx(Result, '%1', Arg, True);
+end;
+const
+  GvpnTaskName = 'GVPN';
+
+// ---------------------------------------------------------------------------------------------
+// GVPN migration. Gnyida releases up to 3.6.7 bundled GVPN in {app}\GVPN. GVPN is now a
+// separate project with its own installer, and it uses the SAME task name, firewall rule names
+// and adapter name as the bundled copy. So every step below acts only on what belongs to the
+// bundled copy (identified by its path under {app}\GVPN) and leaves a standalone GVPN alone.
+// ---------------------------------------------------------------------------------------------
+
+function BundledGvpnDir(): String;
+begin
+  Result := ExpandConstant('{app}\GVPN');
+end;
+
+function IsUnderBundledGvpn(const Path: String): Boolean;
+begin
+  Result := (Path <> '') and
+    (Pos(Lowercase(AddBackslash(BundledGvpnDir())), Lowercase(Path)) = 1);
+end;
+
+// Terminates GVPN.exe / openvpn.exe processes whose image lives under {app}\GVPN. Returns True
+// when a GVPN.exe from any OTHER location is running (a standalone install). taskkill /IM is not
+// used because it cannot filter by path and would also stop a standalone GVPN.
+function StopBundledGvpnProcesses(): Boolean;
+var
+  Locator, Services, Procs, P: Variant;
+  i: Integer;
+  ExePath, ExeName: String;
+begin
+  Result := False;
+  try
+    Locator := CreateOleObject('WbemScripting.SWbemLocator');
+    Services := Locator.ConnectServer('.', 'root\CIMV2');
+    Procs := Services.ExecQuery('SELECT Name, ExecutablePath FROM Win32_Process WHERE Name = ''GVPN.exe'' OR Name = ''openvpn.exe''');
+    for i := 0 to Procs.Count - 1 do
+    begin
+      P := Procs.ItemIndex(i);
+      // Assign the Variant to a String before calling Lowercase: Inno Setup 6 rejects a Variant
+      // argument to a String parameter ("Type mismatch"); Inno Setup 7 converted it implicitly.
+      ExeName := P.Name;
+      ExeName := Lowercase(ExeName);
+      ExePath := '';
+      if not VarIsNull(P.ExecutablePath) then
+        ExePath := P.ExecutablePath;
+      if IsUnderBundledGvpn(ExePath) then
+      begin
+        try
+          P.Terminate(0);
+          Log('GVPN migration: stopped bundled ' + ExePath);
+        except
+          Log('GVPN migration: could not stop ' + ExePath + ': ' + GetExceptionMessage);
+        end;
+      end
+      else if ExeName = 'gvpn.exe' then
+      begin
+        Result := True;
+        Log('GVPN migration: separate GVPN running from "' + ExePath + '"; left running.');
+      end;
+    end;
+  except
+    Log('GVPN migration: process enumeration failed: ' + GetExceptionMessage);
+  end;
+end;
+
+// Deletes the "GVPN" sign-in task only when its action points at the bundled GVPN.exe.
+procedure RemoveBundledGvpnSignInTask();
+var
+  Service, Folder, Task: Variant;
+  Xml: String;
+begin
+  try
+    Service := CreateOleObject('Schedule.Service');
+    Service.Connect();
+    Folder := Service.GetFolder('\');
+    Task := Folder.GetTask(GvpnTaskName);
+    Xml := Task.Xml;
+    if Pos(Lowercase(AddBackslash(BundledGvpnDir()) + 'GVPN.exe'), Lowercase(Xml)) > 0 then
+    begin
+      Folder.DeleteTask(GvpnTaskName, 0);
+      Log('GVPN migration: removed sign-in task of the bundled copy.');
+    end
+    else
+      Log('GVPN migration: sign-in task "' + GvpnTaskName + '" belongs to a separate GVPN install; left in place.');
+  except
+    Log('GVPN migration: no sign-in task to remove.');
+  end;
+end;
+
+// Removes a previously bundled GVPN: stops it, removes its sign-in task and autostart value, and
+// removes its kill-switch firewall rules (a leftover block-all outbound rule would cut off the
+// network once GVPN.exe is gone). The kill-switch rules are kept when a separate GVPN is running,
+// because they then belong to it. The "GVPN TAP" adapter and the TAP driver are left in place:
+// a standalone GVPN reuses the same adapter name, and other OpenVPN installs share the driver.
+// Files under {app}\GVPN are removed by [InstallDelete] (upgrade) or [UninstallDelete].
+procedure MigrateBundledGvpn();
+var
+  ResultCode, i: Integer;
+  Netsh, RunValue: String;
+  Rules: array of String;
+  SeparateGvpnRunning: Boolean;
+begin
+  if not DirExists(BundledGvpnDir()) then
+    Exit;
+
+  Log('GVPN migration: bundled copy found at ' + BundledGvpnDir() + '; removing it (GVPN is now a separate project).');
+  SeparateGvpnRunning := StopBundledGvpnProcesses();
+  RemoveBundledGvpnSignInTask();
+
+  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'GVPN', RunValue) and
+     (Pos(Lowercase(BundledGvpnDir()), Lowercase(RunValue)) > 0) then
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'GVPN');
+
+  if SeparateGvpnRunning then
+    Log('GVPN migration: kill-switch firewall rules left in place for the separate GVPN.')
+  else
+  begin
+    Netsh := ExpandConstant('{sysnative}\netsh.exe');
+    // Current kill-switch rule plus the rule names older GVPN builds created.
+    SetArrayLength(Rules, 5);
+    Rules[0] := 'GVPN Kill Switch';
+    Rules[1] := 'GVPN Allow OpenVPN';
+    Rules[2] := 'GVPN Allow Loopback';
+    Rules[3] := 'GVPN Allow DNS';
+    Rules[4] := 'GVPN Allow Gnyida';
+    for i := 0 to GetArrayLength(Rules) - 1 do
+      Exec(Netsh, 'advfirewall firewall delete rule name="' + Rules[i] + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Log('GVPN migration: kill-switch firewall rules removed.');
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    ResultCode := -1;
+    if not Exec(ExpandConstant('{app}\ExploitShield\Gnyida.ExploitShield.exe'), '--install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      RaiseException(Msg('ExploitShieldStartFailed'));
+    if ResultCode <> 0 then
+      RaiseException(Msg('ExploitShieldScheduleFailed'));
+
+    if WizardIsTaskSelected('autorotate') then
+    begin
+      ResultCode := -1;
+      if (not Exec(ExpandConstant('{app}\GnyidaAutoRotate.exe'), '--install --force', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
+        MsgBox(Msg1('AutoRotateNotEnabled', ExpandConstant('{commonappdata}\Gnyida\AutoRotate\events.log')), mbError, MB_OK);
+    end;
+  end;
+end;
+
+function IsDotNet48OrHigher(): Boolean;
+var
+  Release: Cardinal;
+begin
+  Result := False;
+  if IsWin64 then
+  begin
+    if RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) then
+    begin
+      Result := Release >= 528040;
+      Exit;
+    end;
+  end;
+  if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) then
+    Result := Release >= 528040;
+end;
+
+function OfferDotNet48Download(): Boolean;
+var
+  ErrCode: Integer;
+begin
+  Result := False;
+  if MsgBox(Msg('DotNetRequired'), mbConfirmation, MB_YESNO) = IDYES then
+  begin
+    ShellExec('open',
+      'https://dotnet.microsoft.com/download/dotnet-framework/net48',
+      '', '', SW_SHOWNORMAL, ewNoWait, ErrCode);
+    MsgBox(Msg('DotNetRunAgain'), mbInformation, MB_OK);
+  end;
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  if not IsDotNet48OrHigher() then
+    Result := OfferDotNet48Download();
+end;
+
+function SysNative(const FileName: String): String;
+begin
+  Result := ExpandConstant('{sysnative}\') + FileName;
+  if not FileExists(Result) then
+    Result := ExpandConstant('{sys}\') + FileName;
+end;
+
+// True when Dir is under Program Files (64-bit or 32-bit). The service runs as LocalSystem from {app},
+// so a directory a standard user can write to would hand them SYSTEM (3.7.1).
+function IsProtectedInstallDir(const Dir: String): Boolean;
+var
+  L, Pf, Pf32: String;
+begin
+  L := Lowercase(RemoveBackslash(Dir)) + '\';
+  Pf := Lowercase(RemoveBackslash(ExpandConstant('{commonpf}'))) + '\';
+  Pf32 := Lowercase(RemoveBackslash(ExpandConstant('{commonpf32}'))) + '\';
+  Result := (Pos(Pf, L) = 1) or (Pos(Pf32, L) = 1);
+end;
+
+// Restore v2.3.7 upgrade unlock. Hardened installs add a Users Deny-Write on
+// {app}; admin accounts are in Users, so Inno cannot overwrite unins000.exe
+// (Access is denied). Window is admin Setup only; the service re-locks on start.
+procedure ResetInstallDirAcls(const DirPath: String);
+var
+  ResultCode: Integer;
+  Icacls, Takeown: String;
+begin
+  if not DirExists(DirPath) then
+    Exit;
+
+  Icacls := SysNative('icacls.exe');
+  Takeown := SysNative('takeown.exe');
+
+  if FileExists(DirPath + '\unins000.exe') then
+  begin
+    Exec(Takeown, '/A /F "' + DirPath + '\unins000.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(Icacls, '"' + DirPath + '\unins000.exe" /remove:d *S-1-5-32-545 /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(Icacls, '"' + DirPath + '\unins000.exe" /grant Administrators:F /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+  if FileExists(DirPath + '\unins000.dat') then
+  begin
+    Exec(Takeown, '/A /F "' + DirPath + '\unins000.dat"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(Icacls, '"' + DirPath + '\unins000.dat" /remove:d *S-1-5-32-545 /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(Icacls, '"' + DirPath + '\unins000.dat" /grant Administrators:F /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+
+  Exec(Icacls, '"' + DirPath + '" /grant Administrators:(OI)(CI)F /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Icacls, '"' + DirPath + '" /remove:d *S-1-5-32-545 /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+// Rename every loaded PE (EXE + DLL) in the install dir to *.old before the copy.
+// A DLL mapped by the running Service/Agent cannot be overwritten or deleted
+// (DeleteFile fails with "code 5, Access is denied"), but it CAN be renamed -
+// Windows lets you rename a mapped image, and Inno then writes the new file in
+// its place. The [Run] "del *.old" step cleans the renamed originals afterward.
+procedure RenameLockedBinariesAside(const DirPath: String);
+var
+  FindRec: TFindRec;
+  Name, Lower, Full: String;
+begin
+  if not DirExists(DirPath) then
+    Exit;
+  if FindFirst(DirPath + '\*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
+        begin
+          Name := FindRec.Name;
+          Lower := Lowercase(Name);
+          // Only relocate PE images we ship and overwrite; leave *.old alone.
+          if ((Copy(Lower, Length(Lower) - 3, 4) = '.dll') or
+              (Copy(Lower, Length(Lower) - 3, 4) = '.exe')) then
+          begin
+            Full := DirPath + '\' + Name;
+            RenameFile(Full, Full + '.old');
+          end;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+// One pass: force-kills the Gnyida service and agent images. Returns True when a process
+// was found and killed, False when taskkill reports no matching process (exit 128).
+function KillGnyidaImagesOnce(): Boolean;
+var
+  ResultCode: Integer;
+  Taskkill: String;
+begin
+  Result := False;
+  Taskkill := SysNative('taskkill.exe');
+  Exec(Taskkill, '/F /IM "Gnyida.Service.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if ResultCode <> 128 then Result := True;
+  Exec(Taskkill, '/F /IM "Gnyida.Agent.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if ResultCode <> 128 then Result := True;
+  Exec(Taskkill, '/F /IM "GnyidaAutoRotate.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if ResultCode <> 128 then Result := True;
+end;
+
+// Stops every Gnyida service and agent process before files are copied. The service can
+// restart the agent while it shuts down, so this repeats until a pass finds nothing. Users
+// upgrading should never have to end processes by hand, so if the processes cannot be
+// stopped, setup stops with a message instead of failing on a locked file.
+procedure WaitForGnyidaExit();
+var
+  Attempt: Integer;
+begin
+  for Attempt := 1 to 30 do
+  begin
+    if not KillGnyidaImagesOnce() then
+    begin
+      Log('Gnyida: no service or agent process remains before upgrade.');
+      Exit;
+    end;
+    Sleep(1000);
+  end;
+  RaiseException(Msg('UpgradeStopFailed'));
+end;
+
+procedure StopExistingService();
+var
+  ResultCode: Integer;
+  Svc, Sc: String;
+begin
+  if FileExists(ExpandConstant('{app}\ExploitShield\Gnyida.ExploitShield.exe')) then
+  begin
+    ResultCode := -1;
+    if not Exec(ExpandConstant('{app}\ExploitShield\Gnyida.ExploitShield.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      RaiseException(Msg('UpgradeExploitShieldStopFailed'));
+    if ResultCode <> 0 then
+      RaiseException(Msg('UpgradeExploitShieldScheduleFailed'));
+  end;
+  Svc := ExpandConstant('{app}\Gnyida.Service.exe');
+  if FileExists(Svc) then
+  begin
+    Exec(Svc, '--prepare-upgrade', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(800);
+  end;
+
+  // Stop the watchdog FIRST via the SCM, otherwise GnyidaGuard restarts
+  // Gnyida.Service mid-upgrade and re-locks the DLLs (the regression that
+  // brought back "DeleteFile code 5"). Then stop the main service. Give the
+  // SCM time to actually transition to STOPPED before we taskkill/rename.
+  Sc := SysNative('sc.exe');
+  Exec(Sc, 'stop GnyidaGuard', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Sc, 'stop Gnyida', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(2000);
+
+  WaitForGnyidaExit();
+
+  // Upgrade from a release that bundled GVPN: stop and unregister that copy before
+  // [InstallDelete] removes {app}\GVPN.
+  MigrateBundledGvpn();
+
+  if IsProtectedInstallDir(ExpandConstant('{app}')) then
+    ResetInstallDirAcls(ExpandConstant('{app}'))
+  else
+    Log('Gnyida: skipping recursive ACL reset on unprotected directory ' + ExpandConstant('{app}'));
+  ResetInstallDirAcls(ExpandConstant('{commonpf}\Gnyida'));
+  ResetInstallDirAcls(ExpandConstant('{commonpf32}\Gnyida'));
+  ResetInstallDirAcls(ExpandConstant('{autopf}\Gnyida'));
+
+  // Rename every loaded EXE/DLL aside so Inno can write the new payload even if
+  // a handle is still mapped. Covers Gnyida.Core.dll and the
+  // Microsoft.Extensions.*.dll set that tripped the failed upgrade.
+  RenameLockedBinariesAside(ExpandConstant('{app}'));
+end;
+
+
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  NeedsRestart := False;
+
+  if not IsProtectedInstallDir(ExpandConstant('{app}')) then
+  begin
+    Result := Msg1('InstallDirNotProtected', ExpandConstant('{app}'));
+    Exit;
+  end;
+
+  if RegValueExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'GnyidaAgent') or
+     RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\Gnyida') or
+     DirExists(ExpandConstant('{app}')) or
+     DirExists(ExpandConstant('{commonpf32}\Gnyida')) then
+  begin
+    StopExistingService();
+  end;
+end;
+
+// Force-kills every Gnyida process and waits until none is left. taskkill exits with 128
+// when no matching process exists, so a pass with only 128 results means all are gone.
+// Repeats because a process can come back between passes. Anything still running after the
+// retries is removed at the next restart by the uninsrestartdelete file flag.
+procedure KillGnyidaProcesses();
+var
+  ResultCode, Attempt: Integer;
+  Taskkill: String;
+  AnyRunning: Boolean;
+begin
+  Taskkill := SysNative('taskkill.exe');
+  for Attempt := 1 to 10 do
+  begin
+    AnyRunning := False;
+    Exec(Taskkill, '/F /IM "Gnyida.Service.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if ResultCode <> 128 then AnyRunning := True;
+    Exec(Taskkill, '/F /IM "Gnyida.Agent.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if ResultCode <> 128 then AnyRunning := True;
+    Exec(Taskkill, '/F /IM "GnyidaAutoRotate.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if ResultCode <> 128 then AnyRunning := True;
+    if not AnyRunning then
+    begin
+      Log('Gnyida: all Gnyida processes have exited.');
+      Exit;
+    end;
+    Sleep(500);
+  end;
+  Log('Gnyida: some Gnyida processes did not exit; locked files are removed at restart.');
+end;
+
+// Native, DLL-independent equivalent of InstallBootstrap.RunUninstallCleanup().
+//
+// The managed --uninstall-cleanup path lives in Gnyida.Core.dll. When an AV
+// engine quarantines that DLL (recurring Wacatac.B!ml false positive on
+// Gnyida.Core.dll), Gnyida.Service.exe cannot load its core assembly and
+// --uninstall-cleanup exits non-zero WITHOUT doing any cleanup. This fallback
+// reproduces the same teardown using only native Windows tools so a quarantined
+// core DLL can never strand the install: stop watchdog+service, restore the
+// firewall rollback journal, delete Gnyida's own self-isolation rules in both
+// policy stores, delete the service registrations, and remove the Run + SafeBoot
+// keys. Every step is best-effort - a missing journal means the firewall was
+// never modified, and absent services/keys are simply skipped.
+procedure UninstallFallbackCleanup();
+var
+  ResultCode: Integer;
+  Sc, Netsh, PowerShellPath, Journal, PsRestore: String;
+  Rules: array of String;
+  i: Integer;
+begin
+  Log('Gnyida: running native uninstall fallback cleanup (managed --uninstall-cleanup unavailable or failed).');
+
+  Sc := SysNative('sc.exe');
+  Netsh := SysNative('netsh.exe');
+
+  // 1. Stop the watchdog first (it restarts the service), then the service.
+  Exec(Sc, 'stop GnyidaGuard', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Sc, 'stop Gnyida', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(2000);
+
+  // 2. Delete the SCM registrations before killing anything. A killed registered service
+  // counts as a crash, and ApplyCrashRestart configures SCM to restart it after 2 s. The
+  // restarted service would relaunch the Agent and lock the files Setup must remove.
+  Exec(Sc, 'delete GnyidaGuard', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(Sc, 'delete Gnyida', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // 3. Force-kill survivors and wait until they exit so handles release before file removal.
+  KillGnyidaProcesses();
+
+  // 4. Restore the firewall policy from Gnyida's own rollback journal. The
+  // journal records only rules/profiles Gnyida changed, so this touches
+  // nothing else. If the journal is absent, the firewall was never modified.
+  Journal := ExpandConstant('{commonappdata}\Gnyida\FirewallPolicy\rollback.json');
+  if FileExists(Journal) then
+  begin
+    PowerShellPath := ExpandConstant('{sysnative}\WindowsPowerShell\v1.0\powershell.exe');
+    if not FileExists(PowerShellPath) then
+      PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+    // Single -Command string: reload the journal and re-apply each Changed rule's
+    // original enabled state and each Changed profile's original inbound action /
+    // enabled state, exactly as the managed Restore operation would.
+    PsRestore :=
+      '$ErrorActionPreference=''SilentlyContinue'';' +
+      '$s=Get-Content -LiteralPath ''' + Journal + ''' -Raw | ConvertFrom-Json;' +
+      'foreach($r in $s.Rules){ if($r.Changed){' +
+      '$e= if($r.OriginalEnabled){''True''}else{''False''};' +
+      'Get-NetFirewallRule -Name $r.Name -PolicyStore $r.Store -EA SilentlyContinue | Set-NetFirewallRule -Enabled $e -EA SilentlyContinue } };' +
+      'foreach($p in $s.Profiles){ if($p.Changed){ $a=@{Name=$p.Name;PolicyStore=$p.Store};' +
+      'if($p.ChangedEnabled -and $p.OriginalEnabled -ne ''NotConfigured''){$a.Enabled=$p.OriginalEnabled};' +
+      'if($p.ChangedInbound -and $p.OriginalInboundAction -ne ''NotConfigured''){$a.DefaultInboundAction=$p.OriginalInboundAction};' +
+      'Set-NetFirewallProfile @a -EA SilentlyContinue } }';
+    if not Exec(PowerShellPath,
+      '-NoLogo -NoProfile -NonInteractive -Command "' + PsRestore + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      Log('Gnyida: firewall journal restore could not be launched; continuing teardown.')
+    else if ResultCode <> 0 then
+      Log('Gnyida: firewall journal restore exited ' + IntToStr(ResultCode) + '; continuing teardown.')
+    else
+      Log('Gnyida: firewall policy restored from rollback journal.');
+  end
+  else
+    Log('Gnyida: no firewall rollback journal present; firewall was never modified.');
+
+  // 5. Remove Gnyida's own self-isolation rules (both PersistentStore and
+  // localhost) plus the named RPC block rule. These match SelfNetworkIsolation.
+  SetArrayLength(Rules, 11);
+  Rules[0]  := 'Gnyida-Offline-Gnyida.Service.exe-IN';
+  Rules[1]  := 'Gnyida-Offline-Gnyida.Agent.exe-IN';
+  Rules[2]  := 'Gnyida-Offline-Gnyida.Service.exe-OUT';
+  Rules[3]  := 'Gnyida-Offline-Gnyida.Agent.exe-OUT';
+  Rules[4]  := 'Gnyida-Offline-Gnyida.Service.exe-OUT-Repair';
+  Rules[5]  := 'Gnyida-Offline-Gnyida.Agent.exe-OUT-Repair';
+  Rules[6]  := 'Gnyida-Offline-GnyidaAutoRotate.exe-OUT';
+  Rules[7]  := 'Gnyida-Offline-GnyidaAutoRotate.exe-OUT-Repair';
+  Rules[8]  := 'Gnyida-Offline-GnyidaAutoRotate.exe-IN';
+  Rules[9]  := 'Gnyida-Offline-GnyidaAutoRotate.exe-IN-Repair';
+  Rules[10] := 'Gnyida-Block-Remote-RPC-Ephemeral';
+  for i := 0 to GetArrayLength(Rules) - 1 do
+    Exec(Netsh, 'advfirewall firewall delete rule name="' + Rules[i] + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // 6. Remove the agent autorun value and the SafeBoot keys.
+  RegDeleteValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'GnyidaAgent');
+  RegDeleteKeyIncludingSubkeys(HKLM, 'SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\Gnyida');
+  RegDeleteKeyIncludingSubkeys(HKLM, 'SYSTEM\CurrentControlSet\Control\SafeBoot\Network\Gnyida');
+
+  Log('Gnyida: native uninstall fallback cleanup complete.');
+end;
+
+// True when any GnyidaAutoRotate task (current or from the earlier release) is still registered.
+function AutoRotateTaskExists(): Boolean;
+var
+  ResultCode: Integer;
+  Schtasks: String;
+begin
+  Result := False;
+  Schtasks := SysNative('schtasks.exe');
+  if Exec(Schtasks, '/Query /TN "GnyidaAutoRotate-Logon"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
+  if Exec(Schtasks, '/Query /TN "GnyidaAutoRotate-Boot"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
+  if Exec(Schtasks, '/Query /TN "GnyidaAutoRotate"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
+  if Exec(Schtasks, '/Query /TN "GnyidaAutoRotateStartup"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then Result := True;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+  Svc: String;
+  CleanupOk: Boolean;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    if FileExists(ExpandConstant('{app}\ExploitShield\Gnyida.ExploitShield.exe')) then
+    begin
+      ResultCode := -1;
+      if not Exec(ExpandConstant('{app}\ExploitShield\Gnyida.ExploitShield.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+        RaiseException(Msg('UninstallExploitShieldStopFailed'));
+      if ResultCode <> 0 then
+        RaiseException(Msg('UninstallExploitShieldScheduleFailed'));
+    end;
+    // GnyidaAutoRotate blanks the account password before its tasks are removed. Fail closed:
+    // if the blank cannot be restored, cancel the uninstall so the account is not left on an
+    // unknown password. The exe is still present at this point, so it can run its own cleanup.
+    if FileExists(ExpandConstant('{app}\GnyidaAutoRotate.exe')) then
+    begin
+      ResultCode := -1;
+      if (not Exec(ExpandConstant('{app}\GnyidaAutoRotate.exe'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
+        RaiseException(Msg1('AutoRotateUninstallBlankFailed', ExpandConstant('{commonappdata}\Gnyida\AutoRotate\events.log')));
+    end
+    else if AutoRotateTaskExists() then
+      RaiseException(Msg('AutoRotateUninstallExeMissing'));
+
+    // Stop and kill service + agent before files are removed.
+    // Without this the processes stay running and file deletion fails silently,
+    // leaving both binaries on disk and the service registered.
+    //
+    // The managed --uninstall-cleanup lives in Gnyida.Core.dll. If an AV engine
+    // has quarantined that DLL, Gnyida.Service.exe cannot load it and this call
+    // fails WITHOUT doing any cleanup. Previously that raised an exception and
+    // aborted the whole uninstall, stranding every file on disk with no way out.
+    // Now a launch failure or non-zero exit falls back to native cleanup
+    // (UninstallFallbackCleanup) so the uninstall always completes.
+    Svc := ExpandConstant('{app}\Gnyida.Service.exe');
+    CleanupOk := False;
+    if FileExists(Svc) then
+    begin
+      ResultCode := -1;
+      if Exec(Svc, '--uninstall-cleanup', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+      begin
+        CleanupOk := True;
+        Sleep(800);
+      end
+      else if ResultCode = -1 then
+        Log('Gnyida: --uninstall-cleanup could not be launched (core DLL likely quarantined); using native fallback.')
+      else
+        Log('Gnyida: --uninstall-cleanup exited ' + IntToStr(ResultCode) + '; using native fallback.');
+    end;
+
+    if not CleanupOk then
+      UninstallFallbackCleanup();
+
+    KillGnyidaProcesses();
+    // Only acts when a GVPN bundled by an older release is still under {app}\GVPN; a separate
+    // GVPN install is never touched.
+    MigrateBundledGvpn();
+
+    // Legacy GSecurity IPsec policies may belong to the owner; a name is not ownership.
+    // Remove only Gnyida's separately named firewall rule.
+    Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall delete rule name="Gnyida-Block-Remote-RPC-Ephemeral"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+    // Remove agent autorun key
+    RegDeleteValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'GnyidaAgent');
+  end;
+end;

@@ -1,0 +1,9 @@
+﻿<Project>
+  <!-- Analyzer policy. All built-in analyzer rules stay off (AnalysisMode None) so that only the rules named in
+       .editorconfig run. CA1310 is on: on .NET Framework, string.StartsWith/EndsWith/IndexOf(string) compare by
+       culture, which ignores invisible characters and makes path-prefix trust checks bypassable. -->
+  <PropertyGroup>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisMode>None</AnalysisMode>
+  </PropertyGroup>
+</Project>

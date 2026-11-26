@@ -1,0 +1,33 @@
+// Per-type managed heap summary of a .NET Framework (or .NET) process dump, using ClrMD.
+// Usage:  dotnet run -c Release -- <dump.dmp> [topN]
+// See README.md in this folder for setup. Kept as .cs.txt so no csproj in the repo picks it up.
+using System.Diagnostics;
+using Microsoft.Diagnostics.Runtime;
+
+var path = args[0];
+int top = args.Length > 1 ? int.Parse(args[1]) : 30;
+var sw = Stopwatch.StartNew();
+using var dt = DataTarget.LoadDump(path);
+Console.WriteLine($"CLRs: {string.Join(", ", dt.ClrVersions.Select(v => v.Version + " " + v.Flavor))}");
+using var rt = dt.ClrVersions[0].CreateRuntime();
+var heap = rt.Heap;
+Console.WriteLine($"CanWalkHeap={heap.CanWalkHeap}");
+
+var stats = new Dictionary<string, (long Count, ulong Size)>();
+long total = 0; ulong totalSize = 0;
+foreach (var obj in heap.EnumerateObjects())
+{
+    if (!obj.IsValid || obj.Type == null) continue;
+    var name = obj.Type.Name ?? "<null>";
+    ulong size = obj.Size;
+    stats.TryGetValue(name, out var s);
+    stats[name] = (s.Count + 1, s.Size + size);
+    total++; totalSize += size;
+}
+Console.WriteLine($"Objects={total:N0} Size={totalSize / 1048576.0:N0} MB  ({sw.Elapsed.TotalSeconds:N0}s)");
+Console.WriteLine();
+Console.WriteLine($"{"MB",10} {"Count",14}  Type");
+foreach (var kv in stats.OrderByDescending(k => k.Value.Size).Take(top))
+    Console.WriteLine($"{kv.Value.Size / 1048576.0,10:N1} {kv.Value.Count,14:N0}  {kv.Key}");
+// "Free" rows are heap space that is allocated but unused (fragmentation / not yet compacted). They are
+// not a leak. Look at the largest NON-Free types and whether their count is proportional to uptime.
