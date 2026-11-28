@@ -311,6 +311,13 @@ namespace Gnyida.Core
         /// and never auto-disabled. HID BadUSB rules still apply to unknown keyboards.
         /// </summary>
         public string[] TrustedUsbDevices { get; set; } = Array.Empty<string>();
+        /// <summary>
+        /// Absolute image paths of software an administrator approved for bulk file work (file-encryption,
+        /// DLP, migration or archive agents). A matching process is skipped by the ransomware rename rule only
+        /// when its image is also in an admin-only location and validly signed. Set per deployment with
+        /// <c>Gnyida.Service.exe --set-config "RansomwareIoApprovedImages=C:\Program Files\Vendor\agent.exe|..."</c>.
+        /// </summary>
+        public string[] RansomwareIoApprovedImages { get; set; } = Array.Empty<string>();
 
         /// <summary>
         /// v1.9.7: When true, auto-disable USB nodes that fail descriptor requests

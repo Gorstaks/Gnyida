@@ -92,7 +92,7 @@ The system must detect the following behavioral threats:
 | T1-01 | LSASS credential dumping | Known dumper names, LSASS-targeting command patterns, dump file names |
 | T1-02 | Reverse shell / C2 callback | Encoded PowerShell, LOLBin abuse, C2 framework indicators, suspicious ports |
 | T1-03 | Process injection / hollowing | Known injection tools, hollowing APIs, suspicious parent-child process relationships |
-| T1-04 | Ransomware activity | Shadow copy deletion, backup destruction, bulk file renames, ransomware extensions |
+| T1-04 | Ransomware activity | Shadow copy deletion, backup destruction, file renames with a damage pattern (funnel into one new extension, or user documents losing their type), ransomware extensions |
 | T1-05 | Security tool evasion | AMSI bypass, ETW patching, event log clearing, AV/EDR process termination |
 | T1-06 | Kernel-observed injection | VirtualAllocEx, VirtualProtect RWX, NtMapViewOfSection, APC injection, SetThreadContext (ETW Threat Intelligence provider) |
 | T1-07 | C2 beaconing | Statistical detection via coefficient of variation on connection intervals |

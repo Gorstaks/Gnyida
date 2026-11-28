@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>3.9.4</Version>
+    <Version>3.9.5</Version>
     <Company>Gnyida Security</Company>
     <Product>Gnyida Endpoint Detection and Response</Product>
     <Description>Gnyida EDR Windows Service Host</Description>

@@ -11,22 +11,26 @@ namespace Gnyida.Core
     internal sealed class PartitionedEtwDispatcher : IDisposable
     {
         private readonly BoundedEtwDispatcher[] _lanes;
-        private readonly long[] _drops = new long[4];
+        private readonly long[] _drops = new long[5];
         // The file lane absorbs bursty Kernel-File traffic (installers, builds, scans). A scale
         // above 1 enlarges only that lane; capacity and bytes stay bounded, so memory is capped.
-        internal PartitionedEtwDispatcher(Action<Exception> failure, int laneCapacity = 2048, long laneByteLimit = 4 * 1024 * 1024, int fileLaneScale = 1)
+        internal PartitionedEtwDispatcher(Action<Exception> failure, int laneCapacity = 2048, long laneByteLimit = 4 * 1024 * 1024, int fileLaneScale = 1, int networkLaneScale = 1)
         {
             if (fileLaneScale < 1) throw new ArgumentOutOfRangeException(nameof(fileLaneScale));
-            _lanes = new BoundedEtwDispatcher[4];
+            if (networkLaneScale < 1) throw new ArgumentOutOfRangeException(nameof(networkLaneScale));
+            _lanes = new BoundedEtwDispatcher[5];
             for (int i = 0; i < _lanes.Length; i++)
             {
-                int scale = i == 1 ? fileLaneScale : 1;
+                int scale = i == 1 ? fileLaneScale : i == 4 ? networkLaneScale : 1;
                 _lanes[i] = new BoundedEtwDispatcher(failure, laneCapacity * scale, laneByteLimit * scale);
             }
         }
         internal static int Lane(Guid provider) => provider == UnifiedEtwSession.Providers.KernelProcess ? 0 :
             provider == UnifiedEtwSession.Providers.KernelFile ? 1 :
-            provider == UnifiedEtwSession.Providers.KernelRegistry ? 2 : 3;
+            provider == UnifiedEtwSession.Providers.KernelRegistry ? 2 :
+            // Datagram-level network events are bursty. Their own lane keeps them from displacing DNS,
+            // PowerShell, task, firewall and WMI events that share the general lane.
+            provider == UnifiedEtwSession.Providers.KernelNetwork ? 4 : 3;
         internal bool TryDispatch(EtwRawEvent evt, Action<EtwRawEvent> handler)
         {
             int lane = Lane(evt.ProviderId);
@@ -42,7 +46,8 @@ namespace Gnyida.Core
             ["ProcessImage"] = Interlocked.Read(ref _drops[0]),
             ["File"] = Interlocked.Read(ref _drops[1]),
             ["Registry"] = Interlocked.Read(ref _drops[2]),
-            ["Other"] = Interlocked.Read(ref _drops[3])
+            ["Other"] = Interlocked.Read(ref _drops[3]),
+            ["Network"] = Interlocked.Read(ref _drops[4])
         };
         public void Dispose()
         {

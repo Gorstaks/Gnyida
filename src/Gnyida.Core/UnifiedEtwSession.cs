@@ -43,6 +43,9 @@ namespace Gnyida.Core
         private long _registryHintsCoalesced;
         private readonly RegistryHintAdmission _registryAdmission = new();
         internal void RecordCoalescedRegistryHint() => Interlocked.Increment(ref _registryHintsCoalesced);
+        private long _udpDatagramsCoalesced;
+        /// <summary>A repeat datagram to an endpoint already analysed this second; deliberate, not a loss.</summary>
+        internal void RecordCoalescedUdpDatagram() => Interlocked.Increment(ref _udpDatagramsCoalesced);
         private readonly ConcurrentDictionary<Guid, uint> _providerStatus = new();
         public EtwHealthSnapshot LastHealthSnapshot { get; private set; } = new();
 
@@ -327,7 +330,7 @@ namespace Gnyida.Core
                 {
                     Interlocked.Increment(ref _eventsDropped);
                     _logger.LogDebug(ex, "[UnifiedEtwSession] Analysis handler failed");
-                }, fileLaneScale: 8);
+                }, fileLaneScale: 8, networkLaneScale: 4);
                 // Start the processing thread
                 _stopping = false;
                 _processingThread = new Thread(ProcessTraceThread)
@@ -689,6 +692,7 @@ namespace Gnyida.Core
                 EventsProcessed = EventsProcessed, DispatchDrops = EventsDropped,
                 EventsFiltered = Interlocked.Read(ref _eventsFiltered),
                 RegistryHintsCoalesced = Interlocked.Read(ref _registryHintsCoalesced),
+                UdpDatagramsCoalesced = Interlocked.Read(ref _udpDatagramsCoalesced),
                 FileReadsNotQueued = Interlocked.Read(ref _fileReadsNotQueued),
                 DispatchLaneDrops = _dispatcher?.DropSnapshot() ?? new()
             };

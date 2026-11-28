@@ -215,8 +215,9 @@ namespace Gnyida.Core
                 }
             }
 
-            // removing the host binary and breaking PowerShell / shell integrations system-wide.
-            // forceQuarantineSigned cannot override this gate.
+            // 1.6.3: never quarantine OS-critical paths. A chain-trace false positive once deleted the
+            // stock powershell.exe, removing the host binary and breaking PowerShell / shell integrations
+            // system-wide. forceQuarantineSigned cannot override this gate.
             if (SecurityValidation.IsOsCriticalPath(filePath))
             {
                 return null;

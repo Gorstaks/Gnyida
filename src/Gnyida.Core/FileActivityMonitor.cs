@@ -90,6 +90,10 @@ namespace Gnyida.Core
             _logger = logger;
             _signerTrust = signerTrust;
 
+            // Restart Manager holder lookup only; probeOpen=false so no file is opened.
+            if (_ransomwareIoMonitor != null)
+                _ransomwareIoMonitor.Attributor = path => GetProcessUsingFile(path, false);
+
             Start();
         }
 
@@ -483,14 +487,17 @@ namespace Gnyida.Core
                 && !SecurityFileScope.IsRelevantOrHighRisk(e.FullPath)
                 && !IsProtectedOsDirectory(pathLower))
             {
-                _ransomwareIoMonitor?.RecordRename(0, "unknown");
+                // Out-of-scope files (documents, images, databases) get no per-event process lookup.
+                // The paths join a host-wide tally; the monitor attributes a sample only if the tally
+                // shows a damage pattern.
+                _ransomwareIoMonitor?.RecordRename(0, "unknown", e.OldFullPath, e.FullPath);
                 return;
             }
 
             var processInfo = GetProcessUsingFile(e.FullPath, _config.EnableProactiveFileInspection);
 
             // Feed mass-rename counter for ransomware behavioral detection
-            _ransomwareIoMonitor?.RecordRename(processInfo.pid, processInfo.name);
+            _ransomwareIoMonitor?.RecordRename(processInfo.pid, processInfo.name, e.OldFullPath, e.FullPath);
 
             SubmitEvent(e.OldFullPath, "RENAME", e.FullPath, processInfo.pid, processInfo.name);
         }

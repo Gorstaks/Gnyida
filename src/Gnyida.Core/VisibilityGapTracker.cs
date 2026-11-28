@@ -43,6 +43,8 @@ namespace Gnyida.Core
         public long DispatchDrops { get; set; }
         public long EventsFiltered { get; set; }
         public long RegistryHintsCoalesced { get; set; }
+        /// <summary>Repeat UDP datagrams to an already-analysed endpoint, skipped on purpose. Not a visibility loss.</summary>
+        public long UdpDatagramsCoalesced { get; set; }
         /// <summary>Kernel-File reads of files never named as a credential store; nothing could consume them.</summary>
         public long FileReadsNotQueued { get; set; }
         public System.Collections.Generic.Dictionary<string, long> DispatchLaneDrops { get; set; } = new();

@@ -511,7 +511,7 @@ See [design.md](design.md) for the full component inventory (all MonitorGroups +
 | NetworkMonitor | TCP connection tracking and C2 detection |
 | RegistryMonitor | Registry change monitoring |
 | BeaconingDetector | Statistical C2 beacon detection |
-| RansomwareIoMonitor | Shadow copy + bulk encryption detection |
+| RansomwareIoMonitor | Rename bursts with a file-damage pattern (funnel into one new extension, or user documents losing their type); bare bursts are Tier2 |
 | TokenIntegrityMonitor | Privilege escalation detection |
 | MemoryBehaviorAnalyzer | RWX/shellcode pattern detection |
 | DataExfiltrationMonitor | Large outbound data transfer detection |
@@ -1015,8 +1015,9 @@ or grant an installer exemption through prose. Reject malformed path hints rathe
 stripping characters into an apparently benign filename. Privilege possession does not
 prove use and cannot authorize credential-dump response.
 
-ETW flooding can still exhaust a bounded worker lane. Separate file/registry capacity
-protects process/image dispatch from those queues, but shared OS/CPU/identity resources
+ETW flooding can still exhaust a bounded worker lane. Separate file, registry and network capacity
+protects process/image and DNS/PowerShell/WMI dispatch from those queues, and repeat UDP datagrams
+to one endpoint are sampled once per second (a new endpoint, port or direction is never skipped), but shared OS/CPU/identity resources
 and a slow image handler can still lose events. Cross-provider ordering is approximate.
 The protected Threat-Intelligence provider remains unavailable without Windows-granted
 access. Historical drops cannot be recovered by a later snapshot. Coalesced path-less

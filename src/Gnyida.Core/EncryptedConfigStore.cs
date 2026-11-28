@@ -190,6 +190,9 @@ namespace Gnyida.Core
                     case "TrustedUsbDevices":
                         config.TrustedUsbDevices = kvp.Value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                         break;
+                    case "RansomwareIoApprovedImages":
+                        config.RansomwareIoApprovedImages = ApprovedImageExemption.Parse(kvp.Value);
+                        break;
                     case "LogPath":
                         config.LogPath = kvp.Value;
                         break;

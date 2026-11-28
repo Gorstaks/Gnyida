@@ -230,7 +230,7 @@ Organized by MonitorGroup. Each group has staggered startup, independent failure
 
 | Component | Mechanism | Interval |
 |-----------|-----------|----------|
-| `RansomwareIoMonitor` | High-frequency I/O rate monitoring for bulk rename/encrypt patterns | continuous |
+| `RansomwareIoMonitor` | Rename bursts checked for a file-damage pattern (many types funnelled into one new extension, or user documents losing their type); a bare burst is Tier2 LogOnly (3.9.5) | continuous |
 | `BeaconingDetector` | Statistical CV analysis of connection intervals per (PID, Remote, Port) | 30s |
 | `BehavioralBaselineService` | Learns normal processes, paths, parent-child, network destinations | continuous |
 | `FileVerdictScanner` | Background local file analysis; external hash verdict stays Unknown. Off by default since 3.7.6 (`EnableProactiveFileInspection=false`, no touch until proven malicious): completes as a startup task with no watchers or walk | background walk (only when enabled) |
@@ -1188,8 +1188,11 @@ Installer heuristics accept validated path hints only; prose evidence is never u
 a path. Rule evaluation and downstream policy/dispatch failures have separate diagnostic
 phases. Token privilege possession is explicitly context-only in shared response policy.
 
-ETW uses four FIFO workers: process/image, file, registry and remaining providers. Each
-reserves up to 2,048 events and 4 MiB of payload before copying native data. Provider
+ETW uses five FIFO workers: process/image, file, registry, Kernel-Network and remaining providers
+(the network lane was split out in 3.9.5). Each reserves up to 2,048 events and 4 MiB of payload
+before copying native data; the file lane is 8 times and the network lane 4 times larger. Repeat
+UDP datagrams to an endpoint already analysed this second are skipped before any lookup and counted
+as `UdpDatagramsCoalesced`, not as loss. Provider
 order is retained; cross-provider scheduling order is not a causal guarantee. Genuine
 rejections retain aggregate and per-lane counters. The managed header filter mirrors
 consumed native event IDs; unused IDs are counted separately. File scope checks precede

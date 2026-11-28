@@ -23,6 +23,7 @@ namespace Gnyida.Core
 
         // Track already deployed rules to avoid duplicate writes
         private readonly HashSet<string> _deployedRuleNames = new(StringComparer.OrdinalIgnoreCase);
+        private readonly RepeatedStateLogGate _catalogGate = new();
 
         public CveShieldHardener(
             ILogger<CveShieldHardener> logger,
@@ -102,7 +103,11 @@ namespace Gnyida.Core
             var vulnerabilities = await FetchVulnerabilityFeedAsync(cancellationToken);
             if (vulnerabilities == null || vulnerabilities.Count == 0)
             {
-                _logger.LogWarning("CVE Shield: No local vulnerability catalog is available. Live feed retrieval was removed.");
+                // Without a catalog this repeats unchanged every poll. Warn when it starts and as a daily reminder.
+                if (_catalogGate.ShouldLog("no-catalog", DateTimeOffset.UtcNow, TimeSpan.FromHours(24)))
+                    _logger.LogWarning("CVE Shield: No local vulnerability catalog is available. Live feed retrieval was removed.");
+                else
+                    _logger.LogDebug("CVE Shield: Still no local vulnerability catalog.");
                 return;
             }
 

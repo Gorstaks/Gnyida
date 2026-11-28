@@ -37,6 +37,8 @@ namespace Gnyida.Core
         private readonly ILogger<LocalFirewallPolicyService> _logger;
         private readonly DnsRepairService? _dnsPolicy;
         private readonly SemaphoreSlim _changed = new(0, 1);
+        private readonly RepeatedStateLogGate _logGate = new();
+        private static readonly TimeSpan LogReminder = TimeSpan.FromMinutes(15);
         public LocalFirewallPolicyService(IWindowsFirewallPolicyBridge bridge, FirewallPolicyStatus status,
             ILogger<LocalFirewallPolicyService> logger, DnsRepairService? dnsPolicy = null)
         { _bridge = bridge; _status = status; _logger = logger; _dnsPolicy = dnsPolicy; }
@@ -54,10 +56,17 @@ namespace Gnyida.Core
                     _status.Update(json);
                     using var result = JsonDocument.Parse(json);
                     var root = result.RootElement;
-                    if (!root.TryGetProperty("PolicyCompliant", out var compliant) || compliant.ValueKind != JsonValueKind.True)
-                        _logger.LogError("[FirewallPolicy] Effective firewall policy has conflicts: {Result}", json);
-                    else
-                        _logger.LogInformation("[FirewallPolicy] Effective self-blocks and inbound baseline verified: {Result}", json);
+                    bool isCompliant = root.TryGetProperty("PolicyCompliant", out var compliant) && compliant.ValueKind == JsonValueKind.True;
+                    // Every pass is still verified and published to the status object. Only the log line is
+                    // thinned: a changed result logs at once, an unchanged one repeats as a 15-minute reminder.
+                    bool log = _logGate.ShouldLog(StateSignature(root, isCompliant), DateTimeOffset.UtcNow, LogReminder);
+                    if (!isCompliant)
+                    {
+                        if (log) _logger.LogError("[FirewallPolicy] Effective firewall policy has conflicts: {Result}", json);
+                        else _logger.LogDebug("[FirewallPolicy] Effective firewall policy still has the same conflicts: {Result}", json);
+                    }
+                    else if (log) _logger.LogInformation("[FirewallPolicy] Effective self-blocks and inbound baseline verified: {Result}", json);
+                    else _logger.LogDebug("[FirewallPolicy] Effective self-blocks and inbound baseline still verified: {Result}", json);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
                 catch (Exception ex)
@@ -83,6 +92,14 @@ namespace Gnyida.Core
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             }
+        }
+
+        // What makes two results the same state: compliance, the conflict list, and whether this pass changed anything.
+        internal static string StateSignature(JsonElement root, bool compliant)
+        {
+            string conflicts = root.TryGetProperty("Conflicts", out var c) ? c.GetRawText() : "";
+            string changed = root.TryGetProperty("Changed", out var ch) ? ch.GetRawText() : "";
+            return (compliant ? "ok" : "conflict") + "|" + changed + "|" + conflicts;
         }
 
         // RegistryTreeChangeEvent cannot watch a key that does not exist (the Group Policy firewall

@@ -31,6 +31,7 @@ namespace Gnyida.Core
         private readonly DllUnloadEngine? _dllUnloadEngine;
         private readonly ILogger<EtwEventDispatcher> _logger;
         private readonly CredentialReadTracker _credentialReads = new();
+        private readonly UdpDatagramCoalescer _udpFlows = new();
         private readonly Dictionary<int, DateTime> _registryHintTimes = new();
         private readonly int SelfPid = System.Net48Environment.ProcessId;
 
@@ -600,8 +601,8 @@ namespace Gnyida.Core
         private void HandleUdpNetworkEvent(EtwRawEvent evt)
         {
             bool ipv6 = evt.EventId == UdpSendIpv6 || evt.EventId == UdpRecvIpv6;
-            if (ipv6 && evt.UserDataLength < 40) return;
-
+            // Remote port sits at offset 16 (IPv4) or 40 (IPv6) and is two bytes wide.
+            if (evt.UserDataLength < (ipv6 ? 42 : 18)) return;
             int pid = evt.ProcessId;
             if (pid <= 4 && evt.UserDataLength >= 4)
             {
@@ -610,26 +611,48 @@ namespace Gnyida.Core
                     pid = payloadPid;
             }
 
-            string remoteAddr;
+            // Read the endpoint as raw integers first. Repeated datagrams to one endpoint are
+            // dropped here, before any string, process-name or fusion work (see UdpDatagramCoalescer).
+            ulong addressHigh, addressLow;
             ushort remotePort;
+            if (ipv6)
+            {
+                addressHigh = unchecked((ulong)Marshal.ReadInt64(evt.UserData, 8));
+                addressLow = unchecked((ulong)Marshal.ReadInt64(evt.UserData, 16));
+                remotePort = (ushort)Marshal.ReadInt16(evt.UserData, 40);
+            }
+            else
+            {
+                addressHigh = 0;
+                addressLow = unchecked((uint)Marshal.ReadInt32(evt.UserData, 8));
+                remotePort = (ushort)Marshal.ReadInt16(evt.UserData, 16);
+            }
+            remotePort = (ushort)((remotePort >> 8) | (remotePort << 8));
+
+            // 0.0.0.0, 127.0.0.1, :: and ::1 (little-endian integer forms of the address bytes).
+            bool unspecifiedOrLoopback = ipv6
+                ? addressHigh == 0 && (addressLow == 0 || addressLow == 0x0100000000000000UL)
+                : addressLow == 0 || addressLow == 0x0100007FUL;
+            if (unspecifiedOrLoopback) return;
+
+            bool send = evt.EventId == UdpSendIpv4 || evt.EventId == UdpSendIpv6;
+            if (!_udpFlows.TryAdmit(new UdpFlowKey(pid, addressHigh, addressLow, remotePort, send)))
+            {
+                _session?.RecordCoalescedUdpDatagram();
+                return;
+            }
+
+            string remoteAddr;
             if (ipv6)
             {
                 var addr = new byte[16];
                 Marshal.Copy(IntPtr.Add(evt.UserData, 8), addr, 0, 16);
                 remoteAddr = new System.Net.IPAddress(addr).ToString();
-                remotePort = (ushort)Marshal.ReadInt16(evt.UserData, 40);
             }
             else
             {
-                uint daddr = (uint)Marshal.ReadInt32(evt.UserData, 8);
-                remoteAddr = new System.Net.IPAddress(BitConverter.GetBytes(daddr)).ToString();
-                remotePort = (ushort)Marshal.ReadInt16(evt.UserData, 16);
+                remoteAddr = new System.Net.IPAddress(BitConverter.GetBytes((uint)addressLow)).ToString();
             }
-            remotePort = (ushort)((remotePort >> 8) | (remotePort << 8));
-
-            if (remoteAddr == "0.0.0.0" || remoteAddr == "127.0.0.1" || remoteAddr == "::" || remoteAddr == "::1")
-                return;
-
             string processName = ResolveEtwProcessName(pid);
             var telemetry = new NetworkTelemetry
             {
