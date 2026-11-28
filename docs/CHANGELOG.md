@@ -1,4 +1,10 @@
 # Changelog
+## [3.9.6] - 2026-11-28
+### Fixed - CachedLogonsCount was written twice with different values, and the effective one was neither
+- On every start `GSecurity.inf` (applied with `LGPO /s`) set `Winlogon\CachedLogonsCount` to the string "10", and `ApplyCredentialHardening` then wrote it as DWORD 2. Winlogon reads this value as REG_SZ only, so the DWORD was ignored and Windows kept its default of 10, not the 2 that `docs/design.md` documents. Both now write the REG_SZ "2" (`HardeningModule.CachedLogonsCount`), so a Group Policy baseline that sets the same string no longer flips type and value against Gnyida.
+- Test: `GSecurityInf_EnablesAuditingAndDoesNotOverrideGlobalUserRights` asserts the template value equals `HardeningModule.CachedLogonsCount`.
+### Changed - version stamp
+- Version 3.9.5 -> 3.9.6.
 ## [3.9.5] - 2026-11-28
 ### Fixed - ransomware rename rule killed legitimate bulk-file software
 - `RansomwareIoMonitor` killed any process that renamed more than 50 files in 5 seconds (Tier1 `KillProcessTree`, 0.95). Installers, builds, OS-image tools such as NTLite, backup jobs and database maintenance do that too, and on earlier installs it terminated them. A rename count cannot tell them apart from encryption.

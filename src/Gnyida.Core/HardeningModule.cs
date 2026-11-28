@@ -1428,6 +1428,9 @@ namespace Gnyida.Core
         /// <summary>
         /// LSASS PPL + reduce credential caching. RunAsPPL requires reboot to fully activate.
         /// </summary>
+        /// <summary>Cached domain logons kept for offline sign-in. GSecurity.inf must set the same REG_SZ value.</summary>
+        internal const string CachedLogonsCount = "2";
+
         public static void ApplyCredentialHardening()
         {
             // RunAsPPL = 1 enables LSASS as a Protected Process Light (MITRE T1003.001 mitigation)
@@ -1435,7 +1438,9 @@ namespace Gnyida.Core
             // Do not allow storage of passwords/credentials for network authentication
             SetRegistryDword(@"SYSTEM\CurrentControlSet\Control\Lsa", "DisableDomainCreds", 1);
             // Limit cached domain logons (workstations still need a few for offline logon)
-            SetRegistryDword(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon", "CachedLogonsCount", 2);
+            // Winlogon reads CachedLogonsCount as REG_SZ only; a DWORD is ignored (the old write left the
+            // Windows default of 10 in force). GSecurity.inf sets the same string.
+            SetRegistryString(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon", "CachedLogonsCount", CachedLogonsCount);
             // WDigest cleartext passwords off (legacy)
             SetRegistryDword(@"SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest", "UseLogonCredential", 0);
         }

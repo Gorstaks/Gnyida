@@ -211,6 +211,13 @@ namespace Gnyida.Tests
             var backupHolders = backupLine.Substring(backupSeparator + 1).Replace(" ", "");
             Assert.True(backupHolders == "*S-1-5-32-544" || backupHolders == "*S-1-5-32-544,*S-1-5-32-551",
                 "SeBackupPrivilege must be Administrators only, or Administrators and Backup Operators, was: '" + backupHolders + "'");
+
+            // Winlogon reads CachedLogonsCount as REG_SZ only. The template and ApplyCredentialHardening
+            // must write the same string; before 3.9.6 they wrote "10" and DWORD 2, so the DWORD (ignored) won.
+            var cachedLine = inf.Split('\n').Select(l => l.Trim())
+                .FirstOrDefault(l => l.IndexOf(@"\Winlogon\CachedLogonsCount=", StringComparison.OrdinalIgnoreCase) >= 0);
+            Assert.NotNull(cachedLine);
+            Assert.EndsWith("CachedLogonsCount=1,\"" + HardeningModule.CachedLogonsCount + "\"", cachedLine!);
         }
 
         [Fact]
